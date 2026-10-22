@@ -367,7 +367,7 @@ export async function POST(request) {
       return non('La commande n’a pas pu être enregistrée. Réessaie.', 500)
     }
 
-    await preleverStockVariantes(admin, lignes, variantesData)
+    await preleverStockVariantes(admin, lignes, variantesData, articlesData)
 
     // L'e-mail au client : une CONFIRMATION, seulement si le commerçant l'a
     // demandée et qu'une adresse existe. Jamais l'e-mail « Nouvelle commande »

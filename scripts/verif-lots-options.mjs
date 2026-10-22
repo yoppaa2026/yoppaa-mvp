@@ -15,7 +15,7 @@
 
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
-import { construireLignesCommande, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, SELECT_PRIX_TAILLE, bornesChoix } from '../lib/lignes-commande.js'
+import { construireLignesCommande, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, SELECT_PRIX_TAILLE, SELECT_ARTICLES, bornesChoix } from '../lib/lignes-commande.js'
 import * as OC from '../lib/options-choix.js'
 
 const RACINE = new URL('../', import.meta.url)
@@ -267,8 +267,9 @@ v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, 
   // ⚠️ REPOINTÉE LE 21/10, PAS DÉSARMÉE : même ordre, et seuls les groupes
   // ACTIFS s'affichent (un groupe dépendant n'apparaît qu'avec son option).
   v('🔴 la fiche et l’encodage affichent les groupes dans cet ordre, sans les groupes dépendants dont l’option n’est pas cochée',
-    code('app/commander/[slug]/page.js').includes('{ordonnerGroupes(groupes).filter(g => groupeActif(g, selections)).map(g => {')
-    && code('app/dashboard/ModalNouvelleCommande.js').includes('{ordonnerGroupes(groupes[enOptions.id] || []).filter(g => groupeActif(g, selections)).map(g => {'))
+    // REPOINTÉE LE 22/10 (audit R2 : les groupes sans option sont aussi cachés).
+    code('app/commander/[slug]/page.js').includes('{ordonnerGroupes(groupes).filter(g => groupeAvecOptions(g) && groupeActif(g, selections)).map(g => {')
+    && code('app/dashboard/ModalNouvelleCommande.js').includes('{ordonnerGroupes(groupes[enOptions.id] || []).filter(g => groupeAvecOptions(g) && groupeActif(g, selections)).map(g => {'))
   v('🔴 un groupe à PLUSIEURS choix n’est jamais le groupe des tailles, même nommé « Taille »',
     OC.groupeDesTailles([{ id: 'gM', nom: 'Tailles', type: 'multiple', valeurs: [{}, {}] }, { id: 'gU', nom: 'Format', type: 'unique', valeurs: [{}, {}] }])?.id === 'gU')
   const lp = OC.lignesPrixTaille('sJambon', { tL: '2', tXL: '3,00', tM: '' })
@@ -333,7 +334,8 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
 {
   const fiche = code('app/commander/[slug]/page.js')
   v('🔴 fiche détaillée : un article à options passe par le choix (OptionsSelector), plus par « Ajouter » direct',
-    /\(!hasVar && onAjouter && !article\.est_vitrine && groupes\.length > 0\) \? \(\s*<OptionsSelector article=\{article\} groupes=\{groupes\}\s*onAjouter=\{\(a, opts\) => \{ onAjouter\(a, opts\); onClose\(\) \}\}\/>/.test(fiche)
+    // REPOINTÉE LE 22/10 (audit R2 : un groupe sans option ne compte pas).
+    /\(!hasVar && onAjouter && !article\.est_vitrine && groupes\.some\(groupeAvecOptions\)\) \? \(\s*<OptionsSelector article=\{article\} groupes=\{groupes\}\s*onAjouter=\{\(a, opts\) => \{ onAjouter\(a, opts\); onClose\(\) \}\}\/>/.test(fiche)
     && fiche.includes('groupes={optionsParArticle[articleDetail.id] || []}')
     && fiche.includes('onAjouter={peutCommander ? (a, opts = null) => ajouterAuPanier(a, opts) : null}'))
   v('le titre du choix ne présume pas du genre de l’article (« Ta personnalisation : … », choisi par Alex ; jamais « Personnalise ton »)',
@@ -344,7 +346,8 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   // (`groupesActifs` sur une sélection vide) ; un groupe dépendant obligatoire
   // n'est exigé qu'avec son option.
   v('🔴 panier venu du rendez-vous : un article à choix obligatoire (ou à nombre minimum) reste derrière, et le client est prévenu',
-    fiche.includes('if (groupesActifs(optionsParArticle[article.id] || [], {}).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }')
+    // REPOINTÉE LE 22/10 (audit R1/R2 : bornes du client, et la version exigée).
+    fiche.includes('if (article.gere_variantes || groupesActifs(optionsParArticle[article.id] || [], {}).some(g => bornesPourLeClient(g).min > 0)) { ignores.push(article.nom); continue }')
     && fiche.includes('setPanierRepris({ repris, ignores })'))
   // (13/10) La fiche : groupes lus AVEC les prix par taille (lien nommé), le
   // choix passe par le module partagé, le total aussi.
@@ -389,12 +392,14 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     /\.from\('article_options_groupes'\)\s*\.select\(SELECT_GROUPES_AVEC_VALEURS\)\s*\.in\('article_id', ids\)/.test(code('app/dashboard/ConfigDashboard.js'))
     && /const groupes = groupesParArticle\[String\(articleId\)\] \|\| \[\]/.test(oa))
   v('🔴 le nombre de choix passe par le contrôle partagé avant d’être écrit',
-    /const r = bornesDepuisSaisie\(/.test(oa) && /if \(!r\.ok\) \{ toast\(r\.error, 'error'\); return \}\s*setReglageEnCours\(true\)\s*const \{ error \} = await supabase\.from\('article_options_groupes'\)\.update\(\{ choix_min: r\.choix_min, choix_max: r\.choix_max \}\)/.test(oa))
+    // REPOINTÉE LE 22/10 (audit R2 : le minimum ne dépasse pas les options ; O6 : relu).
+    /const r = bornesDepuisSaisie\(/.test(oa) && /if \(!r\.ok\) \{ toast\(r\.error, 'error'\); return \}\s*const nbOptions = \(g\.valeurs \|\| \[\]\)\.length\s*if \(\(r\.choix_min \|\| 0\) > nbOptions\) \{[^\n]*return \}\s*setReglageEnCours\(true\)\s*const \{ data, error \} = await supabase\.from\('article_options_groupes'\)\.update\(\{ choix_min: r\.choix_min, choix_max: r\.choix_max \}\)\.eq\('id', g\.id\)\.select\('id'\)/.test(oa))
   v('🔴 les prix par taille : contrôlés, puis ceux de CETTE option remplacés, et l’erreur se dit',
     /const r = lignesPrixTaille\(v\.id, prixTailleForm\)/.test(oa)
-    && /\.from\('article_options_prix_taille'\)\.delete\(\)\.eq\('valeur_id', v\.id\)/.test(oa)
-    && /\.from\('article_options_prix_taille'\)\.insert\(r\.lignes\)/.test(oa)
-    && /if \(errDel \|\| errIns\) \{ toast\(/.test(oa))
+    // REPOINTÉE LE 22/10 (audit O6 : effacés et écrits, relus et comptés).
+    && /\.from\('article_options_prix_taille'\)\.delete\(\)\.eq\('valeur_id', v\.id\)\.select\('valeur_id'\)/.test(oa)
+    && /\.from\('article_options_prix_taille'\)\.insert\(r\.lignes\)\.select\('valeur_id'\)/.test(oa)
+    && /if \(errDel \|\| errIns \|\| refusDel \|\| \(r\.lignes\.length > 0 && !refusDel && \(ecrits\?\.length \|\| 0\) !== r\.lignes\.length\)\) \{/.test(oa))
   v('le prix par taille ne se propose que s’il existe un groupe de tailles', /const tailles = groupeDesTailles\(groupes, g\.id\)/.test(oa) && /const reglable = !!tailles && g\.type !== 'unique'/.test(oa))
   v('les boutons d’enregistrement travaillent (points) et ne partent pas deux fois',
     (oa.match(/disabled=\{reglageEnCours\}/g) || []).length >= 2 && /if \(reglageEnCours\) return/.test(oa))
@@ -579,12 +584,139 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     /function VariantesSelector\(\{ article, variantes, groupes = \[\], onAjouter \}\)/.test(fiche)
     && /const choix = groupes\.length > 0 \? options\.valider\(\) : null\s*if \(choix === false\) return\s*onAjouter\(article, varianteChoisie, choix\)/.test(fiche)
     && /<VariantesSelector article=\{article\} variantes=\{variantes\} groupes=\{groupes\}/.test(fiche)
-    && /if \(\(variante\.stock \?\? 0\) <= qteDeLaVariante\(variante\.id\)\) return/.test(fiche)
-    && /if \(\(item\.variante\.stock \?\? 0\) <= qteDeLaVariante\(item\.variante\.id\)\) return/.test(fiche))
+    // REPOINTÉE LE 22/10 (audit R3 : « fabriqué à la demande » ne se compte pas).
+    && /if \(stockDeVariante\(article, variante\) <= qteDeLaVariante\(variante\.id\)\) return/.test(fiche)
+    && /if \(!item\.variante\.sansLimite && \(item\.variante\.stock \?\? 0\) <= qteDeLaVariante\(item\.variante\.id\)\) return/.test(fiche))
   v('🔴 fiche : un groupe dépendant s’affiche en retrait, la carte à lire dit « avec … »',
     /const sousGroupe = estDependant\(g\)/.test(fiche) && /optionParente\(g, groupes\) && <span/.test(fiche))
   v('🔴 le catalogue de l’encodage lit la condition d’affichage',
     code('app/api/equipe/commande/catalogue/route.js').includes('choix_max, depend_de_valeur_id, created_at'))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. L'AUDIT ARTICLES + PERSONNALISATION (22/10, tableau d'Alex : « tout »)
+//    R1 version exigée, R2 groupe impossible, R3 à la demande, O7 pastilles.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const val = (id, g, nom, prix = 0) => ({ id, nom, prix_supplement: prix, groupe_id: g.id, article_options_groupes: { article_id: g.article_id, nom: g.nom } })
+  const bralette = { id: 'b1', nom: 'Bralette', prix: 40, actif: true, commercant_id: 'c1', tva_taux: 21, temps_prepa: 0, gere_variantes: true, stock_mode: 'magasin' }
+  const bague = { id: 'g1', nom: 'Bague gravée', prix: 90, actif: true, commercant_id: 'c1', tva_taux: 21, temps_prepa: 0, gere_variantes: true, stock_mode: 'illimite' }
+  const vS = { id: 'vS', article_id: 'b1', axe1_valeur: 'S', stock: 0, actif: true, prix: null }
+  const vM = { id: 'vM', article_id: 'b1', axe1_valeur: 'M', stock: 2, actif: true, prix: null }
+  const v52 = { id: 'v52', article_id: 'g1', axe1_valeur: '52', stock: 0, actif: true, prix: null }
+  const lotB = { id: 'dB', deal_type: 'lot', titre: '2 bralettes', prix_deal: 70, unites_par_deal: 2, article_id: 'b1', date_deal: JOUR, actif: true }
+  const c = (panier, extra = {}) => construireLignesCommande({
+    panier, articlesData: [bralette, bague], optionsValeurs: [], variantesData: [vS, vM, v52], dealsData: [lotB],
+    commercant, regime: 'emporter', dateCommande: JOUR, groupesOptions: [], ...extra,
+  })
+  // R1
+  const sansVersion = c([{ id: 'b1', quantite: 1 }])
+  v('🔴 R1 : un article à variantes SANS version est refusé (version_manquante)',
+    !sansVersion.ok && sansVersion.version_manquante === true && /Bralette/.test(sansVersion.error), JSON.stringify(sansVersion))
+  v('R1 : avec sa version, accepté', c([{ id: 'b1', quantite: 1, variante_id: 'vM' }]).ok)
+  // Sans la colonne dans le select des routes, la règle ne verrait jamais un article à variantes.
+  v('🔴 R1 : les routes lisent `gere_variantes` (SELECT_ARTICLES)', /(^|, )gere_variantes(,|$)/.test(SELECT_ARTICLES), SELECT_ARTICLES)
+  v('R1 : une offre séparée (lot) composée par le commerçant passe sans version', c([{ id: 'b1', quantite: 1, deal_id: 'dB' }]).ok)
+  v('R1 : un article sans variantes n’est pas touché',
+    construireLignesCommande({ panier: [{ id: 'p1', quantite: 1, options: [{ valeur_ids: ['vTomate'] }] }], articlesData, optionsValeurs, variantesData: [], dealsData: [], commercant, regime: 'emporter', dateCommande: JOUR, groupesOptions: groupes }).ok)
+  // R3
+  v('🔴 R3 : stock par variante, la taille à 0 est refusée', !c([{ id: 'b1', quantite: 1, variante_id: 'vS' }]).ok)
+  const aLaDemande = c([{ id: 'g1', quantite: 5, variante_id: 'v52' }])
+  v('🔴 R3 : « fabriqué à la demande », la taille à stock 0 se vend (5 pièces)', aLaDemande.ok && aLaDemande.totalCents === 45000, JSON.stringify(aLaDemande))
+  // R2
+  const gVide = { id: 'gV', article_id: 'p1', nom: 'Sauces', obligatoire: true, type: 'unique' }
+  const g3 = { id: 'g3', article_id: 'p1', nom: 'Ingrédients', obligatoire: false, type: 'multiple', choix_min: 3, choix_max: 3 }
+  const g2 = { id: 'g2', article_id: 'p1', nom: 'Pâte', obligatoire: false, type: 'multiple', choix_min: 2, choix_max: null }
+  const vals = [val('i1', g3, 'Jambon'), val('i2', g3, 'Olives'), val('p1a', g2, 'Fine'), val('p1b', g2, 'Épaisse'), val('p1c', g2, 'Complète')]
+  const c2 = (opts) => construireLignesCommande({
+    panier: [{ id: 'p1', quantite: 1, options: [{ valeur_ids: opts }] }], articlesData: [pizza], optionsValeurs: vals, variantesData: [], dealsData: [],
+    commercant, regime: 'emporter', dateCommande: JOUR, groupesOptions: [gVide, g3, g2],
+  })
+  const r2 = c2(['p1a', 'p1b'])
+  v('🔴 R2 : « Sauces » obligatoire SANS option et « 3 parmi 2 » ne bloquent plus la commande', r2.ok, JSON.stringify(r2))
+  v('R2 : un minimum possible reste exigé (« au moins 2 » parmi 3)', !c2(['p1a']).ok && c2(['p1a']).option_manquante === true)
+  v('R2 : bornesChoix sans nombre d’options = le réglage tel quel (l’éditeur)', bornesChoix(g3).min === 3 && bornesChoix(gVide).min === 1)
+  v('R2 : bornesChoix avec trop peu d’options = minimum à zéro, maximum gardé', bornesChoix(g3, 2).min === 0 && bornesChoix(g3, 2).max === 3 && bornesChoix(g3, 3).min === 3)
+  const gFiche = { ...gVide, valeurs: [] }
+  v('🔴 R2 fiche : le groupe vide n’est ni exigé, ni « obligatoire », ni affiché',
+    OC.refusDuGroupe(gFiche, 0) === null && OC.bornesPourLeClient(gFiche).min === 0 && !OC.groupeAvecOptions(gFiche) && OC.groupeAvecOptions({ valeurs: [{}] }))
+  v('R2 fiche : un groupe normal reste exigé', OC.refusDuGroupe({ obligatoire: true, valeurs: [{ id: 1 }] }, 0) === 'Choix obligatoire')
+  v('🔴 R2 éditeur : le commerçant lit ce qui cloche',
+    /sans option/.test(OC.problemeDuGroupe(gFiche)) && /Demande 3 choix, mais n’a que 2 options/.test(OC.problemeDuGroupe({ ...g3, valeurs: [{}, {}] }))
+    && OC.problemeDuGroupe({ ...g2, valeurs: [{}, {}, {}] }) === null && OC.problemeDuGroupe({ obligatoire: false, valeurs: [] }) === null,
+    `${OC.problemeDuGroupe(gFiche)} | ${OC.problemeDuGroupe({ ...g3, valeurs: [{}, {}] })}`)
+  // O7
+  const calzone = { type: 'multiple', obligatoire: false, choix_min: 3, choix_max: 3 }
+  v('🔴 O7 : les pastilles disent les vraies bornes (« 3 au choix » = obligatoire)', OC.pastillesDuGroupe(calzone).obligatoire === true && OC.pastillesDuGroupe(calzone).unique === false)
+  v('🔴 O7 : « Optionnel » remet le minimum à zéro', JSON.stringify(OC.basculeObligatoire(calzone)) === '{"obligatoire":false,"choix_min":null}', JSON.stringify(OC.basculeObligatoire(calzone)))
+  v('🔴 O7 : « 1 choix » remet le nombre de choix à zéro et garde l’obligation', JSON.stringify(OC.basculeType(calzone)) === '{"type":"unique","choix_min":null,"choix_max":null,"obligatoire":true}', JSON.stringify(OC.basculeType(calzone)))
+  v('O7 : un « 1 choix » repasse à « plusieurs »', OC.basculeType({ type: 'unique', obligatoire: false }).type === 'multiple')
+
+  // Les écrans branchent ces règles.
+  const fiche = code('app/commander/[slug]/page.js')
+  v('🔴 R1 fiche : sans version active, « Indisponible », pas de « + », pas d’options vendues seules',
+    /const sansVersion = !!article\.gere_variantes && variantes\.length === 0/.test(fiche)
+    && /const hasOptions = !article\.gere_variantes && groupes\.some\(groupeAvecOptions\)/.test(fiche)
+    && /!modeVitrine && !article\.est_vitrine && !sansVersion && !epuiseComplet/.test(fiche)
+    && /\(article\.gere_variantes && !article\.est_vitrine\) \? \(/.test(fiche))
+  v('🔴 R2 fiche : groupes vides cachés, pastille « Obligatoire » aux bornes du client',
+    /\.filter\(g => groupeAvecOptions\(g\) && groupeActif\(g, selections\)\)/.test(fiche) && /\{bornesPourLeClient\(g\)\.min > 0 && <span/.test(fiche))
+  v('🔴 R3 fiche : la version « à la demande » ne se compte nulle part',
+    /const stockDe = \(v\) => stockDeVariante\(article, v\)/.test(fiche) && /sansLimite: stockDeVariante\(article, variante\) === Infinity/.test(fiche)
+    && /item\.variante\.sansLimite \? Infinity :/.test(fiche) && /\.some\(v => v\.actif !== false && stockDeVariante\(article, v\) > 0\)/.test(fiche))
+  v('🔴 R3 serveur : rien n’est prélevé ni rendu pour une version « à la demande »',
+    /if \(variantesSansLimite\(articleParId\[l\.article_id\]\)\) continue/.test(code('lib/stock-variantes-server.js'))
+    && (code('lib/stock-variantes-server.js').match(/if \(libres\.ids\.has\(v\.id\)\) continue/g) || []).length === 2
+    && /preleverStockVariantes\(supabase, lignes, variantesData, articlesData\)/.test(code('app/api/stripe/checkout/create-commande/route.js'))
+    && /preleverStockVariantes\(admin, lignes, variantesData, articlesData\)/.test(code('app/api/equipe/commande/creer/route.js')))
+  const bord = code('app/dashboard/ConfigDashboard.js')
+  v('🔴 R2 éditeur : « au moins N » au-delà des options est refusé, la pastille « À corriger » se montre',
+    /if \(\(r\.choix_min \|\| 0\) > nbOptions\)/.test(bord) && /\{problemeDuGroupe\(g\) && \(/.test(bord))
+  v('🔴 O7 éditeur : les pastilles passent par basculeType / basculeObligatoire',
+    /updateGroupe\(g\.id, basculeType\(g\)\)/.test(bord) && /updateGroupe\(g\.id, basculeObligatoire\(g\)\)/.test(bord) && /pastillesDuGroupe\(g\)\.unique \? '1 choix'/.test(bord))
+  v('🟡 J2 : Entrée + clic ne crée l’option qu’une fois', /async function addValeur\(groupeId\) \{\s*if \(ajoutOption\.current\) return/.test(bord))
+
+  // R3, EXÉCUTÉ CONTRE UNE FAUSSE BASE : rien n'est prélevé, rendu ni repris
+  // pour une version « à la demande » ; le stock par variante, lui, bouge.
+  const SV = await import('../lib/stock-variantes-server.js')
+  const fausseBase = (tables) => {
+    const ecrits = []
+    return {
+      ecrits,
+      from(t) {
+        const q = { filtres: {}, maj: null, cle: null }
+        Object.assign(q, {
+          select: () => q, not: () => q,
+          in: (c, val) => { q.filtres[c] = val; return q },
+          eq: (c, val) => { q.cle = val; return q },
+          update: (p) => { q.maj = p; return q },
+          then: (res, rej) => {
+            if (q.maj) { ecrits.push({ t, id: q.cle, ...q.maj }); return Promise.resolve({ error: null }).then(res, rej) }
+            let rows = tables[t] || []
+            for (const [c, val] of Object.entries(q.filtres)) rows = rows.filter(r => val.includes(r[c]))
+            return Promise.resolve({ data: rows, error: null }).then(res, rej)
+          },
+        })
+        return q
+      },
+    }
+  }
+  const tables = {
+    commande_articles: [{ commande_id: 'c1', variante_id: 'v52', quantite: 2 }, { commande_id: 'c1', variante_id: 'vM', quantite: 1 }],
+    article_variantes: [{ id: 'v52', stock: 0, article_id: 'g1' }, { id: 'vM', stock: 2, article_id: 'b1' }],
+    articles: [bague, bralette],
+  }
+  const b1 = fausseBase(tables)
+  const rendu = await SV.restaurerStockVariantes(b1, ['c1'])
+  v('🔴 R3 : l’annulation ne rend rien à une version « à la demande », rend au stock par variante',
+    rendu.ok && rendu.rendues === 1 && JSON.stringify(b1.ecrits) === '[{"t":"article_variantes","id":"vM","stock":3}]', JSON.stringify(b1.ecrits))
+  const b2 = fausseBase(tables)
+  const repris = await SV.reprendreStockVariantes(b2, ['c1'])
+  v('🔴 R3 : « finalement retirée » ne reprend rien à une version « à la demande »',
+    repris.ok && JSON.stringify(b2.ecrits) === '[{"t":"article_variantes","id":"vM","stock":1}]', JSON.stringify(b2.ecrits))
+  const b3 = fausseBase(tables)
+  await SV.preleverStockVariantes(b3, [{ variante_id: 'v52', article_id: 'g1', quantite: 1 }, { variante_id: 'vM', article_id: 'b1', quantite: 1 }], tables.article_variantes, [bague, bralette])
+  v('🔴 R3 : la vente ne prélève rien sur une version « à la demande »', JSON.stringify(b3.ecrits) === '[{"t":"article_variantes","id":"vM","stock":1}]', JSON.stringify(b3.ecrits))
 }
 
 console.log(`\nLots et options : ${ok} vérifications`)

@@ -25,7 +25,7 @@ import { useTracesAHonorer } from './useTracesAHonorer'
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09, décisions d'Alex).
-import { choixDeStock, MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour, aDeuxCircuits, CHOIX_JOUR_MEME, CHOIX_SUR_COMMANDE, refusCircuits, champsCircuits, maximumSurCommande } from '@/lib/stock-article'
+import { choixDeStock, MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour, aDeuxCircuits, CHOIX_JOUR_MEME, CHOIX_SUR_COMMANDE, refusCircuits, champsCircuits, maximumSurCommande, variantesSansLimite, CHOIX_STOCK_VARIANTES, modeStockDesVariantes } from '@/lib/stock-article'
 import { jourBelgeDeCreation } from '@/lib/heure-belge'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
@@ -47,12 +47,14 @@ import {
   ciblesDeMasse, variantesVisees, quantiteSaisie, prixSaisiMasse, lignesDeStock,
   bibliothequeDeGrilles, libelleDeGrille, axesDeGrille, combinaisonsDeGrille, repartirGrille,
   ciblesVariantesDuLot,
+  combinaisonsManquantes, combinaisonsDeLaValeur, retraitDeValeur, cleDesAxes,
 } from '@/lib/variantes-grille'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 import {
   SELECT_GROUPES_AVEC_VALEURS, pastilleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille,
   taillesDesCopies, prixTailleParNom, prixParNomDe, prixTailleDeSaisie, lignesPrixTailleDesCopies,
   parentsPuisEnfants, optionParente,
+  problemeDuGroupe, pastillesDuGroupe, basculeType, basculeObligatoire,
 } from '@/lib/options-choix'
 import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
@@ -186,6 +188,7 @@ import {
   planModificationGroupe, resumeModification,
   planDuGroupe, resumeDuPlan,
   parentParNom, resoudreParent, cleParent, choixDeParent, enfantsDe, phraseEnfantsEmportes,
+  prixTailleDeLaCopie,
 } from '@/lib/catalogue-copie'
 // ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
@@ -662,6 +665,8 @@ function TabMenu({ commercantId, commercant, toast }) {
   // ⚠️ UN COMPTEUR PAR ARTICLE, PAS UN COMPTEUR GLOBAL : faire relire quarante
   // panneaux pour trois articles touchés, c'est trente-sept requêtes pour rien.
   const [optionsTouchees, setOptionsTouchees] = useState({})
+  // (22/10, audit O2) Les panneaux de Personnalisation ouverts : { [articleId]: true }.
+  const [panneauxOuverts, setPanneauxOuverts] = useState({})
   // ─── CE QUE CHAQUE ARTICLE CONTIENT, CHARGÉ UNE SEULE FOIS ───────────────
   //
   // 🔴 POURQUOI ICI ET PAS DANS CHAQUE VIGNETTE (Alex, 25/09) : « quand un
@@ -954,14 +959,14 @@ function TabMenu({ commercantId, commercant, toast }) {
     // jours (le défaut). C'est ce que faisait tout article avant les deux
     // circuits, et ce que la migration a donné à l'existant (Alex, 08/10).
     const demainCommandable = deuxCircuits && (Number(commercant?.horizon_commande) || 2) >= 2
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '', gere_variantes: false })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
     // ⚠️ « Sans limite » n'a pas de quantité : le champ repart vide si l'on
     // change d'avis, au lieu d'afficher le 0 technique qui la représente.
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '', gere_variantes: a.gere_variantes === true })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
@@ -976,10 +981,14 @@ function TabMenu({ commercantId, commercant, toast }) {
     // celui de A : sans A, il n'y a aucune quantité à demander.
     const avecCircuits = deuxCircuits && form.vendable
     const venteJour = !avecCircuits || form.vente_jour !== false
-    const refusB = avecCircuits ? refusCircuits(form) : null
+    // 🔴 (22/10, audit R3) À VARIANTES : deux modes seulement, et aucune
+    // quantité générale (le stock vit sur chaque variante).
+    const aVariantes = form.gere_variantes === true
+    const formStock = aVariantes ? { ...form, stock_mode: modeStockDesVariantes(form.stock_mode) } : form
+    const refusB = avecCircuits ? refusCircuits(formStock) : null
     if (refusB) return toast(refusB, 'error')
     // Un article vendu en ligne dit comment se compte son stock.
-    const refusStock = form.vendable && venteJour ? refusQuantite(form.stock_mode, form.stock_jour) : null
+    const refusStock = form.vendable && venteJour && !aVariantes ? refusQuantite(form.stock_mode, form.stock_jour) : null
     if (refusStock) return toast(refusStock, 'error')
     // ✅ LA PLAGE DE RETRAIT (19/10) : en alimentaire seulement (les créneaux),
     // et sur un article vendu en ligne. Ailleurs on écrit `null`, jamais une
@@ -994,7 +1003,9 @@ function TabMenu({ commercantId, commercant, toast }) {
     // reste, pour le jour où l'article repasse en vente.
     // ⚠️ SUR COMMANDE SEULEMENT (B sans A) : la quantité du jour ne sert plus,
     // mais on ne l'efface pas, pour le jour où il revient au comptoir.
-    const stock = form.vendable && venteJour
+    const stock = aVariantes
+      ? { stock_mode: formStock.stock_mode, stock_jour: avant ? Math.max(0, Number(avant.stock_jour) || 0) : 0 }
+      : form.vendable && venteJour
       ? champsStock({ mode: form.stock_mode, saisie: form.stock_jour, avant })
       : form.vendable
         ? { stock_mode: modeValide, stock_jour: avant ? Math.max(0, Number(avant.stock_jour) || 0) : 0 }
@@ -1039,6 +1050,9 @@ function TabMenu({ commercantId, commercant, toast }) {
       ? await supabase.from('articles').update(payload).eq('id', editId).select('id').maybeSingle()
       : await supabase.from('articles').insert(payload).select('id').single()
     if (error) { setSaving(false); toast(`Erreur : ${error.message}`, 'error'); return }
+    // 🟠 (22/10, audit O6) ZÉRO LIGNE ÉCRITE N'EST PAS « MIS À JOUR » : un
+    // commerce bloqué par les permissions recevait le message de succès.
+    if (!cree?.id) { setSaving(false); toast('L’article n’a pas été enregistré : modification refusée. Recharge la page.', 'error'); return }
     // (21/10) LES PHOTOS DE GALERIE ajoutées avant le premier enregistrement
     // se rattachent maintenant au nouvel article, dans leur ordre.
     const enAttente = galerie.filter(p => p.enAttente)
@@ -1281,23 +1295,37 @@ function TabMenu({ commercantId, commercant, toast }) {
   // ⚠️ CE QU'ELLE N'EMPORTE PAS EST DIT AUSSI : les photos de la galerie, les
   // variantes et les stocks par jour restent à l'original. Un stock recopié
   // promettrait des parts qui n'existent pas.
+  // 🟡 (22/10, audit J1) UN DOUBLE CLIC FAISAIT DEUX COPIES.
+  const duplicationEnCours = useRef(false)
   async function dupliquerArticle(a) {
+    if (duplicationEnCours.current) return
+    duplicationEnCours.current = true
+    try { await dupliquerArticleUneFois(a) } finally { duplicationEnCours.current = false }
+  }
+  async function dupliquerArticleUneFois(a) {
     const payload = copieDArticle(a, {
       commercantId,
       nomsExistants: articles.map(x => x.nom),
     })
     if (!payload) { toast('Cet article ne peut pas être dupliqué.', 'error'); return }
+    // (22/10, audit J1) La copie se range JUSTE APRÈS l'original (même place,
+    // le nom « (copie) » la met derrière), plus en fin de catégorie.
+    if (Number.isFinite(Number(a.ordre))) payload.ordre = Number(a.ordre)
+
+    // ⚠️ LES OPTIONS SUIVENT, SINON LA DUPLICATION NE SERT À RIEN : c'est
+    // justement la liste des garnitures qu'on ne veut plus réécrire.
+    // 🟡 (22/10, audit J1) LUES AVANT DE CRÉER LA COPIE : une lecture ratée
+    // donnait une copie sans options, sans un mot.
+    // 🔴 (22/10, audit R4) ET LEURS PRIX SELON LA TAILLE (`prix_taille`).
+    const { data: groupesSource, error: errLecture } = await supabase
+      .from('article_options_groupes')
+      .select('*, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(*, prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix))')
+      .eq('article_id', a.id)
+    if (errLecture) { toast(`Les options de « ${a.nom} » n’ont pas pu être lues : rien n’a été copié. Réessaie.`, 'error'); return }
 
     const { data: cree, error } = await supabase
       .from('articles').insert(payload).select('id').single()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-
-    // ⚠️ LES OPTIONS SUIVENT, SINON LA DUPLICATION NE SERT À RIEN : c'est
-    // justement la liste des garnitures qu'on ne veut plus réécrire.
-    const { data: groupesSource } = await supabase
-      .from('article_options_groupes')
-      .select('*, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(*)')
-      .eq('article_id', a.id)
 
     let optionsRatees = false
 
@@ -1335,10 +1363,18 @@ function TabMenu({ commercantId, commercant, toast }) {
       if (valeursCopie.length > 0) {
         const { data: vals, error: errV } = await supabase.from('article_options_valeurs')
           .insert(valeursCopie.map(v => ({ groupe_id: gCree.id, ...v }))).select('id, nom')
-        if (errV) optionsRatees = true
+        if (errV || (vals?.length || 0) !== valeursCopie.length) optionsRatees = true
         valeursCreees = vals || []
       }
       groupesCopie.push({ id: gCree.id, nom: copie.nom, depend_de_valeur_id: copie.depend_de_valeur_id || null, valeurs: valeursCreees })
+    }
+    // 🔴 (22/10, audit R4) Les prix selon la taille, retrouvés par NOM sur la
+    // copie (`prixTailleDeLaCopie`). Ce qui n'a pas pu suivre se dit.
+    const prixT = prixTailleDeLaCopie(source, groupesCopie)
+    let prixTaillePerdus = prixT.perdus
+    if (prixT.lignes.length > 0) {
+      const { data: pt, error: errPT } = await supabase.from('article_options_prix_taille').insert(prixT.lignes).select('valeur_id')
+      if (errPT || (pt?.length || 0) !== prixT.lignes.length) prixTaillePerdus += prixT.lignes.length - (pt?.length || 0)
     }
 
     fetchArticles()
@@ -1378,6 +1414,9 @@ function TabMenu({ commercantId, commercant, toast }) {
       stocksJour: nbStocks || 0,
       variantes: nbVariantes || 0,
       options: optionsRatees ? 0 : (groupesSource?.length || 0),
+      prixTaille: prixT.lignes.length - Math.min(prixT.lignes.length, prixTaillePerdus),
+      prixTaillePerdus,
+      variantesSansStock: variantesSansLimite(a),
     })
     // 🔴 PAS QUINZE FOIS LA MÊME FENÊTRE (Alex, 25/09). Elle ne se lève que
     // pour ce qui ne se voit nulle part — des variantes à stock zéro — et une
@@ -1700,7 +1739,15 @@ function TabMenu({ commercantId, commercant, toast }) {
                   estChoisi={c => (form.vente_jour !== false) === c.vente_jour}
                   onChoisir={c => setForm(p => ({ ...p, vente_jour: c.vente_jour }))}/>
               )}
-              {(!deuxCircuits || form.vente_jour !== false) && (<>
+              {(!deuxCircuits || form.vente_jour !== false) && form.gere_variantes && (
+                // 🔴 (22/10, audit R3) UN ARTICLE À VARIANTES : son stock vit
+                // sur chaque variante, ou rien ne se compte (« à la demande »).
+                // Plus de quantité générale exigée, que personne ne lisait.
+                <ChoixCartes label="Comment se compte le stock de ses variantes ?" choix={CHOIX_STOCK_VARIANTES} colonnes={220}
+                  estChoisi={c => modeStockDesVariantes(form.stock_mode) === c.mode}
+                  onChoisir={c => setForm(p => ({ ...p, stock_mode: c.mode, ...(deuxCircuits && c.mode === 'magasin' ? { commande_active: false } : {}) }))}/>
+              )}
+              {(!deuxCircuits || form.vente_jour !== false) && !form.gere_variantes && (<>
               {/* ✅ 07/10 : TROIS CARTES QUI DISENT À QUOI ELLES SERVENT, avec
                   des exemples de plusieurs métiers (`choixDeStock`), au lieu de
                   trois pastilles muettes. */}
@@ -1714,7 +1761,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                 <ChampFormulaire label={form.stock_mode === 'jour' ? 'Quantité par jour *' : 'Quantité en stock *'}
                   aide={form.stock_mode === 'jour'
                     ? 'La quantité de chaque jour. Tu peux la changer jour par jour sur la carte de l’article (« Quantité chaque jour »).'
-                    : (variantesCategorie ? 'Si l’article a des variantes, le stock se gère par variante.' : null)}>
+                    : (variantesCategorie ? 'Si cet article se décline en variantes (« Personnaliser »), chacune aura son stock.' : null)}>
                   <Input type="number" min={form.stock_mode === 'jour' ? 1 : 0} value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder={form.stock_mode === 'jour' ? '30' : '12'}/>
                   {/* 🔴 LA GRILLE REMPLACE CE CHIFFRE, ET ON LE DIT (Alex, 07/10) :
                       « 30 » ici, « 3 » sur la carte, et la fiche vendait 3. */}
@@ -2636,7 +2683,11 @@ function TabMenu({ commercantId, commercant, toast }) {
             </div>
           ) : (
             articles.map(a => (
-              <details key={a.id} style={{ ...s.card, padding: 0, overflow: 'hidden' }}>
+              // 🟠 (22/10, audit O2) Le panneau des variantes ne se monte qu'à
+              // l'ouverture : monté fermé, chacun faisait 2 lectures (120 pour
+              // une boutique de 60 articles) à chaque affichage de l'onglet.
+              <details key={a.id} style={{ ...s.card, padding: 0, overflow: 'hidden' }}
+                onToggle={e => { const ouvert = e.currentTarget.open; setPanneauxOuverts(p => (!!p[a.id] === ouvert ? p : { ...p, [a.id]: ouvert })) }}>
                 <summary style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, listStyle: 'none' }}>
                   <div style={{ width: 32, height: 32, borderRadius: 8, background: T.bgPanel, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Icon name="sliders" size={16} color="#fff"/>
@@ -2677,7 +2728,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                       <Icon name="x" size={13} color={T.ink}/> Fermer
                     </button>
                   </div>
-                  {variantesCategorie && <VariantesArticle article={a} articles={articles} onChange={chargerVariantes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                  {variantesCategorie && panneauxOuverts[a.id] && <VariantesArticle article={a} articles={articles} onChange={chargerVariantes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                   {/* ✅ (22/10, Alex) Variantes ET options : la fiche montre
                       les options sous la variante (emballage cadeau d'une robe). */}
                   <OptionsArticle articleId={a.id} articles={articles} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
@@ -2731,11 +2782,12 @@ async function poserGrille({ grille: g, cibles = [], articles = [], remplacer = 
   // une combinaison n'existe qu'une fois par article.
   const { error: errSup } = await supabase.from('article_variantes').delete().in('article_id', tous)
   if (errSup) { toast(`Les anciennes combinaisons n’ont pas pu être retirées : ${errSup.message}`, 'error'); return { ok: false } }
-  const { error: errAxes } = await supabase.from('articles').update(axesDeGrille(g)).in('id', tous)
-  if (errAxes) { toast(`La grille n’a pas pu être posée : ${errAxes.message}`, 'error'); return { ok: false, partiel: true } }
+  // (22/10, audit O6) relu : zéro ligne = refusé, jamais « posée ».
+  const { data: posees, error: errAxes } = await supabase.from('articles').update(axesDeGrille(g)).in('id', tous).select('id')
+  if (errAxes || (posees?.length || 0) !== tous.length) { toast(`La grille n’a pas pu être posée partout : ${errAxes?.message || 'modification refusée'}. Recharge la page.`, 'error'); return { ok: false, partiel: true } }
   const lignes = tous.flatMap(id => combinaisonsDeGrille(g, id))
-  const { error: errComb } = await supabase.from('article_variantes').insert(lignes)
-  if (errComb) { toast(`La grille est posée mais ses combinaisons n’ont pas pu être créées : ${errComb.message}`, 'error'); return { ok: false, partiel: true } }
+  const { data: crees, error: errComb } = await supabase.from('article_variantes').insert(lignes).select('id')
+  if (errComb || (crees?.length || 0) !== lignes.length) { toast(`La grille est posée mais ses combinaisons n’ont pas toutes été créées : ${errComb?.message || 'création refusée'}`, 'error'); return { ok: false, partiel: true } }
   toast(`Grille posée sur ${tous.length === 1 ? '1 article' : `${tous.length} articles`}, à stock zéro${ignores.length ? ` (${ignores.length} ignoré${ignores.length > 1 ? 's' : ''} : autre grille)` : ''}.`)
   return { ok: true, combien: tous.length, ignores: ignores.length }
 }
@@ -2903,7 +2955,10 @@ function BibliothequeGrilles({ articles = [], toast, onApplique }) {
   const [remplacer, setRemplacer] = useState(false)
   const [envoi, setEnvoi] = useState(false)
   const grilles = bibliothequeDeGrilles(articles)
-  const listeCibles = articles.filter(a => a.est_vitrine !== true)
+  // 🟠 (22/10, audit O9) LA VITRINE AUSSI : la fiche montre ses variantes et
+  // ses options (à lire, sans « Ajouter »). La boutique en vitrine qui pose
+  // 36-44 sur vingt robes n'en voyait aucune.
+  const listeCibles = ciblesDeCopie(articles)
   if (grilles.length === 0) return null
 
   async function appliquer(g) {
@@ -3367,7 +3422,8 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
   const [form, setForm] = useState(vide)
   const [cibles, setCibles] = useState([])
   const [envoi, setEnvoi] = useState(false)
-  const listeCibles = articles.filter(a => a.est_vitrine !== true)
+  // (22/10, audit O9) La vitrine aussi (`ciblesDeCopie`).
+  const listeCibles = ciblesDeCopie(articles)
   const tousCoches = listeCibles.length > 0 && listeCibles.every(a => cibles.some(id => String(id) === String(a.id)))
   const conflits = conflitsDeGroupe(form.nom, cibles, groupesParArticle)
   // (21/10) « N'apparaît que si » : les options de tous les groupes du
@@ -3499,9 +3555,9 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
 
   const biblio = bibliothequeDeGroupes(tousLesGroupes)
 
-  // Les articles qu'on peut cocher : la vitrine ne prend pas de commande, elle
-  // n'a pas d'options à composer.
-  const listeCibles = articles.filter(a => a.est_vitrine !== true)
+  // Les articles qu'on peut cocher. (22/10, audit O9) La vitrine aussi : la
+  // fiche montre ses options à lire (`ciblesDeCopie`).
+  const listeCibles = ciblesDeCopie(articles)
 
   // ✅ 15/10 (Alex) : la liste s'ouvre avec les articles qui ONT le groupe déjà
   // cochés ; cocher pose, décocher retire (`planDuGroupe`).
@@ -3776,10 +3832,14 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
     const f = bornesForms[g.id] || {}
     const r = bornesDepuisSaisie(f.min ?? g.choix_min ?? '', f.max ?? g.choix_max ?? '')
     if (!r.ok) { toast(r.error, 'error'); return }
+    // 🔴 (22/10, audit R2) « Au moins 3 » sur un groupe de 2 options rendait
+    // l'article impossible à commander.
+    const nbOptions = (g.valeurs || []).length
+    if ((r.choix_min || 0) > nbOptions) { toast(`« ${g.nom} » n’a que ${nbOptions} option${nbOptions > 1 ? 's' : ''} : le minimum ne peut pas dépasser ${nbOptions}.`, 'error'); return }
     setReglageEnCours(true)
-    const { error } = await supabase.from('article_options_groupes').update({ choix_min: r.choix_min, choix_max: r.choix_max }).eq('id', g.id)
+    const { data, error } = await supabase.from('article_options_groupes').update({ choix_min: r.choix_min, choix_max: r.choix_max }).eq('id', g.id).select('id')
     setReglageEnCours(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (error || (data?.length || 0) !== 1) { toast(`Pas enregistré : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error'); return }
     setBornesForms(p => ({ ...p, [g.id]: undefined }))
     toast('Nombre de choix enregistré'); apresEcriture()
   }
@@ -3798,12 +3858,18 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
     const r = lignesPrixTaille(v.id, prixTailleForm)
     if (!r.ok) { toast(r.error, 'error'); return }
     setReglageEnCours(true)
-    const { error: errDel } = await supabase.from('article_options_prix_taille').delete().eq('valeur_id', v.id)
-    const { error: errIns } = errDel || r.lignes.length === 0
-      ? { error: null }
-      : await supabase.from('article_options_prix_taille').insert(r.lignes)
+    // (22/10, audit O6) relu : les anciens prix ont-ils tous disparu, les
+    // nouveaux sont-ils tous là ?
+    const anciens = (v.prix_taille || []).length
+    const { data: effaces, error: errDel } = await supabase.from('article_options_prix_taille').delete().eq('valeur_id', v.id).select('valeur_id')
+    const refusDel = !errDel && (effaces?.length || 0) !== anciens
+    const { data: ecrits, error: errIns } = errDel || refusDel || r.lignes.length === 0
+      ? { data: [], error: null }
+      : await supabase.from('article_options_prix_taille').insert(r.lignes).select('valeur_id')
     setReglageEnCours(false)
-    if (errDel || errIns) { toast(`Erreur : ${(errDel || errIns).message}`, 'error'); return }
+    if (errDel || errIns || refusDel || (r.lignes.length > 0 && !refusDel && (ecrits?.length || 0) !== r.lignes.length)) {
+      toast(`Prix par taille pas enregistrés : ${(errDel || errIns)?.message || 'modification refusée'}. Recharge la page.`, 'error'); apresEcriture(); return
+    }
     setPrixTailleDe(null)
     toast(r.lignes.length ? 'Prix par taille enregistrés' : 'Prix unique rétabli'); apresEcriture()
   }
@@ -3821,17 +3887,20 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
 
   async function saveGroupe() {
     if (!formGroupe.nom.trim()) return toast('Nom obligatoire', 'error')
+    if (saving) return
     setSaving(true)
-    const { error } = await supabase.from('article_options_groupes').insert({ article_id: articleId, nom: formGroupe.nom.trim(), type: formGroupe.type, obligatoire: formGroupe.obligatoire })
+    const { data, error } = await supabase.from('article_options_groupes').insert({ article_id: articleId, nom: formGroupe.nom.trim(), type: formGroupe.type, obligatoire: formGroupe.obligatoire }).select('id')
     setSaving(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    toast('Groupe ajouté')
+    if (error || (data?.length || 0) !== 1) { toast(`Groupe pas créé : ${error?.message || 'création refusée'}`, 'error'); return }
+    // (22/10, audit R2) Un groupe obligatoire naît vide : on dit la suite.
+    toast(formGroupe.obligatoire ? 'Groupe ajouté : ajoute maintenant ses options, il n’est exigé du client qu’à partir de là.' : 'Groupe ajouté')
     setFormGroupe({ nom: '', type: 'unique', obligatoire: false }); setShowForm(false); apresEcriture()
   }
 
+  // (22/10, audit O6) relu : zéro ligne = refusé.
   async function updateGroupe(id, patch) {
-    const { error } = await supabase.from('article_options_groupes').update(patch).eq('id', id)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    const { data, error } = await supabase.from('article_options_groupes').update(patch).eq('id', id).select('id')
+    if (error || (data?.length || 0) !== 1) { toast(`Pas enregistré : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error'); return }
     apresEcriture()
   }
 
@@ -3847,25 +3916,39 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
     toast('Groupe supprimé'); apresEcriture()
   }
 
+  // 🟡 (22/10, audit J2) Entrée + clic créait l'option deux fois.
+  const ajoutOption = useRef(false)
   async function addValeur(groupeId) {
+    if (ajoutOption.current) return
     const f = valeursForms[groupeId] || { nom: '', prix_supplement: 0 }
     if (!f.nom.trim()) return toast('Nom obligatoire', 'error')
-    const { error } = await supabase.from('article_options_valeurs').insert({ groupe_id: groupeId, nom: f.nom.trim(), prix_supplement: parseFloat(f.prix_supplement) || 0 })
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    setValeursForms(p => ({ ...p, [groupeId]: { nom: '', prix_supplement: 0 } }))
-    toast('Option ajoutée'); apresEcriture()
+    ajoutOption.current = true
+    try {
+      const { data, error } = await supabase.from('article_options_valeurs').insert({ groupe_id: groupeId, nom: f.nom.trim(), prix_supplement: parseFloat(f.prix_supplement) || 0 }).select('id')
+      if (error || (data?.length || 0) !== 1) { toast(`Option pas ajoutée : ${error?.message || 'création refusée'}`, 'error'); return }
+      setValeursForms(p => ({ ...p, [groupeId]: { nom: '', prix_supplement: 0 } }))
+      toast('Option ajoutée'); apresEcriture()
+    } finally { ajoutOption.current = false }
   }
 
+  // 🟠 (22/10, audit O11) TOUJOURS CONFIRMÉ : la croix de 12 px collée à
+  // « Prix par taille » emportait l'option et ses prix d'un clic. Et on dit
+  // si le groupe devient impossible à respecter (audit R2).
   async function deleteValeur(id) {
     const fils = enfantsDe([id], groupes)
-    if (fils.length > 0) {
-      const v = groupes.flatMap(g => g.valeurs || []).find(x => x.id === id)
-      if (!await confirme(confirmationSimple({
-        titre: `Supprimer « ${v?.nom || 'cette option'} » ?`,
-        message: phraseEnfantsEmportes(fils.map(f => f.nom)),
-        action: 'Oui, supprimer',
-      }))) return
-    }
+    const g = groupes.find(x => (x.valeurs || []).some(v => v.id === id))
+    const v = (g?.valeurs || []).find(x => x.id === id)
+    const apres = g ? problemeDuGroupe({ ...g, valeurs: (g.valeurs || []).filter(x => x.id !== id) }) : null
+    const morceaux = [
+      (v?.prix_taille || []).length > 0 ? 'Ses prix par taille partent avec.' : null,
+      fils.length > 0 ? phraseEnfantsEmportes(fils.map(f => f.nom)) : null,
+      apres && !problemeDuGroupe(g) ? `« ${g.nom} » : ${apres.charAt(0).toLowerCase()}${apres.slice(1)}` : null,
+    ].filter(Boolean)
+    if (!await confirme(confirmationSimple({
+      titre: `Supprimer « ${v?.nom || 'cette option'} » ?`,
+      message: morceaux.join(' ') || 'Les commandes déjà passées ne changent pas.',
+      action: 'Oui, supprimer',
+    }))) return
     const { data, error } = await supabase.from('article_options_valeurs').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
@@ -3930,15 +4013,16 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
             <div>
               <label style={{ ...s.label, fontSize: 10 }}>Nom du groupe *</label>
               <input value={formGroupe.nom} onChange={e => setFormGroupe(p => ({ ...p, nom: e.target.value }))}
-                placeholder="Ex: Choix de sauce, Crudités..."
+                placeholder="Ex : Sauce, Emballage cadeau, Gravure…"
                 style={{ ...s.input, fontSize: 13, padding: '7px 10px' }}/>
             </div>
             <div>
               <label style={{ ...s.label, fontSize: 10 }}>Type de choix</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 {[
-                  { val: 'unique',   label: 'Un seul choix', desc: 'Ex : taille, sauce' },
-                  { val: 'multiple', label: 'Plusieurs',     desc: 'Ex : suppléments' },
+                  // (22/10, audit J7) Des exemples pour tous les métiers.
+                  { val: 'unique',   label: 'Un seul choix', desc: 'Ex : une sauce, une finition' },
+                  { val: 'multiple', label: 'Plusieurs',     desc: 'Ex : suppléments, accessoires' },
                 ].map(opt => {
                   const sel = formGroupe.type === opt.val
                   return (
@@ -3982,20 +4066,29 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
                   si « {optionParente(g, groupes).valeur.nom} »
                 </span>
               )}
-              {/* Badge type cliquable pour basculer unique <-> multiple */}
-              <button onClick={() => updateGroupe(g.id, { type: g.type === 'unique' ? 'multiple' : 'unique' })}
-                title="Cliquer pour basculer"
+              {/* 🟠 (22/10, audit O7) LES PASTILLES DISENT LES VRAIES BORNES
+                  (nombre de choix compris), et un clic remet ce nombre à zéro
+                  (`basculeType`, `basculeObligatoire`). */}
+              <button onClick={() => updateGroupe(g.id, basculeType(g))}
+                title="Cliquer pour basculer (remet le nombre de choix à zéro)"
                 style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 100, background: T.bgPanel, color: '#fff', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                {g.type === 'unique' ? '1 choix' : 'Plusieurs choix'}
+                {pastillesDuGroupe(g).unique ? '1 choix' : 'Plusieurs choix'}
               </button>
-              {/* Badge obligatoire cliquable */}
-              <button onClick={() => updateGroupe(g.id, { obligatoire: !g.obligatoire })}
+              <button onClick={() => updateGroupe(g.id, basculeObligatoire(g))}
                 title="Cliquer pour basculer"
-                style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 100, background: g.obligatoire ? '#FEE2E2' : '#F3F4F6', color: g.obligatoire ? '#DC2626' : T.muted, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                {g.obligatoire ? 'Obligatoire' : 'Optionnel'}
+                style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 100, background: pastillesDuGroupe(g).obligatoire ? '#FEE2E2' : '#F3F4F6', color: pastillesDuGroupe(g).obligatoire ? '#DC2626' : T.muted, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                {pastillesDuGroupe(g).obligatoire ? 'Obligatoire' : 'Optionnel'}
               </button>
+              {/* 🔴 (22/10, audit R2) Le réglage ne peut pas être respecté :
+                  le client n'est pas bloqué, mais le commerçant le sait. */}
+              {problemeDuGroupe(g) && (
+                <span role="alert" style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 100, background: '#FFFBEB', color: '#92400E', border: '1px solid #F59E0B88' }}>
+                  À corriger : {problemeDuGroupe(g)}
+                </span>
+              )}
             </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* (22/10, audit O13) Les boutons passent à la ligne sur téléphone. */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {/* 🔴 MODIFIER CE GROUPE ICI SEULEMENT : nom, options et
                   suppléments (Alex, 10/10, les exceptions d'un article). */}
               <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
@@ -4218,12 +4311,26 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
   const [variantes, setVariantes] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploadId, setUploadId] = useState(null)
+  // (22/10, audit R3) « Fabriqué à la demande » : aucune variante ne se compte.
+  const sansLimite = variantesSansLimite({ ...article, gere_variantes: true })
 
+  // 🟠 (22/10, audit O1) LE PANNEAU SE RELIT QUAND SES AXES CHANGENT AILLEURS :
+  // une grille posée depuis la bibliothèque ou une copie laissait ici une case
+  // décochée sans valeur, et le premier ajout écrasait les axes de la grille.
+  // `axesEnBase` = ce que la base porte selon CE panneau (lu ou écrit par
+  // lui) : seule une clé différente venue du parent déclenche la relecture,
+  // sans démonter le panneau (le champ en cours de frappe garde le focus).
+  const axesEnBase = useRef(null)
+  const cleExterne = cleDesAxes(article)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchVariantes() }, [article.id])
+  useEffect(() => {
+    if (axesEnBase.current && cleExterne !== cleDesAxes(axesEnBase.current)) fetchVariantes({ silencieux: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- relu seulement quand la clé des axes change
+  }, [cleExterne])
 
-  async function fetchVariantes() {
-    setLoading(true)
+  async function fetchVariantes({ silencieux = false } = {}) {
+    if (!silencieux) setLoading(true)
     // Axes relus depuis la BASE (pas la prop article, potentiellement périmée :
     // la liste parent n'est pas rafraîchie après chaque saveAxes → les valeurs
     // semblaient « perdues » à la réouverture. Bug signalé Alex 24/07).
@@ -4233,6 +4340,7 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
     ])
     setVariantes(data || [])
     if (art) {
+      axesEnBase.current = art
       setGere(!!art.gere_variantes)
       setAxe1Nom(art.axe1_nom || 'Taille')
       setAxe2Nom(art.axe2_nom || '')
@@ -4240,35 +4348,87 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
       setAxe2Valeurs(Array.isArray(art.axe2_valeurs) ? art.axe2_valeurs : [])
     }
     setLoading(false)
+    return data || []
   }
 
+  // 🟠 (22/10, audit O6) RELU : une écriture refusée par les permissions rend
+  // zéro ligne sans erreur. Rend `true` si l'article a bien changé.
+  // Le parent relit ses articles (la carte, les grilles, la clé ci-dessus).
   async function saveAxes(patch) {
-    const { error } = await supabase.from('articles').update(patch).eq('id', article.id)
-    if (error) toast(`Erreur : ${error.message}`, 'error')
+    const { data, error } = await supabase.from('articles').update(patch).eq('id', article.id).select('id')
+    if (error || (data?.length || 0) !== 1) {
+      toast(`Les variantes n’ont pas été enregistrées : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error')
+      return false
+    }
+    axesEnBase.current = { ...(axesEnBase.current || {}), ...patch }
+    onChange?.({ articles: true })
+    return true
   }
 
-  // (21/10) Le parent relit ses articles : la carte passe du stock général au
-  // stock par variante (et inversement).
-  async function toggleGere(v) { setGere(v); await saveAxes({ gere_variantes: v }); onChange?.({ articles: true }) }
+  // 🔴 (22/10, audit O8) LE NOM « TAILLE » S'ENREGISTRE DÈS L'ACTIVATION : il
+  // s'affichait ici sans exister en base, et le client lisait « Version ».
+  // Et si des valeurs attendent déjà (article réactivé), leurs combinaisons
+  // naissent tout de suite (combinaisons automatiques).
+  async function toggleGere(v) {
+    setGere(v)
+    const patch = { gere_variantes: v }
+    if (v && !axesEnBase.current?.axe1_nom) { patch.axe1_nom = axe1Nom.trim() || 'Taille'; setAxe1Nom(patch.axe1_nom) }
+    if (!await saveAxes(patch)) { setGere(!v); return }
+    if (v) await creerCombinaisons(combinaisonsManquantes({ articleId: article.id, axe1Valeurs, axe2Valeurs, variantes }))
+  }
 
-  function addValeur(axe) {
+  // Écrit des combinaisons nées automatiquement, relit, et prévient le parent.
+  async function creerCombinaisons(lignes, aConvertir = [], valeurAxe2 = null) {
+    if (aConvertir.length > 0) {
+      const { data, error } = await supabase.from('article_variantes').update({ axe2_valeur: valeurAxe2 }).in('id', aConvertir).select('id')
+      if (error || (data?.length || 0) !== aConvertir.length) { toast(`Les variantes n’ont pas toutes été mises à jour : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error'); await fetchVariantes({ silencieux: true }); onChange?.(); return false }
+    }
+    if (lignes.length > 0) {
+      const { data, error } = await supabase.from('article_variantes').insert(lignes).select('id')
+      if (error || (data?.length || 0) !== lignes.length) { toast(`Les combinaisons n’ont pas toutes été créées : ${error?.message || 'création refusée'}. Recharge la page.`, 'error'); await fetchVariantes({ silencieux: true }); onChange?.(); return false }
+    }
+    if (lignes.length > 0 || aConvertir.length > 0) { await fetchVariantes({ silencieux: true }); onChange?.() }
+    return true
+  }
+
+  // ✅ (22/10, Alex, tableau de l'audit) COMBINAISONS AUTOMATIQUES : chaque
+  // valeur ajoutée crée ses combinaisons, plus de « Générer ».
+  // 🟡 (audit J2) Entrée + clic ne fait qu'un ajout.
+  const ajoutEnCours = useRef(false)
+  async function addValeur(axe) {
+    if (ajoutEnCours.current) return
     const raw = (axe === 1 ? input1 : input2).trim()
     if (!raw) return
     const list = axe === 1 ? axe1Valeurs : axe2Valeurs
-    if (list.includes(raw)) { toast('Valeur déjà présente', 'error'); return }
-    const next = [...list, raw]
-    if (axe === 1) { setAxe1Valeurs(next); setInput1(''); saveAxes({ axe1_valeurs: next }) }
-    else { setAxe2Valeurs(next); setInput2(''); saveAxes({ axe2_valeurs: next }) }
+    if (list.some(x => x.toLowerCase() === raw.toLowerCase())) { toast('Valeur déjà présente', 'error'); return }
+    ajoutEnCours.current = true
+    try {
+      const next = [...list, raw]
+      const a1 = axe === 1 ? next : axe1Valeurs
+      const a2 = axe === 2 ? next : axe2Valeurs
+      if (axe === 1) { setAxe1Valeurs(next); setInput1('') } else { setAxe2Valeurs(next); setInput2('') }
+      const patch = axe === 1 ? { axe1_valeurs: next } : { axe2_valeurs: next }
+      // Le nom du 2e axe s'enregistre avec sa première valeur (« Couleur »).
+      if (axe === 2 && !axesEnBase.current?.axe2_nom && axe2Nom.trim()) patch.axe2_nom = axe2Nom.trim()
+      if (!await saveAxes(patch)) { await fetchVariantes({ silencieux: true }); return }
+      const { aCreer, aConvertir } = combinaisonsDeLaValeur({ articleId: article.id, axe, valeur: raw, axe1Valeurs: a1, axe2Valeurs: a2, variantes })
+      if (await creerCombinaisons(aCreer, aConvertir, raw) && aConvertir.length > 0) {
+        toast(`${aConvertir.length === 1 ? 'Ta variante devient' : `Tes ${aConvertir.length} variantes deviennent`} « … · ${raw} », stock gardé.`)
+      }
+    } finally { ajoutEnCours.current = false }
   }
 
   // 🔴 (21/10, Alex, Caprice de Magali) RETIRER UNE VALEUR EMPORTE SES
   // COMBINAISONS. Avant, seul l'axe changeait : les lignes « 85a » restaient,
   // vendues sur la fiche, et il fallait les supprimer une par une. On dit
   // combien partent, et leur stock, avant.
+  // ✅ (22/10) SAUF LA DERNIÈRE COULEUR : ses combinaisons la perdent et
+  // gardent leur stock (`retraitDeValeur`), l'inverse de la première.
   async function removeValeur(axe, val) {
     const list = axe === 1 ? axe1Valeurs : axe2Valeurs
     const next = list.filter(x => x !== val)
-    const combos = variantesDeLaValeur(variantes, axe, val)
+    const { aSupprimer, aGarderSansAxe2 } = retraitDeValeur({ axe, valeur: val, axe2Valeurs, variantes })
+    const combos = variantes.filter(v => aSupprimer.includes(v.id))
     if (combos.length > 0) {
       const okRetraitValeur = await confirme(confirmationSimple({
         titre: `Retirer « ${val} » ?`, message: phraseRetraitValeur(val, combos), action: 'Oui, retirer',
@@ -4277,8 +4437,9 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
       const { data, error } = await supabase.from('article_variantes').delete().in('id', combos.map(v => v.id)).select('id')
       if (error || (data?.length || 0) !== combos.length) { toast(`Retrait incomplet : ${error?.message || 'refusé par les permissions'}. Recharge la page.`, 'error'); fetchVariantes(); return }
     }
-    if (axe === 1) { setAxe1Valeurs(next); await saveAxes({ axe1_valeurs: next }) }
-    else { setAxe2Valeurs(next); await saveAxes({ axe2_valeurs: next }) }
+    if (aGarderSansAxe2.length > 0 && !await creerCombinaisons([], aGarderSansAxe2, null)) return
+    if (axe === 1) setAxe1Valeurs(next); else setAxe2Valeurs(next)
+    if (!await saveAxes(axe === 1 ? { axe1_valeurs: next } : { axe2_valeurs: next })) { await fetchVariantes({ silencieux: true }); return }
     if (combos.length > 0) { setVariantes(prev => prev.filter(v => !combos.some(c => c.id === v.id))); onChange?.() }
   }
 
@@ -4296,17 +4457,25 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
   async function rangerVariantes(a1, a2) {
     const changes = ordreDesVariantes(variantes, a1, a2)
     for (const { id, ordre } of changes) {
-      const { error } = await supabase.from('article_variantes').update({ ordre }).eq('id', id)
-      if (error) { toast(`L’ordre n’a pas pu être enregistré : ${error.message}`, 'error'); break }
+      // (22/10, audit O6) relu : zéro ligne = refusé.
+      const { data, error } = await supabase.from('article_variantes').update({ ordre }).eq('id', id).select('id')
+      if (error || (data?.length || 0) !== 1) { toast(`L’ordre n’a pas pu être enregistré : ${error?.message || 'modification refusée'}`, 'error'); break }
     }
-    if (changes.length > 0) { fetchVariantes(); onChange?.() }
+    if (changes.length > 0) { fetchVariantes({ silencieux: true }); onChange?.() }
   }
 
   // (21/10) Renommer une valeur SANS perdre son stock : l'axe ET ses
   // combinaisons changent de nom, rien n'est recréé.
-  async function renommerUneValeur(axe, val) {
-    const saisie = window.prompt(`Nouveau nom pour « ${val} » :`, val)
-    if (saisie === null) return
+  // 🟡 (22/10, audit J11) UN VRAI CHAMP, plus `window.prompt` (illisible sur
+  // téléphone) : ✎ ouvre le nom en place, Entrée enregistre, Échap annule.
+  const [renommage, setRenommage] = useState(null) // { axe, val, saisie }
+  // Entrée PUIS la sortie du champ (qui disparaît) ne renomment qu'une fois.
+  const renommageOuvert = useRef(false)
+  function ouvrirRenommage(axe, val) { renommageOuvert.current = true; setRenommage({ axe, val, saisie: val }) }
+  function fermerRenommage() { renommageOuvert.current = false; setRenommage(null) }
+  async function renommerUneValeur(axe, val, saisie) {
+    if (!renommageOuvert.current) return
+    fermerRenommage()
     const list = axe === 1 ? axe1Valeurs : axe2Valeurs
     const r = renommerValeur(list, val, saisie)
     if (!r.ok) { toast(r.error, 'error'); return }
@@ -4318,7 +4487,7 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
       if (error || (data?.length || 0) !== combos.length) { toast(`Renommage incomplet : ${error?.message || 'refusé par les permissions'}. Recharge la page.`, 'error'); fetchVariantes(); return }
     }
     if (axe === 1) setAxe1Valeurs(r.liste); else setAxe2Valeurs(r.liste)
-    await saveAxes(axe === 1 ? { axe1_valeurs: r.liste } : { axe2_valeurs: r.liste })
+    if (!await saveAxes(axe === 1 ? { axe1_valeurs: r.liste } : { axe2_valeurs: r.liste })) { await fetchVariantes({ silencieux: true }); return }
     setVariantes(prev => prev.map(v => (v[col] === val ? { ...v, [col]: r.nom } : v)))
     onChange?.()
     toast(`« ${val} » renommé en « ${r.nom} »${combos.length ? ', stock gardé' : ''}.`)
@@ -4358,32 +4527,34 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
   }
 
   async function saveNom(axe) {
-    if (axe === 1) await saveAxes({ axe1_nom: axe1Nom.trim() || null })
-    else await saveAxes({ axe2_nom: axe2Nom.trim() || null })
+    // Rien ne part si rien n'a changé (sortie du champ sans modification).
+    const nom = (axe === 1 ? axe1Nom : axe2Nom).trim() || (axe === 1 ? 'Taille' : null)
+    const col = axe === 1 ? 'axe1_nom' : 'axe2_nom'
+    if ((axesEnBase.current?.[col] || null) === nom) return
+    if (axe === 1) setAxe1Nom(nom)
+    await saveAxes({ [col]: nom })
   }
 
-  async function genererCombinaisons() {
-    if (!axe1Valeurs.length) { toast('Ajoute au moins une valeur au premier axe', 'error'); return }
-    const a2 = axe2Valeurs.length ? axe2Valeurs : [null]
-    const existing = new Set(variantes.map(v => `${v.axe1_valeur || ''}|${v.axe2_valeur || ''}`))
-    const toInsert = []
-    for (const v1 of axe1Valeurs) for (const v2 of a2) {
-      const key = `${v1 || ''}|${v2 || ''}`
-      if (!existing.has(key)) toInsert.push({ article_id: article.id, axe1_valeur: v1, axe2_valeur: v2, stock: 0, ordre: variantes.length + toInsert.length })
-    }
-    if (!toInsert.length) { toast('Toutes les combinaisons existent déjà'); return }
-    const { error } = await supabase.from('article_variantes').insert(toInsert)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    toast(`${toInsert.length} combinaison${toInsert.length > 1 ? 's' : ''} ajoutée${toInsert.length > 1 ? 's' : ''}`)
-    fetchVariantes()
-    onChange?.()
+  // ✅ (22/10) PLUS DE BOUTON « GÉNÉRER » : les combinaisons naissent avec
+  // leurs valeurs. Ce lien ne sert qu'à un article encodé AVANT (des valeurs
+  // sans combinaisons) ou à une combinaison supprimée qu'on veut ravoir. Il ne
+  // s'affiche que s'il manque quelque chose (`combinaisonsManquantes`).
+  const manquantes = combinaisonsManquantes({ articleId: article.id, axe1Valeurs, axe2Valeurs, variantes })
+  const creationEnCours = useRef(false)
+  async function creerLesManquantes() {
+    if (creationEnCours.current || manquantes.length === 0) return
+    creationEnCours.current = true
+    try {
+      if (await creerCombinaisons(manquantes)) toast(`${manquantes.length === 1 ? '1 combinaison créée' : `${manquantes.length} combinaisons créées`}, à stock zéro.`)
+    } finally { creationEnCours.current = false }
   }
 
   function setVarLocal(id, patch) { setVariantes(prev => prev.map(v => v.id === id ? { ...v, ...patch } : v)) }
 
+  // (22/10, audit O6) relu : zéro ligne = refusé, et l'écran revient à la base.
   async function persistVar(id, patch) {
-    const { error } = await supabase.from('article_variantes').update(patch).eq('id', id)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    const { data, error } = await supabase.from('article_variantes').update(patch).eq('id', id).select('id')
+    if (error || (data?.length || 0) !== 1) { toast(`Pas enregistré : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error'); fetchVariantes({ silencieux: true }); return }
     onChange?.()
   }
 
@@ -4414,7 +4585,17 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
   const stockSaisi = (txt) => Math.max(0, parseInt(txt, 10) || 0)
   const prixSaisi = (txt) => (String(txt).trim() === '' ? null : Math.max(0, parseFloat(String(txt).replace(',', '.')) || 0))
 
+  // 🟠 (22/10, audit O11) CONFIRMÉ : la poubelle emportait stock et photo d'un
+  // seul geste. Pour une rupture, l'interrupteur suffit (la combinaison reste).
   async function deleteVariante(id) {
+    const v = variantes.find(x => x.id === id)
+    const nomV = v ? [v.axe1_valeur, v.axe2_valeur].filter(Boolean).join(' · ') : 'cette combinaison'
+    const okSuppressionVariante = await confirme(confirmationSimple({
+      titre: `Supprimer « ${nomV} » ?`,
+      message: `Son stock (${Math.max(0, Number(v?.stock) || 0)})${v?.photo_url ? ' et sa photo partent' : ' part'} avec. Pour une simple rupture, éteins-la plutôt : elle reste prête pour le réassort.`,
+      action: 'Oui, supprimer',
+    }))
+    if (!okSuppressionVariante) return
     const { data, error } = await supabase.from('article_variantes').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || !data.length) { toast('Suppression refusée (RLS)', 'error'); return }
@@ -4450,12 +4631,24 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
               celui de l'encodage. */}
           {valeurs.map((val, i) => {
             const fleche = (actif) => ({ width: 22, height: 22, borderRadius: 7, border: `1px solid ${actif ? T.hairline : 'transparent'}`, background: actif ? '#F8F6FF' : 'transparent', cursor: actif ? 'pointer' : 'default', color: actif ? T.deep : T.hairline, fontSize: 13, fontWeight: 800, padding: 0, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' })
+            const enRenommage = renommage && renommage.axe === n && renommage.val === val
             return (
             <span key={val} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 6px', fontSize: 12 }}>
               <button type="button" onClick={() => bougerValeur(n, val, -1)} disabled={i === 0} aria-label={`Avancer ${val}`} title="Avancer" style={fleche(i > 0)}>←</button>
-              <span style={{ color: T.ink, fontWeight: 700, padding: '0 3px' }}>{val}</span>
+              {enRenommage ? (
+                <input autoFocus value={renommage.saisie} aria-label={`Nouveau nom pour ${val}`}
+                  onChange={e => setRenommage(r => ({ ...r, saisie: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); renommerUneValeur(n, val, renommage.saisie) }
+                    if (e.key === 'Escape') { e.preventDefault(); fermerRenommage() }
+                  }}
+                  onBlur={() => renommerUneValeur(n, val, renommage.saisie)}
+                  style={{ ...s.input, width: Math.max(48, renommage.saisie.length * 8 + 20), fontSize: 12, padding: '2px 6px' }}/>
+              ) : (
+                <span style={{ color: T.ink, fontWeight: 700, padding: '0 3px' }}>{val}</span>
+              )}
               <button type="button" onClick={() => bougerValeur(n, val, 1)} disabled={i === valeurs.length - 1} aria-label={`Reculer ${val}`} title="Reculer" style={fleche(i < valeurs.length - 1)}>→</button>
-              <button type="button" onClick={() => renommerUneValeur(n, val)} aria-label={`Renommer ${val}`} title="Renommer"
+              <button type="button" onClick={() => ouvrirRenommage(n, val)} aria-label={`Renommer ${val}`} title="Renommer"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, fontSize: 11, padding: '0 2px', lineHeight: 1 }}>✎</button>
               <button type="button" onClick={() => removeValeur(n, val)} aria-label={`Retirer ${val}`} title="Retirer" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
             </span>
@@ -4503,15 +4696,17 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
       if (errSup) { setEnvoiVar(false); toast(`Les anciennes grilles n’ont pas pu être retirées : ${errSup.message}`, 'error'); return }
     }
     const axes = axesDeLArticle({ gere_variantes: true, axe1_nom: axe1Nom, axe1_valeurs: axe1Valeurs, axe2_nom: axe2Nom, axe2_valeurs: axe2Valeurs })
-    const { error } = await supabase.from('articles').update(axes).in('id', aCopier)
-    if (error) { setEnvoiVar(false); toast(`Erreur : ${error.message}`, 'error'); return }
+    // (22/10, audit O6) relu : zéro ligne = refusé, jamais « copié ».
+    const { data: posees, error } = await supabase.from('articles').update(axes).in('id', aCopier).select('id')
+    if (error || (posees?.length || 0) !== aCopier.length) { setEnvoiVar(false); toast(`Copie incomplète : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error'); onChange?.({ articles: true }); return }
 
     const lignes = aCopier.flatMap(id => copiesDeVariantes(variantes, id))
     if (lignes.length > 0) {
-      const { error: errVar } = await supabase.from('article_variantes').insert(lignes)
-      if (errVar) {
+      const { data: crees, error: errVar } = await supabase.from('article_variantes').insert(lignes).select('id')
+      if (errVar || (crees?.length || 0) !== lignes.length) {
         setEnvoiVar(false)
-        toast(`Les axes sont posés mais les combinaisons n'ont pas pu être créées : ${errVar.message}`, 'error')
+        toast(`Les axes sont posés mais les combinaisons n'ont pas pu être créées : ${errVar?.message || 'création refusée'}`, 'error')
+        onChange?.({ articles: true })
         return
       }
     }
@@ -4607,9 +4802,23 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
           {renderAxe(1, axe1Nom, setAxe1Nom, axe1Valeurs, input1, setInput1)}
           {renderAxe(2, axe2Nom, setAxe2Nom, axe2Valeurs, input2, setInput2)}
 
-          <button style={{ ...s.btn, ...s.btnPrimary, padding: '7px 12px', fontSize: 12, marginBottom: 12 }} onClick={genererCombinaisons}>
-            <Icon name="plus" size={13}/> Générer les combinaisons
-          </button>
+          {/* ✅ (22/10) Les combinaisons naissent avec leurs valeurs. Ce
+              rappel n'apparaît que s'il en manque (article encodé avant). */}
+          {manquantes.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: '#FFFBEB', border: '1px solid #F59E0B55', borderRadius: 10, padding: '8px 10px', marginBottom: 10, fontSize: 12, color: '#92400E' }}>
+              <span style={{ flex: 1, minWidth: 160 }}>
+                {manquantes.length === 1 ? 'Il manque 1 combinaison' : `Il manque ${manquantes.length} combinaisons`} (ex. « {[manquantes[0].axe1_valeur, manquantes[0].axe2_valeur].filter(Boolean).join(' · ')} »).
+              </span>
+              <button type="button" style={{ ...s.btn, ...s.btnPrimary, padding: '5px 10px', fontSize: 12 }} onClick={creerLesManquantes}>
+                <Icon name="plus" size={13}/> Les créer
+              </button>
+            </div>
+          )}
+          {sansLimite && (
+            <p style={{ fontSize: 12, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+              Fabriqué à la demande : aucune variante ne se compte, chacune se commande sans limite. Pour suivre un stock par variante, change « Le stock » dans la fiche de l&rsquo;article.
+            </p>
+          )}
 
           {/* ─── EN MASSE (21/10, Alex) : un stock ou un prix posé d'un coup,
               sur toutes les combinaisons ou sur une valeur. */}
@@ -4620,11 +4829,13 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
                 style={{ ...s.input, width: 'auto', fontSize: 12, padding: '5px 8px' }}>
                 {ciblesDeMasse({ axe1Nom, axe1Valeurs, axe2Nom, axe2Valeurs }).map(c => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
               </select>
+              {!sansLimite && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <input type="number" min="0" value={masseStock} onChange={e => setMasseStock(e.target.value)} placeholder="Stock" aria-label="Stock à poser"
                   style={{ ...s.input, width: 64, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
                 <button type="button" onClick={() => appliquerMasse('stock')} disabled={masseEnvoi} style={{ ...s.btn, ...s.btnPrimary, padding: '5px 10px', fontSize: 12 }}>Mettre ce stock</button>
               </span>
+              )}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <input inputMode="decimal" value={massePrix} onChange={e => setMassePrix(e.target.value)} placeholder={Number(article.prix || 0).toFixed(2).replace('.', ',')} aria-label="Prix à poser"
                   style={{ ...s.input, width: 72, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
@@ -4635,7 +4846,7 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
           )}
 
           {variantes.length === 0 ? (
-            <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Définis tes axes puis clique sur «&nbsp;Générer les combinaisons&nbsp;».</p>
+            <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Ajoute tes valeurs (S, M, L, 36, 38, Bleu…) : chaque combinaison se crée toute seule, à stock zéro.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {variantes.map(v => (
@@ -4647,17 +4858,19 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
                   <span style={{ fontWeight: 700, fontSize: 12.5, color: T.ink, minWidth: 80, flex: 1 }}>
                     {v.axe1_valeur}{v.axe2_valeur ? ` · ${v.axe2_valeur}` : ''}
                   </span>
+                  {!sansLimite && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ fontSize: 10, color: T.muted, fontWeight: 700 }}>Stock</span>
                     <input type="number" min="0" value={v.stock ?? 0} aria-label={`Stock ${v.axe1_valeur || ''}${v.axe2_valeur ? ` ${v.axe2_valeur}` : ''}`}
                       onChange={e => { setVarLocal(v.id, { stock: e.target.value }); planifierVar(v.id, { stock: stockSaisi(e.target.value) }) }}
                       onBlur={() => viderVar(v.id)} style={{ ...s.input, width: 54, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
                   </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ fontSize: 10, color: T.muted, fontWeight: 700 }}>Prix</span>
                     <input type="number" min="0" step="0.10" value={v.prix ?? ''} placeholder={Number(article.prix || 0).toFixed(2)} onChange={e => { setVarLocal(v.id, { prix: e.target.value }); planifierVar(v.id, { prix: prixSaisi(e.target.value) }) }} onBlur={() => viderVar(v.id)} style={{ ...s.input, width: 62, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
                   </div>
-                  <button onClick={() => { const nv = !v.actif; setVarLocal(v.id, { actif: nv }); persistVar(v.id, { actif: nv }) }} title="Actif / inactif"
+                  <button onClick={() => { const nv = !v.actif; setVarLocal(v.id, { actif: nv }); persistVar(v.id, { actif: nv }) }} title={v.actif ? 'En vente : clique pour l’éteindre' : 'Éteinte : clique pour la remettre en vente'} aria-label={`${v.actif ? 'Éteindre' : 'Remettre en vente'} ${[v.axe1_valeur, v.axe2_valeur].filter(Boolean).join(' · ')}`}
                     style={{ width: 34, height: 20, borderRadius: 100, background: v.actif ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
                     <div style={{ position: 'absolute', top: 2, left: v.actif ? 16 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.15s' }}/>
                   </button>

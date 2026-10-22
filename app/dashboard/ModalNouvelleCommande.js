@@ -22,8 +22,8 @@ import { referenceCommande } from '@/lib/numero-commande'
 import { creneauRetraitHorsHoraires } from '@/lib/ouverture'
 import { COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
-import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
-import { prixTailleDesGroupes, prixDeValeur, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, estDependant, groupeActif, groupesActifs, purgerInactifs } from '@/lib/options-choix'
+import { construireLignesCommande } from '@/lib/lignes-commande'
+import { prixTailleDesGroupes, prixDeValeur, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, estDependant, groupeActif, groupesActifs, purgerInactifs, bornesPourLeClient, groupeAvecOptions } from '@/lib/options-choix'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
@@ -430,7 +430,7 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
               <p style={{ fontSize: 15, fontWeight: 800, color: T.ink, margin: '0 0 8px' }}>{enOptions.nom}</p>
               {/* (21/10) Un groupe dépendant n'apparaît que si son option est
                   cochée, en retrait sous son groupe parent, comme sur la fiche. */}
-              {ordonnerGroupes(groupes[enOptions.id] || []).filter(g => groupeActif(g, selections)).map(g => {
+              {ordonnerGroupes(groupes[enOptions.id] || []).filter(g => groupeAvecOptions(g) && groupeActif(g, selections)).map(g => {
                 // (13/10) Nombre de choix et prix selon la taille : mêmes
                 // règles que la fiche et le serveur (`lib/options-choix.js`).
                 const idsChoisis = Object.values(selections).flat().map(x => x.id)
@@ -440,8 +440,10 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                   <p style={{ fontSize: 13, fontWeight: 700, color: T.deep, margin: '0 0 4px' }}>
                     {/* (13/10, Alex) Seulement ce qui informe : « obligatoire »
                         et une vraie limite, comme sur la fiche. */}
-                    {g.nom} {(bornesChoix(g).min > 0 || pastilleBornes(g)) && (
-                      <span style={{ fontWeight: 600, color: T.muted }}>· {[bornesChoix(g).min > 0 ? 'obligatoire' : null, pastilleBornes(g)?.toLowerCase()].filter(Boolean).join(', ')}</span>
+                    {/* (22/10, audit R2) Les bornes du client : un groupe
+                        sans option assez n'est pas « obligatoire ». */}
+                    {g.nom} {(bornesPourLeClient(g).min > 0 || pastilleBornes(g)) && (
+                      <span style={{ fontWeight: 600, color: T.muted }}>· {[bornesPourLeClient(g).min > 0 ? 'obligatoire' : null, pastilleBornes(g)?.toLowerCase()].filter(Boolean).join(', ')}</span>
                     )}
                   </p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

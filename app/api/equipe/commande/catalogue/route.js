@@ -40,7 +40,9 @@ export async function POST(request) {
       admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut, ordre_categories, horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours').eq('id', commercant_id).maybeSingle(),
       // ⚠️ Les colonnes du stock : celles que `etatStock` lit (comptoir, maximum
       // sur commande, stock qui baisse), comme `verifierStockDisponible`.
-      admin.from('articles').select(`${SELECT_ARTICLES}, gere_variantes, ordre, stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le`).eq('commercant_id', commercant_id).eq('actif', true).order('categorie').order('nom'),
+      // (22/10) `gere_variantes` vient maintenant de SELECT_ARTICLES (une
+      // colonne nommée deux fois dans un select est un risque inutile).
+      admin.from('articles').select(`${SELECT_ARTICLES}, ordre, stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le`).eq('commercant_id', commercant_id).eq('actif', true).order('categorie').order('nom'),
       admin.from('yoppaa_deals').select(SELECT_DEALS).eq('commercant_id', commercant_id).eq('actif', true),
       admin.from('creneaux').select(COLONNES_CRENEAU).eq('commercant_id', commercant_id).eq('actif', true).order('heure_debut'),
       admin.from('livraison_creneaux').select(COLONNES_CRENEAU).eq('commercant_id', commercant_id).eq('actif', true).order('heure_debut'),

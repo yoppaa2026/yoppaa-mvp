@@ -226,7 +226,8 @@ const code = (f) => sansProse(lire(f))
   v('l’enregistrement d’un article a été retrouvé', save.length > 500, String(save.length))
   v('🔴 le prix est obligatoire, vitrine comprise', /if \(!form\.nom\.trim\(\) \|\| !\(parseFloat\(form\.prix\) > 0\)\) return toast\(/.test(save))
   // ⚠️ RÉORIENTÉE LE 08/10 : s'il se vend le jour même (temps 3).
-  v('🔴 un article vendu dit comment se compte son stock', /const refusStock = form\.vendable && venteJour \? refusQuantite\(form\.stock_mode, form\.stock_jour\) : null\s*if \(refusStock\) return toast\(refusStock, 'error'\)/.test(save))
+  // REPOINTÉE LE 22/10 (audit R3) : sauf à variantes (le stock vit sur chacune).
+  v('🔴 un article vendu dit comment se compte son stock', /const refusStock = form\.vendable && venteJour && !aVariantes \? refusQuantite\(form\.stock_mode, form\.stock_jour\) : null\s*if \(refusStock\) return toast\(refusStock, 'error'\)/.test(save))
   v('🔴 le stock s’écrit par la règle partagée', /\? champsStock\(\{ mode: form\.stock_mode, saisie: form\.stock_jour, avant \}\)/.test(save) && /\.\.\.stock,/.test(save))
   v('🔴 en vitrine = pas vendu en ligne, pour TOUS les métiers', /est_vitrine: !form\.vendable,/.test(save) && !/est_vitrine: estVitrine \?/.test(save))
   v('🔴 « sans limite » retire les quantités par jour, et garde les jours indisponibles',
@@ -610,9 +611,11 @@ const code = (f) => sansProse(lire(f))
 
   const bord = code('app/dashboard/ConfigDashboard.js')
   v('🔴 le formulaire refuse un réglage impossible, puis écrit les circuits par la règle partagée',
-    /const refusB = avecCircuits \? refusCircuits\(form\) : null\s*if \(refusB\) return toast\(refusB, 'error'\)/.test(bord)
+    // REPOINTÉE LE 22/10 (audit R3) : le mode retenu pour des variantes passe d'abord.
+    /const formStock = aVariantes \? \{ \.\.\.form, stock_mode: modeStockDesVariantes\(form\.stock_mode\) \} : form\s*const refusB = avecCircuits \? refusCircuits\(formStock\) : null\s*if \(refusB\) return toast\(refusB, 'error'\)/.test(bord)
     && /const circuits = avecCircuits \? champsCircuits\(form\) : null/.test(bord) && /\.\.\.\(circuits \|\| \{\}\),/.test(bord))
-  v('🔴 sans le jour même, aucune quantité n’est exigée', /const refusStock = form\.vendable && venteJour \? refusQuantite\(form\.stock_mode, form\.stock_jour\) : null/.test(bord))
+  // REPOINTÉE LE 22/10 (audit R3) : ni pour un article à variantes.
+  v('🔴 sans le jour même, aucune quantité n’est exigée', /const refusStock = form\.vendable && venteJour && !aVariantes \? refusQuantite\(form\.stock_mode, form\.stock_jour\) : null/.test(bord))
   v('🔴 les deux sections existent, en cartes',
     /<ChoixCartes label="Se vend-il le jour même \?" choix=\{CHOIX_JOUR_MEME\}/.test(bord) && /<ChoixCartes label="Se prend-il sur commande \?" choix=\{CHOIX_SUR_COMMANDE\}/.test(bord))
   v('🔴 sur commande : seulement les délais d’au moins un jour', /choixDeDelai\(form\.delai_minutes\)\.filter\(m => m >= 1440\)/.test(bord))
@@ -657,11 +660,13 @@ const code = (f) => sansProse(lire(f))
     && /variantes=\{variantesParArticle\[a\.id\] \|\| \[\]\} onVariantesChange=\{chargerVariantes\}/.test(bord))
   v('🔴 les variantes de la liste se lisent par pages et se relisent après chaque écriture du panneau',
     /await toutesLesLignes\(\(\) => supabase\.from\('article_variantes'\)/.test(bord)
-    && /if \(error\) \{ toast\(`Erreur : \$\{error\.message\}`, 'error'\); return \}\s*onChange\?\.\(\)/.test(bord)
+    // REPOINTÉE LE 22/10 (audit O6) : l'écriture est relue avant de prévenir la liste.
+    && /if \(error \|\| \(data\?\.length \|\| 0\) !== 1\) \{ toast\(`Pas enregistré : [^\n]*return \}\s*onChange\?\.\(\)/.test(bord)
     && (bord.match(/<VariantesArticle article=\{a\} articles=\{articles\} onChange=/g) || []).length === 2)
   // 3. La fiche : le stock général ne limite plus un article à variantes.
   v('🔴 fiche : un article à variantes n’est plus limité ni caché par son stock général',
-    /const stockGere = etat\.gere && !hasVariantes/.test(fiche))
+    // REPOINTÉE LE 22/10 (audit R1) : aussi sans version active.
+    /const stockGere = etat\.gere && !article\.gere_variantes/.test(fiche))
 }
 
 // ═══ (21/10, Alex) LOT B : LA GRILLE DES TAILLES, PLUS VITE ═════════════════
@@ -711,7 +716,8 @@ const code = (f) => sansProse(lire(f))
   v('🔴 l’action groupée écrit le stock des tailles, relu',
     /\.from\('article_variantes'\)\s*\.update\(\{ stock: varLot\.quantite \}\)\.in\('article_id', varLot\.ids\)\.select\('id'\)/.test(bord))
   v('🔴 retirer une valeur supprime ses combinaisons après confirmation',
-    /const combos = variantesDeLaValeur\(variantes, axe, val\)\s*if \(combos\.length > 0\) \{\s*const okRetraitValeur = await confirme\(/.test(bord)
+    // REPOINTÉE LE 22/10 : la règle `retraitDeValeur` dit ce qui part (la dernière couleur ne supprime rien).
+    /const \{ aSupprimer, aGarderSansAxe2 \} = retraitDeValeur\(\{ axe, valeur: val, axe2Valeurs, variantes \}\)\s*const combos = variantes\.filter\(v => aSupprimer\.includes\(v\.id\)\)\s*if \(combos\.length > 0\) \{\s*const okRetraitValeur = await confirme\(/.test(bord)
     && /if \(!okRetraitValeur\) return/.test(bord)
     && /\.from\('article_variantes'\)\.delete\(\)\.in\('id', combos\.map\(v => v\.id\)\)\.select\('id'\)/.test(bord))
   v('🔴 renommer met à jour les combinaisons (stock gardé), pas de recréation',
@@ -786,6 +792,71 @@ const code = (f) => sansProse(lire(f))
     && /if \(!articleId\) \{\s*setGalerie\(prev => \[\.\.\.prev, \{ id: `attente-\$\{Date\.now\(\)\}`, url: urlData\.publicUrl, enAttente: true \}\]\)/.test(bord)
     && /const enAttente = galerie\.filter\(p => p\.enAttente\)\s*if \(!editId && enAttente\.length > 0 && cree\?\.id\) \{/.test(bord)
     && /: await supabase\.from\('articles'\)\.insert\(payload\)\.select\('id'\)\.single\(\)/.test(bord))
+}
+
+// ═══ (22/10) L'AUDIT : COMBINAISONS AUTOMATIQUES, « À LA DEMANDE », PANNEAU ═══
+{
+  const G = await import('../lib/variantes-grille.js')
+  const S = await import('../lib/stock-article.js')
+  const bord = code('app/dashboard/ConfigDashboard.js')
+  // Les combinaisons automatiques (plus de « Générer »).
+  const vS = { id: 'a', axe1_valeur: 'S', axe2_valeur: null, ordre: 0, stock: 3 }
+  const vM = { id: 'b', axe1_valeur: 'M', axe2_valeur: null, ordre: 1, stock: 1 }
+  const ajoutL = G.combinaisonsDeLaValeur({ articleId: 'r', axe: 1, valeur: 'L', axe1Valeurs: ['S', 'M', 'L'], axe2Valeurs: [], variantes: [vS, vM] })
+  v('🔴 une taille ajoutée crée SA combinaison, à stock 0, après les autres',
+    JSON.stringify(ajoutL) === JSON.stringify({ aCreer: [{ article_id: 'r', axe1_valeur: 'L', axe2_valeur: null, stock: 0, actif: true, ordre: 2 }], aConvertir: [] }), JSON.stringify(ajoutL))
+  const premiere = G.combinaisonsDeLaValeur({ articleId: 'r', axe: 2, valeur: 'Bleu', axe1Valeurs: ['S', 'M', 'L'], axe2Valeurs: ['Bleu'], variantes: [vS, vM] })
+  v('🔴 la PREMIÈRE couleur : S et M deviennent « · Bleu » (stock gardé), seule L est créée',
+    JSON.stringify(premiere.aConvertir) === '["a","b"]' && premiere.aCreer.length === 1 && premiere.aCreer[0].axe1_valeur === 'L' && premiere.aCreer[0].axe2_valeur === 'Bleu', JSON.stringify(premiere))
+  const deux = [{ id: 'a', axe1_valeur: 'S', axe2_valeur: 'Bleu' }, { id: 'b', axe1_valeur: 'M', axe2_valeur: 'Bleu' }]
+  const rose = G.combinaisonsDeLaValeur({ articleId: 'r', axe: 2, valeur: 'Rose', axe1Valeurs: ['S', 'M'], axe2Valeurs: ['Bleu', 'Rose'], variantes: deux })
+  v('🔴 une 2e couleur : une combinaison par taille, rien de converti', rose.aConvertir.length === 0 && rose.aCreer.map(x => `${x.axe1_valeur}|${x.axe2_valeur}`).join() === 'S|Rose,M|Rose', JSON.stringify(rose))
+  const sansXLRouge = G.combinaisonsDeLaValeur({ articleId: 'r', axe: 2, valeur: 'Vert', axe1Valeurs: ['S', 'XL'], axe2Valeurs: ['Rouge', 'Vert'], variantes: [{ id: 'z', axe1_valeur: 'S', axe2_valeur: 'Rouge' }] })
+  v('🔴 une combinaison supprimée exprès (XL rouge) ne revient pas quand on ajoute « Vert »',
+    !sansXLRouge.aCreer.some(x => x.axe1_valeur === 'XL' && x.axe2_valeur === 'Rouge') && sansXLRouge.aCreer.length === 2)
+  const tailleM = G.combinaisonsDeLaValeur({ articleId: 'r', axe: 1, valeur: 'M', axe1Valeurs: ['S', 'XL', 'M'], axe2Valeurs: ['Rouge', 'Vert'], variantes: [{ id: 'z', axe1_valeur: 'S', axe2_valeur: 'Rouge' }] })
+  v('🔴 une taille ajoutée ne recrée QUE ses combinaisons (pas S vert ni XL rouge, supprimées exprès)',
+    tailleM.aCreer.map(x => `${x.axe1_valeur}|${x.axe2_valeur}`).join() === 'M|Rouge,M|Vert', JSON.stringify(tailleM))
+  v('une valeur vide ne crée rien', G.combinaisonsDeLaValeur({ axe: 1, valeur: '  ', axe1Valeurs: ['S'] }).aCreer.length === 0)
+  v('🟡 J2 : Entrée + clic n’ajoute la valeur qu’une fois', /async function addValeur\(axe\) \{\s*if \(ajoutEnCours\.current\) return/.test(bord))
+  v('🔴 les combinaisons manquantes : le produit des axes moins l’existant',
+    G.combinaisonsManquantes({ articleId: 'r', axe1Valeurs: ['S', 'M'], axe2Valeurs: ['Bleu'], variantes: [{ axe1_valeur: 'S', axe2_valeur: 'Bleu', ordre: 4 }] }).map(x => `${x.axe1_valeur}|${x.axe2_valeur}|${x.ordre}`).join() === 'M|Bleu|5')
+  v('🔴 la DERNIÈRE couleur retirée : ses combinaisons la perdent, rien n’est supprimé',
+    JSON.stringify(G.retraitDeValeur({ axe: 2, valeur: 'Bleu', axe2Valeurs: ['Bleu'], variantes: deux })) === '{"aSupprimer":[],"aGarderSansAxe2":["a","b"]}')
+  v('🔴 une taille retirée emporte ses combinaisons',
+    JSON.stringify(G.retraitDeValeur({ axe: 1, valeur: 'S', axe2Valeurs: ['Bleu'], variantes: deux })) === '{"aSupprimer":["a"],"aGarderSansAxe2":[]}')
+  v('la clé des axes change avec une valeur, pas avec l’ordre des propriétés',
+    G.cleDesAxes({ gere_variantes: true, axe1_valeurs: ['S'] }) !== G.cleDesAxes({ gere_variantes: true, axe1_valeurs: ['S', 'M'] })
+    && G.cleDesAxes({ axe1_valeurs: ['S'], gere_variantes: true }) === G.cleDesAxes({ gere_variantes: true, axe1_valeurs: ['S'] }))
+  // « Fabriqué à la demande » avec variantes (R3).
+  v('🔴 R3 : à la demande + variantes = aucune variante ne se compte',
+    S.variantesSansLimite({ gere_variantes: true, stock_mode: 'illimite' }) && !S.variantesSansLimite({ gere_variantes: true, stock_mode: 'magasin' })
+    && !S.variantesSansLimite({ gere_variantes: false, stock_mode: 'illimite' })
+    && S.stockDeVariante({ gere_variantes: true, stock_mode: 'illimite' }, { stock: 0 }) === Infinity
+    && S.stockDeVariante({ gere_variantes: true, stock_mode: 'jour' }, { stock: 4 }) === 4 && S.stockDeVariante({ gere_variantes: true }, { stock: -2 }) === 0)
+  v('🔴 R3 : deux modes pour un article à variantes, « par jour » devient le stock par variante',
+    S.CHOIX_STOCK_VARIANTES.map(c => c.mode).join() === 'magasin,illimite' && S.modeStockDesVariantes('jour') === 'magasin' && S.modeStockDesVariantes('illimite') === 'illimite')
+  // L'écran.
+  v('🔴 plus de bouton « Générer » : chaque valeur ajoutée crée ses combinaisons, relues',
+    !/Générer les combinaisons<\/button>/.test(bord) && !/function genererCombinaisons/.test(bord)
+    && /const \{ aCreer, aConvertir \} = combinaisonsDeLaValeur\(\{ articleId: article\.id, axe, valeur: raw, axe1Valeurs: a1, axe2Valeurs: a2, variantes \}\)/.test(bord)
+    && /const \{ data, error \} = await supabase\.from\('article_variantes'\)\.insert\(lignes\)\.select\('id'\)/.test(bord))
+  v('🔴 O8 : « Taille » s’enregistre dès l’activation, et les valeurs qui attendaient reçoivent leurs combinaisons',
+    /if \(v && !axesEnBase\.current\?\.axe1_nom\) \{ patch\.axe1_nom = axe1Nom\.trim\(\) \|\| 'Taille'/.test(bord)
+    && /if \(v\) await creerCombinaisons\(combinaisonsManquantes\(\{ articleId: article\.id, axe1Valeurs, axe2Valeurs, variantes \}\)\)/.test(bord))
+  v('🔴 O6 : les axes sont relus (zéro ligne = refusé)', /const \{ data, error \} = await supabase\.from\('articles'\)\.update\(patch\)\.eq\('id', article\.id\)\.select\('id'\)\s*if \(error \|\| \(data\?\.length \|\| 0\) !== 1\) \{/.test(bord))
+  v('🔴 O1 : le panneau se relit quand ses axes changent ailleurs (grille, copie), sans se démonter',
+    /const cleExterne = cleDesAxes\(article\)/.test(bord) && /if \(axesEnBase\.current && cleExterne !== cleDesAxes\(axesEnBase\.current\)\) fetchVariantes\(\{ silencieux: true \}\)/.test(bord))
+  v('🔴 O2 : le panneau de Personnalisation ne se monte qu’à l’ouverture',
+    /onToggle=\{e => \{ const ouvert = e\.currentTarget\.open; setPanneauxOuverts\(/.test(bord) && /\{variantesCategorie && panneauxOuverts\[a\.id\] && <VariantesArticle/.test(bord))
+  v('🔴 R3 formulaire : à variantes, deux choix de stock et aucune quantité générale',
+    /form\.gere_variantes && \(\s*<ChoixCartes label="Comment se compte le stock de ses variantes \?" choix=\{CHOIX_STOCK_VARIANTES\}/.test(bord)
+    && /&& !form\.gere_variantes && \(<>/.test(bord)
+    && /\? \{ stock_mode: formStock\.stock_mode, stock_jour: avant \? Math\.max\(0, Number\(avant\.stock_jour\) \|\| 0\) : 0 \}/.test(bord))
+  v('🔴 R3 panneau : « à la demande » cache le stock des variantes', (bord.match(/\{!sansLimite && \(/g) || []).length === 2)
+  v('🟠 O11 : supprimer une combinaison se confirme', /const okSuppressionVariante = await confirme\(confirmationSimple\(\{/.test(bord) && /if \(!okSuppressionVariante\) return/.test(bord))
+  v('🟡 J11 : renommer passe par un vrai champ, plus `window.prompt`',
+    !/window\.prompt\(`Nouveau nom pour/.test(bord) && /onClick=\{\(\) => ouvrirRenommage\(n, val\)\}/.test(bord) && /if \(!renommageOuvert\.current\) return/.test(bord))
 }
 
 console.log(`\nStock et vitrine : ${ok} vérifications`)

@@ -197,12 +197,14 @@ const v = (nom, cond, detail = '') => {
   const cibles = ciblesDeCopie(articles, 1)
   v('la source ne se propose pas à elle-même',
     !cibles.some(a => a.id === 1), cibles.map(a => a.id).join(','))
-  // ⚠️ UN BOUTON MORT FAIT DOUTER DE TOUT L'ÉCRAN : un article de vitrine ne se
-  // commande pas, ses options ne seraient jamais proposées à personne.
-  v('un article de vitrine n’est pas proposé',
-    !cibles.some(a => a.id === 3), cibles.map(a => a.id).join(','))
+  // ⚠️ REPOINTÉE LE 22/10 (audit O9, décision « tout corriger » d'Alex) : la
+  // fiche montre les options et les variantes d'un article en VITRINE (à
+  // lire, sans « Ajouter ») depuis le 15/10. L'exclure cachait vingt robes à
+  // la boutique qui posait sa grille. Il EST proposé.
+  v('🔴 un article de vitrine est proposé (copies, grilles, groupes)',
+    cibles.some(a => a.id === 3), cibles.map(a => a.id).join(','))
   v('les autres articles restent proposés',
-    cibles.length === 1 && cibles[0].id === 2, cibles.map(a => a.id).join(','))
+    cibles.length === 2 && cibles[0].id === 2 && cibles[1].id === 3, cibles.map(a => a.id).join(','))
   v('un catalogue vide ne casse rien', ciblesDeCopie(null, 1).length === 0)
 }
 
@@ -676,7 +678,8 @@ const v = (nom, cond, detail = '') => {
     && /\{variantesCategorie && articles\.length > 0 && \(\s*<BibliothequeGrilles articles=\{articles\} toast=\{toast\} onApplique=\{\(\) => chargerVariantes\(\{ articles: true \}\)\}\/>/.test(config)
     // ⚠️ REPOINTÉE LE 22/10 (Alex : « tailles + options ») : les options
     // s'affichent aussi sur un article à variantes, partout.
-    && /\{variantesCategorie && <VariantesArticle [^\n]*\n[\s\S]{0,300}?<OptionsArticle articleId=\{a\.id\} articles=\{articles\} onCopie=\{noterOptionsTouchees\}/.test(config)
+    // REPOINTÉE LE 22/10 (audit O2) : le panneau des variantes se monte à l'ouverture.
+    && /\{variantesCategorie && panneauxOuverts\[a\.id\] && <VariantesArticle [^\n]*\n[\s\S]{0,300}?<OptionsArticle articleId=\{a\.id\} articles=\{articles\} onCopie=\{noterOptionsTouchees\}/.test(config)
     && /\{showOptions && <OptionsArticle articleId=\{a\.id\}/.test(config)
     && !/!a\.gere_variantes\) && <OptionsArticle /.test(config))
   // ⚠️ RIEN À MONTRER, RIEN À DIRE : un bloc vide ferait douter de l'écran.
@@ -726,15 +729,29 @@ const v = (nom, cond, detail = '') => {
     /\}, \[cleArticles, totalTouches\]\)/.test(config))
 
   // ─── LA DUPLICATION D'ARTICLE ────────────────────────────────────────────
-  const iDup = config.indexOf('async function dupliquerArticle(')
-  const dup = iDup >= 0 ? config.slice(iDup, iDup + 2600) : ''
+  // REPOINTÉE LE 22/10 (audit J1) : `dupliquerArticle` garde le double clic et
+  // appelle `dupliquerArticleUneFois`, qui fait le travail. La garde lit tout
+  // son corps (jusqu'à `updateStock`), plus une longueur fixe qui périmait.
+  const iDup = config.indexOf('async function dupliquerArticleUneFois(')
+  const finDup = config.indexOf('\n  async function updateStock(', iDup)
+  const dup = iDup >= 0 && finDup > iDup ? config.slice(iDup, finDup) : ''
+  v('🟡 J1 : un double clic ne fait qu’une copie',
+    /async function dupliquerArticle\(a\) \{\s*if \(duplicationEnCours\.current\) return\s*duplicationEnCours\.current = true\s*try \{ await dupliquerArticleUneFois\(a\) \} finally \{ duplicationEnCours\.current = false \}/.test(config))
+  v('🟡 J1 : les options sont lues AVANT de créer la copie, une lecture ratée arrête tout',
+    dup.indexOf("if (errLecture) { toast(") > 0 && dup.indexOf("if (errLecture) { toast(") < dup.indexOf(".from('articles').insert(payload)"))
+  v('🟡 J1 : la copie se range juste après l’original', /if \(Number\.isFinite\(Number\(a\.ordre\)\)\) payload\.ordre = Number\(a\.ordre\)/.test(dup))
+  v('🔴 R4 : les prix par taille suivent, et ce qui n’a pas suivi se dit',
+    /const prixT = prixTailleDeLaCopie\(source, groupesCopie\)/.test(dup)
+    && /\.from\('article_options_prix_taille'\)\.insert\(prixT\.lignes\)\.select\('valeur_id'\)/.test(dup)
+    && /prixTaillePerdus,/.test(dup) && /variantesSansStock: variantesSansLimite\(a\),/.test(dup))
   v('la duplication d’article a bien été retrouvée', dup.length > 800, String(dup.length))
   v('elle compose sa copie avec le module',
     /copieDArticle\(a, \{/.test(dup))
   // 🔴 SANS LES OPTIONS, DUPLIQUER NE SERT À RIEN : c'est la liste des
   // garnitures qu'on ne veut plus réécrire.
   v('elle emporte les groupes d’options de l’original',
-    /from\('article_options_groupes'\)[\s\S]{0,200}eq\('article_id', a\.id\)/.test(dup))
+    // REPOINTÉE LE 22/10 : le select porte aussi les prix par taille (R4), plus long.
+    /from\('article_options_groupes'\)[\s\S]{0,400}eq\('article_id', a\.id\)/.test(dup))
   v('et leurs valeurs',
     /from\('article_options_valeurs'\)[\s\S]{0,120}insert\(/.test(dup))
   // ⚠️ UN ÉCHEC PARTIEL SE DIT : une pizza sans garnitures se vendrait nue.
@@ -744,7 +761,7 @@ const v = (nom, cond, detail = '') => {
   //
   // 🔴 « S'il est informé, c'est très bien. » Un toast de trois secondes ne
   // l'informe pas : il disparaît pendant qu'il regarde sa liste.
-  const dupInfo = iDup >= 0 ? config.slice(iDup, iDup + 5000) : ''
+  const dupInfo = dup
   v('une fenêtre annonce ce qu’il reste à vérifier',
     /confirme\(confirmationInfo\(\{/.test(dupInfo))
   // ⚠️ ELLE DIT QUE LA COPIE EST INDISPONIBLE, sinon le commerçant la cherche
@@ -805,7 +822,9 @@ const v = (nom, cond, detail = '') => {
   // commerçants » (Alex, 25/09). Le détail et la vitrine n'ont pas de groupes
   // d'options : sans ce geste-là, la moitié des métiers restait à la main.
   const iVarC = config.indexOf('async function copierVariantes(')
-  const copVar = iVarC >= 0 ? config.slice(iVarC, iVarC + 2000) : ''
+  // REPOINTÉE LE 22/10 : tout le corps (jusqu'au chargement), plus une longueur fixe.
+  const finVarC = config.indexOf('\n  if (loading) return', iVarC)
+  const copVar = iVarC >= 0 && finVarC > iVarC ? config.slice(iVarC, finVarC) : ''
   v('la copie de variantes a bien été retrouvée', copVar.length > 500, String(copVar.length))
   v('elle écarte les articles déjà équipés', /conflitsDeVariantes\(ciblesVar, articles\)/.test(copVar))
   v('elle compose ses axes avec le module', /axesDeLArticle\(/.test(copVar))
@@ -900,7 +919,9 @@ const v = (nom, cond, detail = '') => {
   v('🔴 la carte de table lit `ordre` et trie par la règle',
     /const COLONNES_ARTICLE = '[^']*\bordre\b'/.test(menu) && /articles: trierArticles\(articles\.data \|\| \[\]\)/.test(menu))
   // (10/10) les colonnes du stock suivent désormais `ordre` dans le select.
-  v('la commande encodée trie par la règle', /trierArticles\(\(articles\.data \|\| \[\]\)\.filter/.test(cata) && /\.select\(`\$\{SELECT_ARTICLES\}, gere_variantes, ordre[,`]/.test(cata))
+  // REPOINTÉE LE 22/10 : `gere_variantes` vient de SELECT_ARTICLES (audit R1).
+  v('la commande encodée trie par la règle', /trierArticles\(\(articles\.data \|\| \[\]\)\.filter/.test(cata) && /\.select\(`\$\{SELECT_ARTICLES\}, ordre[,`]/.test(cata)
+    && /export const SELECT_ARTICLES = '[^']*\bgere_variantes\b/.test(readFileSync(new URL('../lib/lignes-commande.js', import.meta.url), 'utf8')))
   v('🔴 les flèches écrivent par la règle, sur ce commerce seulement, et lisent leur résultat',
     /const patchs = deplacementDansCategorie\(articles, a\.id, sens\)/.test(config)
     && /\.update\(\{ ordre: p\.ordre \}\)\.eq\('id', p\.id\)\.eq\('commercant_id', commercantId\)\.select\('id'\)/.test(config)
@@ -925,8 +946,11 @@ const v = (nom, cond, detail = '') => {
   v('un supplément négatif est refusé', !nouveauGroupe({ nom: 'S', options: [{ nom: 'A', prix_supplement: '-1' }] }).ok)
   v('un type inconnu devient « 1 choix »', nouveauGroupe({ nom: 'S', type: 'x', options: [{ nom: 'A' }] }).groupe.type === 'unique')
   // (13/10) Le nombre de choix, dans le formulaire de création.
-  const calz = nouveauGroupe({ nom: 'Ingrédients (3 inclus)', type: 'multiple', choix_min: '3', choix_max: '3', options: [{ nom: 'Oignons' }] })
+  // REPOINTÉE LE 22/10 (audit R2) : le groupe a ses 3 options ; « 3 parmi 1 » est refusé.
+  const calz = nouveauGroupe({ nom: 'Ingrédients (3 inclus)', type: 'multiple', choix_min: '3', choix_max: '3', options: [{ nom: 'Oignons' }, { nom: 'Olives' }, { nom: 'Jambon' }] })
   v('🔴 « 3 ingrédients au choix » se crée avec 3 et 3', calz.ok && calz.groupe.choix_min === 3 && calz.groupe.choix_max === 3, JSON.stringify(calz))
+  const impossible = nouveauGroupe({ nom: 'Ingrédients', type: 'multiple', choix_min: '3', choix_max: '3', options: [{ nom: 'Oignons' }] })
+  v('🔴 R2 : « au moins 3 » parmi 1 option est refusé en mots', !impossible.ok && /au moins 3, mais le groupe n’a que 1 option/.test(impossible.error || ''), JSON.stringify(impossible))
   v('un groupe à un seul choix ignore les bornes', nouveauGroupe({ nom: 'T', type: 'unique', choix_min: '2', choix_max: '5', options: [{ nom: 'M' }] }).groupe.choix_max === null)
   v('🔴 des bornes impossibles sont refusées en mots', /^Nombre de choix : /.test(nouveauGroupe({ nom: 'I', type: 'multiple', choix_min: '4', choix_max: '3', options: [{ nom: 'A' }] }).error || ''))
   const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
@@ -993,8 +1017,9 @@ const v = (nom, cond, detail = '') => {
   v('sans changement : rien à écrire, et c’est dit', rien.ok && resumeModification(rien) === 'Rien n’a changé.')
   // 🔴 (13/10) MODIFIER NE DOIT PAS EFFACER LE NOMBRE DE CHOIX : l'écran
   // transmet les valeurs actuelles, la règle les compare et les réécrit.
-  const avecChoix = [{ ...copies[0], choix_min: 3, choix_max: 3 }]
-  const garde = planModificationGroupe({ copies: avecChoix, edition: { nom: 'Sauces', type: 'multiple', obligatoire: false, choix_min: '3', choix_max: '3', options: [
+  // REPOINTÉE LE 22/10 (audit R2) : 2 et 2 sur ses 2 options (3 parmi 2 est refusé).
+  const avecChoix = [{ ...copies[0], choix_min: 2, choix_max: 2 }]
+  const garde = planModificationGroupe({ copies: avecChoix, edition: { nom: 'Sauces', type: 'multiple', obligatoire: false, choix_min: '2', choix_max: '2', options: [
     { origine: 'Ketchup', nom: 'Ketchup' }, { origine: 'Samouraï', nom: 'Samouraï', prix_supplement: '0.5' }] }, groupesParArticle: parArticle })
   v('🔴 les mêmes bornes : rien à écrire (le nombre de choix est gardé)', garde.ok && garde.groupes.length === 0, JSON.stringify(garde.groupes))
   const change = planModificationGroupe({ copies: avecChoix, edition: { nom: 'Sauces', type: 'multiple', obligatoire: false, choix_min: '', choix_max: '2', options: [
@@ -1173,6 +1198,33 @@ const v = (nom, cond, detail = '') => {
     && /const emportes = phraseEnfantsEmportes\(enfantsDesCopies\(entree\.copies \|\| \[\]\)\)/.test(ecr))
   v('🔴 le formulaire propose « N’apparaît que si », à la création et à la modification',
     (ecr.match(/<ChampParent /g) || []).length === 2 && /parent: parentParNom\(depart, groupesDuModele\),/.test(ecr))
+}
+
+// ═══ L'AUDIT DU 22/10 : DUPLIQUER GARDE LES PRIX PAR TAILLE (R4) ══════════
+{
+  const { prixTailleDeLaCopie, aVerifierApresCopie: verifier } = await import('../lib/catalogue-copie.js')
+  const source = [
+    { nom: 'Taille', valeurs: [{ id: 'tM', nom: 'M' }, { id: 'tXL', nom: 'XL' }] },
+    { nom: 'Suppléments', valeurs: [
+      { id: 'sCh', nom: 'Charcuterie', prix_taille: [{ taille_valeur_id: 'tM', prix: 1.5 }, { taille_valeur_id: 'tXL', prix: '3' }] },
+      { id: 'sOl', nom: 'Olives', prix_taille: [] },
+      { id: 'sPerdu', nom: 'Anchois', prix_taille: [{ taille_valeur_id: 'tAilleurs', prix: 2 }] },
+    ] },
+  ]
+  const copie = [
+    { nom: ' taille ', valeurs: [{ id: 'cM', nom: 'm' }, { id: 'cXL', nom: 'XL' }] },
+    { nom: 'Suppléments', valeurs: [{ id: 'cCh', nom: 'Charcuterie' }, { id: 'cOl', nom: 'Olives' }, { id: 'cAn', nom: 'Anchois' }] },
+  ]
+  const r = prixTailleDeLaCopie(source, copie)
+  v('🔴 R4 : la charcuterie garde 1,50 € en M et 3 € en XL sur la COPIE (identifiants de la copie)',
+    JSON.stringify(r.lignes) === JSON.stringify([{ valeur_id: 'cCh', taille_valeur_id: 'cM', prix: 1.5 }, { valeur_id: 'cCh', taille_valeur_id: 'cXL', prix: 3 }]), JSON.stringify(r))
+  v('🔴 R4 : un prix dont la taille n’est pas retrouvée est compté comme perdu', r.perdus === 1, String(r.perdus))
+  v('R4 : rien à recopier, rien de perdu', JSON.stringify(prixTailleDeLaCopie([], [])) === '{"lignes":[],"perdus":0}')
+  const perdus = verifier({ nom: 'Calzone (copie)', prixTaillePerdus: 2, prixTaille: 3 })
+  v('🔴 R4 : des prix perdus arrêtent le geste (fenêtre)', perdus.some(p => p.grave && /2 prix selon la taille n’ont pas pu être repris/.test(p.quoi)))
+  v('R4 : des prix qui ont suivi se disent sans alarme', verifier({ nom: 'X', prixTaille: 3 }).some(p => !p.grave && /3 prix selon la taille ont suivi/.test(p.quoi)))
+  v('🔴 R3 : des variantes « à la demande » ne sonnent pas « stock zéro »',
+    !verifier({ nom: 'X', variantes: 4, variantesSansStock: true }).some(p => p.grave) && verifier({ nom: 'X', variantes: 4 }).some(p => p.grave))
 }
 
 console.log(`\nCopier dans le catalogue : ${ok} vérifications`)

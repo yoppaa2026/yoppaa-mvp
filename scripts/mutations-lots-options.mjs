@@ -29,7 +29,8 @@ const MUTATIONS = [
   // ⚠️ ANCRES REPOINTÉES LE 13/10 : l'obligatoire passe désormais par le
   // nombre de choix (`bornesChoix`, minimum 1), même but, même garde.
   { nom: '🔴 une option obligatoire manquante passe', fichier: REGLE,
-    de: "  const min = Number.isInteger(g?.choix_min) ? g.choix_min : (g?.obligatoire ? 1 : 0)", vers: '  const min = Number.isInteger(g?.choix_min) ? g.choix_min : 0' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit R2 : `minRegle`, puis le nombre d'options).
+    de: "  const minRegle = Number.isInteger(g?.choix_min) ? g.choix_min : (g?.obligatoire ? 1 : 0)", vers: '  const minRegle = Number.isInteger(g?.choix_min) ? g.choix_min : 0' },
   { nom: '🔴 une valeur facultative suffit à l obligatoire', fichier: REGLE,
     de: '      choixParGroupe[v.groupe_id] = (choixParGroupe[v.groupe_id] || 0) + 1', vers: '      for (const gid of Object.keys(groupesParArticle).flatMap(a => groupesParArticle[a].map(x => x.id))) choixParGroupe[gid] = (choixParGroupe[gid] || 0) + 1' },
   { nom: '🔴 le choix d un autre article compte', fichier: REGLE,
@@ -40,7 +41,8 @@ const MUTATIONS = [
   { nom: '🔴 une version (taille, couleur) n exige plus ses options', fichier: REGLE,
     de: '    if (!deal && groupesOptions) {', vers: '    if (!deal && !variante && groupesOptions) {' },
   { nom: '🔴 deux lignes de la même variante passent chacune sur un stock de 1', fichier: REGLE,
-    de: '      if ((variante.stock ?? 0) < dejaParVariante[variante.id]) {', vers: '      if ((variante.stock ?? 0) < quantite) {' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit R3 : `stockDeVariante`).
+    de: '      if (stockDeVariante(article, variante) < dejaParVariante[variante.id]) {', vers: '      if (stockDeVariante(article, variante) < quantite) {' },
   { nom: '🔴 la consommation d un lot redevient le nombre de lots', fichier: REGLE,
     de: '      quantite_stock: quantite * (deal?.unites_par_deal || 1),', vers: '      quantite_stock: quantite,' },
   // ─── (21/10) le groupe dépendant ────────────────────────────────────────
@@ -68,7 +70,8 @@ const MUTATIONS = [
     de: '.filter(g => !g.depend_de_valeur_id && bornesChoix(g).min > 0)', vers: '.filter(g => bornesChoix(g).min > 0)' },
   // ─── (21/10) le lien groupes ↔ valeurs, nommé avant le groupe dépendant ──
   { nom: '🔴 la duplication d article relit les options par un lien anonyme', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: "      .select('*, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(*)')", vers: "      .select('*, valeurs:article_options_valeurs(*)')" },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit R4 : les prix par taille suivent).
+    de: "      .select('*, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(*, prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix))')", vers: "      .select('*, valeurs:article_options_valeurs(*, prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix))')" },
   { nom: '🔴 le paiement lit les valeurs avec un groupe anonyme', fichier: REGLE,
     de: "groupe_id, article_options_groupes!article_options_valeurs_groupe_id_fkey!inner(article_id, nom)'", vers: "groupe_id, article_options_groupes!inner(article_id, nom)'" },
   { nom: '🔴 l encodage lit les valeurs par un lien anonyme', fichier: 'app/api/equipe/commande/catalogue/route.js',
@@ -96,13 +99,15 @@ const MUTATIONS = [
     de: "      .from('consommation_stock')", vers: "      .from('commande_articles')" },
   // ─── les écrans ─────────────────────────────────────────────────────────
   { nom: '🔴 la fiche détaillée ajoute de nouveau sans les options', fichier: FICHE,
-    de: '          ) : (!hasVar && onAjouter && !article.est_vitrine && groupes.length > 0) ? (', vers: '          ) : (false) ? (' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit R2 : un groupe sans option ne compte pas).
+    de: '          ) : (!hasVar && onAjouter && !article.est_vitrine && groupes.some(groupeAvecOptions)) ? (', vers: '          ) : (false) ? (' },
   { nom: '🔴 la fiche détaillée perd les options choisies', fichier: FICHE,
     de: 'onAjouter={peutCommander ? (a, opts = null) => ajouterAuPanier(a, opts) : null}', vers: 'onAjouter={peutCommander ? (a) => ajouterAuPanier(a) : null}' },
   // ⚠️ ANCRE REPOINTÉE LE 13/10 (`bornesChoix`).
   { nom: '🔴 le panier venu du rendez-vous reprend un article sans son choix obligatoire', fichier: FICHE,
     // ⚠️ ANCRE REPOINTÉE LE 21/10 (groupe dépendant : seuls les groupes actifs comptent).
-    de: "      if (groupesActifs(optionsParArticle[article.id] || [], {}).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }", vers: '' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit R1/R2 : bornes du client, version exigée).
+    de: "      if (article.gere_variantes || groupesActifs(optionsParArticle[article.id] || [], {}).some(g => bornesPourLeClient(g).min > 0)) { ignores.push(article.nom); continue }", vers: '' },
   // ─── 13/10 : les écrans suivent les bornes et le prix par taille ─────────
   { nom: '🔴 le tunnel RDV ne voit plus les groupes à nombre minimum', fichier: TUNNEL,
     // ⚠️ ANCRES REPOINTÉES LE 21/10 (groupe dépendant).
@@ -159,7 +164,8 @@ const MUTATIONS = [
   { nom: '🔴 la fiche reprend « Choisis-en un » pour tous', fichier: FICHE,
     de: '        const pastille = pastilleBornes(g)', vers: '        const pastille = libelleBornes(g)' },
   { nom: '⚠️ la fiche ignore l ordre des groupes', fichier: FICHE,
-    de: '      {ordonnerGroupes(groupes).filter(g => groupeActif(g, selections)).map(g => {', vers: '      {groupes.filter(g => groupeActif(g, selections)).map(g => {' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit R2 : les groupes sans option sont cachés).
+    de: '      {ordonnerGroupes(groupes).filter(g => groupeAvecOptions(g) && groupeActif(g, selections)).map(g => {', vers: '      {groupes.filter(g => groupeAvecOptions(g) && groupeActif(g, selections)).map(g => {' },
   // ─── 13/10 : le réglage du commerçant ────────────────────────────────────
   { nom: '🔴 le réglage accepte un minimum au-dessus du maximum', fichier: 'lib/options-choix.js',
     de: "  if (min !== null && max !== null && min > max) return { ok: false, error: 'Le minimum dépasse le maximum.' }", vers: '' },
@@ -226,6 +232,55 @@ const MUTATIONS = [
     de: '      prixTaille: prixTaille || [],', vers: '' },
   { nom: '🔴 la route RDV ne lit plus les prix par taille', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
     de: '      prixTaille: prixTaille || [],', vers: '' },
+  // ─── (22/10) l'audit Articles + Personnalisation ─────────────────────────
+  { nom: '🔴 R1 : un article à variantes repart sans sa version', fichier: REGLE,
+    de: '    if (!variante && !deal && article.gere_variantes === true) {', vers: '    if (false) {' },
+  { nom: '🔴 R1 : le serveur ne lit plus gere_variantes', fichier: REGLE,
+    de: "retrait_des, retrait_jusqua, gere_variantes'", vers: "retrait_des, retrait_jusqua'" },
+  { nom: '🔴 R2 : le serveur exige un groupe sans assez d options', fichier: REGLE,
+    de: '        const { min, max } = bornesChoix(g, nbValeursParGroupe[g.id] || 0)', vers: '        const { min, max } = bornesChoix(g)' },
+  { nom: '🔴 R2 : le nombre d options ne compte plus', fichier: REGLE,
+    de: '  const min = Number.isInteger(nbValeurs) && minRegle > nbValeurs ? 0 : minRegle', vers: '  const min = minRegle' },
+  { nom: '🔴 R2 : le serveur compte mal les options', fichier: REGLE,
+    de: '    if (v?.groupe_id) nbValeursParGroupe[v.groupe_id] = (nbValeursParGroupe[v.groupe_id] || 0) + 1', vers: '    if (v?.groupe_id) nbValeursParGroupe[v.groupe_id] = 99' },
+  { nom: '🔴 R2 : la fiche exige de nouveau un groupe vide', fichier: 'lib/options-choix.js',
+    de: '  return bornesChoix(groupe, Array.isArray(groupe?.valeurs) ? groupe.valeurs.length : null)', vers: '  return bornesChoix(groupe)' },
+  { nom: '🔴 R2 : le commerçant n est plus prévenu d un groupe obligatoire vide', fichier: 'lib/options-choix.js',
+    de: "  if (min > 0 && nb === 0) return 'Obligatoire, mais sans option : ajoute ses options, ou rends-le facultatif.'", vers: '' },
+  { nom: '🔴 R2 : ni d un minimum au-delà des options', fichier: 'lib/options-choix.js',
+    de: "  if (min > nb) return `Demande ${min} choix, mais n’a que ${nb} option${nb > 1 ? 's' : ''}.`", vers: '' },
+  { nom: '🔴 O7 : « Optionnel » garde le minimum', fichier: 'lib/options-choix.js',
+    de: '  return { obligatoire: !pastillesDuGroupe(groupe).obligatoire, choix_min: null }', vers: '  return { obligatoire: !groupe.obligatoire }' },
+  { nom: '🔴 O7 : « 1 choix » garde les bornes', fichier: 'lib/options-choix.js',
+    de: "  return { type: p.unique ? 'multiple' : 'unique', choix_min: null, choix_max: null, obligatoire: p.obligatoire }", vers: "  return { type: groupe.type === 'unique' ? 'multiple' : 'unique' }" },
+  { nom: '🔴 O7 : les pastilles relisent le réglage brut', fichier: 'lib/options-choix.js',
+    de: '  return { unique: max === 1, obligatoire: min > 0 }', vers: "  return { unique: groupe?.type === 'unique', obligatoire: !!groupe?.obligatoire }" },
+  { nom: '🔴 R3 : le serveur compte le stock d une version à la demande', fichier: REGLE,
+    de: '      if (stockDeVariante(article, variante) < dejaParVariante[variante.id]) {', vers: '      if ((variante.stock ?? 0) < dejaParVariante[variante.id]) {' },
+  { nom: '🔴 R3 : la vente prélève une version à la demande', fichier: 'lib/stock-variantes-server.js',
+    de: '    if (variantesSansLimite(articleParId[l.article_id])) continue', vers: '' },
+  { nom: '🔴 R3 : l annulation rend à une version à la demande', fichier: 'lib/stock-variantes-server.js',
+    de: '  const libres = new Set((data || []).filter(variantesSansLimite).map(a => a.id))', vers: '  const libres = new Set()' },
+  { nom: '🔴 R3 : la règle « à la demande » oublie les variantes', fichier: 'lib/stock-article.js',
+    de: '  if (variantesSansLimite(article)) return Infinity', vers: '' },
+  { nom: '🔴 R1 fiche : sans version active, l article se vend comme un simple', fichier: FICHE,
+    de: '  const sansVersion = !!article.gere_variantes && variantes.length === 0', vers: '  const sansVersion = false' },
+  { nom: '🔴 R1 fiche : les options d un article à variantes se vendent seules', fichier: FICHE,
+    de: '  const hasOptions = !article.gere_variantes && groupes.some(groupeAvecOptions)', vers: '  const hasOptions = !hasVariantes && groupes.length > 0' },
+  { nom: '🔴 R1 fiche détaillée : sans version, retour à l ajout simple', fichier: FICHE,
+    de: '          ) : (article.gere_variantes && !article.est_vitrine) ? (', vers: '          ) : (false) ? (' },
+  { nom: '🔴 R3 fiche : le sélecteur compte le stock d une version à la demande', fichier: FICHE,
+    de: '  const stockDe = (v) => stockDeVariante(article, v)', vers: '  const stockDe = (v) => v.stock' },
+  { nom: '🔴 R3 fiche : le panier bloque une version à la demande', fichier: FICHE,
+    de: 'sansLimite: stockDeVariante(article, variante) === Infinity }', vers: 'sansLimite: false }' },
+  { nom: '🔴 R2 éditeur : « au moins 3 » parmi 2 options passe', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '    if ((r.choix_min || 0) > nbOptions) {', vers: '    if (false) {' },
+  { nom: '🔴 O7 éditeur : la pastille ne remet plus les bornes à zéro', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '<button onClick={() => updateGroupe(g.id, basculeType(g))}', vers: "<button onClick={() => updateGroupe(g.id, { type: g.type === 'unique' ? 'multiple' : 'unique' })}" },
+  { nom: '🔴 R2 éditeur : la pastille « À corriger » disparaît', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '              {problemeDuGroupe(g) && (', vers: '              {false && (' },
+  { nom: '🟡 J2 : Entrée + clic crée l option deux fois', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '    if (ajoutOption.current) return', vers: '' },
 ]
 
 const lancer = () => {

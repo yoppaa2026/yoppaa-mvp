@@ -1347,7 +1347,8 @@ export async function POST(request) {
     // (pas de survente possible). Restauration à l'annulation = backlog.
     // ⚠️ 10/10 : à partir des LIGNES du serveur (plus du corps de la requête),
     // et partagé avec la commande encodée (`preleverStockVariantes`).
-    await preleverStockVariantes(supabase, lignes, variantesData)
+    // (22/10, audit R3) Avec les articles : « fabriqué à la demande » ne se prélève pas.
+    await preleverStockVariantes(supabase, lignes, variantesData, articlesData)
 
     // ─── 8) Réservations stock : déjà posées atomiquement à l'étape 6.5 ─────
 

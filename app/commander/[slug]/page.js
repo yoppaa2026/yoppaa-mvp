@@ -14,7 +14,7 @@ import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09) : une seule règle
 // pour la carte, la limite du panier et le tableau de bord.
-import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour, modeStockDe, dejaCommandePourStock } from '@/lib/stock-article'
+import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour, modeStockDe, dejaCommandePourStock, stockDeVariante } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe } from '@/lib/creneaux'
 import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier, mentionDisponibilite, propositionPourArticle, delaiSurCommande } from '@/lib/delai-commande'
@@ -43,8 +43,8 @@ import { trierArticles } from '@/lib/ordre-articles'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte, fraisLivraison as regleFraisLivraison, minimumAtteint } from '@/lib/livraison'
-import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
-import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, afficheEnRond, estDependant, groupeActif, groupesActifs, purgerInactifs, optionParente } from '@/lib/options-choix'
+import { construireLignesCommande } from '@/lib/lignes-commande'
+import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, afficheEnRond, estDependant, groupeActif, groupesActifs, purgerInactifs, optionParente, bornesPourLeClient, groupeAvecOptions } from '@/lib/options-choix'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone, livraisonDisponible } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -289,7 +289,9 @@ function ListeGroupesOptions({ groupes, selections, erreurs, onToggle }) {
           puis les groupes obligatoires, puis les facultatifs. */}
       {/* (21/10) Un groupe dépendant n'apparaît que si son option est
           cochée, en retrait juste sous son groupe parent. */}
-      {ordonnerGroupes(groupes).filter(g => groupeActif(g, selections)).map(g => {
+      {/* (22/10, audit R2) Un groupe sans option ne s'affiche pas : il
+          montrait « Sauces · OBLIGATOIRE » sans aucune sauce. */}
+      {ordonnerGroupes(groupes).filter(g => groupeAvecOptions(g) && groupeActif(g, selections)).map(g => {
         // Le rond quand on n'en prend qu'un parmi plusieurs, la case sinon
         // (une option seule et facultative prend une case : `afficheEnRond`).
         const isUnique = afficheEnRond(g)
@@ -308,7 +310,7 @@ function ListeGroupesOptions({ groupes, selections, erreurs, onToggle }) {
                   {pastille}
                 </span>
               )}
-              {bornesChoix(g).min > 0 && <span style={{ fontSize: '0.68rem', fontWeight: 800, background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Obligatoire</span>}
+              {bornesPourLeClient(g).min > 0 && <span style={{ fontSize: '0.68rem', fontWeight: 800, background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Obligatoire</span>}
             </div>
             {erreurs[g.id] && <p role="alert" style={{ fontSize: '0.72rem', color: '#DC2626', marginBottom: 4, fontWeight: 700 }}>{erreurs[g.id]}</p>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -354,20 +356,33 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
   const [choix1, setChoix1] = useState(null)
   const [choix2, setChoix2] = useState(null)
   const options = useChoixOptions(groupes)
-  const deuxAxes = !!article.axe2_nom
   const vals1 = [...new Set(variantes.map(v => v.axe1_valeur).filter(Boolean))]
-  const vals2 = deuxAxes ? [...new Set(variantes.map(v => v.axe2_valeur).filter(Boolean))] : []
+  // 🟡 (22/10, audit J9) LE 2e AXE N'EXISTE QUE S'IL A DES VALEURS : un nom
+  // « Couleur » sans couleur montrait un titre vide et bloquait sur « Choisis
+  // Couleur ».
+  const vals2 = [...new Set(variantes.map(v => v.axe2_valeur).filter(Boolean))]
+  const deuxAxes = vals2.length > 0
   const varianteChoisie = choix1
     ? variantes.find(v => v.axe1_valeur === choix1 && (!deuxAxes || v.axe2_valeur === choix2)) || null
     : null
-  // Une valeur est proposable si au moins une combinaison en stock existe
-  const dispo1 = (v1) => variantes.some(v => v.axe1_valeur === v1 && v.stock > 0)
-  const dispo2 = (v2) => variantes.some(v => v.axe1_valeur === choix1 && v.axe2_valeur === v2 && v.stock > 0)
+  // Une valeur est proposable si au moins une combinaison en stock existe.
+  // ✅ (22/10, audit R3) « Fabriqué à la demande » : toutes le sont
+  // (`stockDeVariante` rend Infinity).
+  const stockDe = (v) => stockDeVariante(article, v)
+  const dispo1 = (v1) => variantes.some(v => v.axe1_valeur === v1 && stockDe(v) > 0)
+  const dispo2 = (v2) => variantes.some(v => v.axe1_valeur === choix1 && v.axe2_valeur === v2 && stockDe(v) > 0)
   const prixAffiche = varianteChoisie
     ? (varianteChoisie.prix != null ? Number(varianteChoisie.prix) : Number(article.prix))
     : null
-  const epuise = !!varianteChoisie && (varianteChoisie.stock || 0) <= 0
+  const stockChoisi = varianteChoisie ? stockDe(varianteChoisie) : 0
+  const epuise = !!varianteChoisie && stockChoisi <= 0
   const pret = !!varianteChoisie && !epuise
+  // 🟠 (22/10, audit O3) LA PHOTO DE LA VERSION : la boutique photographie sa
+  // robe en rose et en bleu, le client ne voyait jamais ces photos. Celle de
+  // la combinaison choisie, sinon la première de la valeur choisie.
+  const photoVersion = (varianteChoisie?.photo_url)
+    || (choix1 ? variantes.find(v => v.axe1_valeur === choix1 && v.photo_url)?.photo_url : null)
+    || null
 
   const chipSt = (sel, off) => ({
     padding: '7px 13px', borderRadius: 100, cursor: off ? 'default' : 'pointer',
@@ -379,6 +394,10 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
       <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Choisis ta version</p>
+      {photoVersion && (
+        <img decoding="async" loading="lazy" src={photoVersion} alt={[article.nom, varianteChoisie?.axe1_valeur || choix1, varianteChoisie?.axe2_valeur].filter(Boolean).join(' ')}
+          style={{ display: 'block', width: 120, aspectRatio: '4/5', objectFit: 'cover', borderRadius: 12, border: `1px solid ${T.pale}`, marginBottom: 12, background: T.pale }}/>
+      )}
       <div style={{ marginBottom: 12 }}>
         <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem', marginBottom: 6 }}>{article.axe1_nom || 'Version'}</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -394,7 +413,7 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
       </div>
       {deuxAxes && choix1 && (
         <div style={{ marginBottom: 12 }}>
-          <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem', marginBottom: 6 }}>{article.axe2_nom}</p>
+          <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem', marginBottom: 6 }}>{article.axe2_nom || 'Variante'}</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {vals2.map(v2 => {
               const off = !dispo2(v2)
@@ -414,8 +433,8 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
           )}
           {epuise ? (
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#DC2626', background: '#FEE2E2', padding: '3px 10px', borderRadius: 100 }}>Épuisé</span>
-          ) : (varianteChoisie.stock || 0) <= 3 ? (
-            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#B45309', background: '#FFFBEB', padding: '3px 10px', borderRadius: 100 }}>Plus que {varianteChoisie.stock}</span>
+          ) : stockChoisi <= 3 ? (
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#B45309', background: '#FFFBEB', padding: '3px 10px', borderRadius: 100 }}>Plus que {stockChoisi}</span>
           ) : (
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#10B981', background: '#F0FDF4', padding: '3px 10px', borderRadius: 100 }}>En stock</span>
           )}
@@ -433,7 +452,7 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
           onAjouter(article, varianteChoisie, choix)
         }} disabled={!pret}
         style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: pret ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: pret ? '#fff' : '#9CA3AF', fontWeight: 800, cursor: pret ? 'pointer' : 'default', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: pret ? `0 4px 14px ${T.main}44` : 'none', marginTop: 4 }}>
-        {pret ? `Ajouter à ma commande${options.supplement > 0 ? ` (+${euros(options.supplement)})` : ''}` : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom}` : `Choisis ${article.axe1_nom || 'ta version'}`}
+        {pret ? `Ajouter à ma commande${options.supplement > 0 ? ` (+${euros(options.supplement)})` : ''}` : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom || 'ta variante'}` : `Choisis ${article.axe1_nom || 'ta version'}`}
       </button>
     </div>
   )
@@ -471,7 +490,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
           const prixUnitaire = item.prix + (item.options ? supplementDeSelection(item.options) : 0)
           // FIX STOCK : vérifier la limite par article dans le panier
           // (item à variante : le stock de LA variante fait foi)
-          const stockMax = item.variante ? (item.variante.stock ?? Infinity) : (getStockMax ? getStockMax(item.id, { invendu: porteUneFenetre(item.offre) }) : Infinity)
+          const stockMax = item.variante ? (item.variante.sansLimite ? Infinity : (item.variante.stock ?? Infinity)) : (getStockMax ? getStockMax(item.id, { invendu: porteUneFenetre(item.offre) }) : Infinity)
           // Une ligne deal consomme unites_par_deal unités de stock par +
           const unitesLigne = item.deal_id ? (item.unites_par_deal || 1) : 1
           // (22/10) Une variante peut avoir plusieurs lignes (options) : son
@@ -547,7 +566,11 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
-  const hasOptions = !hasVariantes && groupes.length > 0
+  // 🔴 (22/10, audit R1) UN ARTICLE À VARIANTES SANS AUCUNE VERSION ACTIVE NE
+  // SE VEND PAS : il partait comme un article simple, sans taille. Le serveur
+  // le refuse aussi (`version_manquante`).
+  const sansVersion = !!article.gere_variantes && variantes.length === 0
+  const hasOptions = !article.gere_variantes && groupes.some(groupeAvecOptions)
   const [showOptions, setShowOptions] = useState(false)
   const qteTotale = qteTotaleArticle(article.id)
   const keySimple = String(article.id)
@@ -576,7 +599,8 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
   // Le stock général à 1 empêchait de prendre deux tailles, à 0 il cachait le
   // « + » alors que les tailles étaient en stock. Le serveur l'ignore déjà
   // (`lib/lignes-commande.js`, articles `gere_variantes`).
-  const stockGere = etat.gere && !hasVariantes
+  // (22/10) Ni non plus sans version active (`sansVersion`) : « Indisponible ».
+  const stockGere = etat.gere && !article.gere_variantes
   const stockAujourdhui = stockGere ? etat.dispo : 0
   const epuiseAujourdhui = stockGere && stockAujourdhui === 0
 
@@ -706,7 +730,8 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
               <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
                 aria-label="Choisir une version"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.65rem', fontWeight: 800, color: T.main, background: T.pale, padding: '3px 9px', borderRadius: 100, border: `1px solid ${T.main}22`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', letterSpacing: '-0.1px' }}>
-                {article.axe1_nom || 'Version'}{article.axe2_nom ? ` · ${article.axe2_nom}` : ''}
+                {/* (22/10, audit J9) Le 2e axe seulement s'il a des valeurs. */}
+                {article.axe1_nom || 'Version'}{article.axe2_nom && variantes.some(v => v.axe2_valeur) ? ` · ${article.axe2_nom}` : ''}
               </button>
             )}
             {/* Badge DEAL retiré de la card unité (24/07) : l'offre vit sur sa
@@ -721,7 +746,7 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
               pourquoi, et on propose son premier jour. Le bouton passe par
               `ajouterAuPanier`, qui ouvre la fenêtre de choix : rien ne
               change de jour sans le clic du client. */}
-          {etatJour && !article.est_vitrine && !modeVitrine && (
+          {etatJour && !article.est_vitrine && !modeVitrine && !sansVersion && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
               <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9CA3AF', flexShrink: 0 }}/>
@@ -743,8 +768,15 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
             </div>
           )}
 
+          {sansVersion && !article.est_vitrine && !modeVitrine && (
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9CA3AF', flexShrink: 0 }}/>
+              Indisponible pour l&rsquo;instant
+            </span>
+          )}
+
           {hasVariantes && !article.est_vitrine && !etatJour ? (() => {
-            const dispoVar = (variantes || []).some(v => v.actif !== false && (v.stock ?? 0) > 0)
+            const dispoVar = (variantes || []).some(v => v.actif !== false && stockDeVariante(article, v) > 0)
             return dispoVar ? (
               <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#10B981', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#10B981', flexShrink: 0 }}/>
@@ -816,7 +848,7 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
           })()}
         </div>
 
-        {!modeVitrine && !article.est_vitrine && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && !etatJour && (
+        {!modeVitrine && !article.est_vitrine && !sansVersion && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && !etatJour && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
             {(hasOptions || hasVariantes) ? (
               // hasOptions : "+ " ouvre les options (au lieu d'ajouter direct). Compteur visible si qte > 0.
@@ -943,11 +975,27 @@ function VariantesVitrine({ article, variantes }) {
   const actives = (variantes || []).filter(v => v.actif !== false)
   const axes = [
     { nom: article.axe1_nom || 'Version', valeurs: [...new Set(actives.map(v => v.axe1_valeur).filter(Boolean))] },
-    ...(article.axe2_nom ? [{ nom: article.axe2_nom, valeurs: [...new Set(actives.map(v => v.axe2_valeur).filter(Boolean))] }] : []),
+    { nom: article.axe2_nom || 'Variante', valeurs: [...new Set(actives.map(v => v.axe2_valeur).filter(Boolean))] },
   ].filter(a => a.valeurs.length > 0)
   if (axes.length === 0) return null
+  // (22/10, audit O3) Les photos des versions se voient aussi sur une carte à
+  // lire : une par valeur du premier axe (la robe en rose, en bleu).
+  const photos = []
+  for (const v of actives) {
+    if (v.photo_url && !photos.some(p => p.url === v.photo_url)) photos.push({ url: v.photo_url, legende: [v.axe1_valeur, v.axe2_valeur].filter(Boolean).join(' · ') })
+  }
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
+      {photos.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10, paddingBottom: 2 }}>
+          {photos.map(p => (
+            <figure key={p.url} style={{ margin: 0, flexShrink: 0, width: 84 }}>
+              <img decoding="async" loading="lazy" src={p.url} alt={`${article.nom} ${p.legende}`} style={{ display: 'block', width: 84, aspectRatio: '4/5', objectFit: 'cover', borderRadius: 10, background: T.pale }}/>
+              <figcaption style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, marginTop: 3, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.legende}</figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
       {axes.map(a => (
         <div key={a.nom} style={{ marginBottom: 8 }}>
           <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem', margin: '0 0 6px' }}>{a.nom}</p>
@@ -1226,7 +1274,12 @@ function ArticleDetailModal({ article, variantes, groupes = [], photosActives, c
           {hasVar && onAjouterVariante && !article.est_vitrine ? (
             <VariantesSelector article={article} variantes={variantes} groupes={groupes}
               onAjouter={(a, v, opts) => { onAjouterVariante(a, v, opts); onClose() }}/>
-          ) : (!hasVar && onAjouter && !article.est_vitrine && groupes.length > 0) ? (
+          ) : (article.gere_variantes && !article.est_vitrine) ? (
+            // 🔴 (22/10, audit R1) À variantes, mais aucune version active.
+            <p style={{ fontSize: '0.85rem', fontWeight: 700, color: T.muted, background: '#F9FAFB', borderRadius: 12, padding: '0.75rem 1rem', margin: 0 }}>
+              Indisponible pour l&rsquo;instant.
+            </p>
+          ) : (!hasVar && onAjouter && !article.est_vitrine && groupes.some(groupeAvecOptions)) ? (
             // 🔴 (11/10) CE BOUTON AJOUTAIT L'ARTICLE SANS SES OPTIONS : une
             // pizza partait sans sa base obligatoire. La fiche détaillée
             // passe par le même choix que la ligne du catalogue.
@@ -2758,12 +2811,13 @@ export default function CommanderSlug() {
       // de la variante compte TOUTES ses lignes (38 rose emballée + 38 rose
       // nue = deux pièces de la même variante).
       const key = options ? `${article.id}_v${variante.id}_${JSON.stringify(options)}` : `${article.id}_v${variante.id}`
-      if ((variante.stock ?? 0) <= qteDeLaVariante(variante.id)) return
+      // (22/10, audit R3) « Fabriqué à la demande » : `stockDeVariante` = Infinity.
+      if (stockDeVariante(article, variante) <= qteDeLaVariante(variante.id)) return
       const prixVar = variante.prix != null
         ? prixEffectifVariante(variante.prix, article, dealsActifs)
         : prixEffectif(article, dealsActifs)
       const label = [variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · ')
-      setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: options || null, variante: { id: variante.id, label, stock: variante.stock }, quantite: (prev[key]?.quantite || 0) + 1 } }))
+      setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: options || null, variante: { id: variante.id, label, stock: variante.stock, sansLimite: stockDeVariante(article, variante) === Infinity }, quantite: (prev[key]?.quantite || 0) + 1 } }))
       return
     }
     // FIX STOCK : vérifier la limite avant d'ajouter
@@ -2870,7 +2924,8 @@ export default function CommanderSlug() {
   function incrementerPanier(key, item) {
     if (item.variante) {
       // (22/10) Toutes les lignes de la variante (avec ou sans options).
-      if ((item.variante.stock ?? 0) <= qteDeLaVariante(item.variante.id)) return
+      // (22/10, audit R3) Une version « fabriquée à la demande » ne se compte pas.
+      if (!item.variante.sansLimite && (item.variante.stock ?? 0) <= qteDeLaVariante(item.variante.id)) return
       setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
       return
     }
@@ -2929,7 +2984,9 @@ export default function CommanderSlug() {
       // (13/10) Et un nombre de choix minimum vaut un choix obligatoire.
       // (21/10) Sans aucun choix, un groupe dépendant n'apparaît pas : seuls
       // les groupes toujours affichés comptent (`groupesActifs` sur rien).
-      if (groupesActifs(optionsParArticle[article.id] || [], {}).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }
+      // (22/10, audit R1/R2) Les bornes du client (un groupe sans option
+      // n'exige rien), et un article à variantes demande sa version.
+      if (article.gere_variantes || groupesActifs(optionsParArticle[article.id] || [], {}).some(g => bornesPourLeClient(g).min > 0)) { ignores.push(article.nom); continue }
       const stockMax = getStockMax(article.id)
       const qte = stockMax === Infinity ? l.quantite : Math.min(l.quantite, stockMax)
       if (qte <= 0) continue

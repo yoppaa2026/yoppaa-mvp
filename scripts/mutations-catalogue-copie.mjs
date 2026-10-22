@@ -98,15 +98,16 @@ const MUTATIONS = [
     vers: '  if (true) return candidat' },
 
   // ─── VERS QUI ON COPIE ───────────────────────────────────────────────────
+  // REPOINTÉES LE 22/10 (audit O9) : la vitrine est désormais proposée.
   { nom: '🔴 l article source se propose a lui-meme',
     fichier: COPIE,
-    de: '    a && String(a.id) !== String(sourceId) && a.est_vitrine !== true',
-    vers: '    a && a.est_vitrine !== true' },
+    de: '  return liste.filter(a => a && String(a.id) !== String(sourceId))',
+    vers: '  return liste.filter(a => a)' },
 
-  { nom: '⚠️ un article de vitrine recoit des options invisibles',
+  { nom: '🔴 la vitrine est de nouveau exclue des copies, grilles et groupes',
     fichier: COPIE,
-    de: '    a && String(a.id) !== String(sourceId) && a.est_vitrine !== true',
-    vers: '    a && String(a.id) !== String(sourceId)' },
+    de: '  return liste.filter(a => a && String(a.id) !== String(sourceId))',
+    vers: '  return liste.filter(a => a && String(a.id) !== String(sourceId) && a.est_vitrine !== true)' },
 
   // ─── CE QU ON REFUSE D ECRASER ───────────────────────────────────────────
   //
@@ -226,9 +227,49 @@ const MUTATIONS = [
     de: '  if (galerie > 0) {',
     vers: '  if (galerie >= 0) {' },
 
+  // REPOINTÉE LE 22/10 : la branche « fabriqué à la demande » passe avant.
   { nom: '🔴 la liste ne dit plus que les variantes sont a zero',
     fichier: COPIE,
-    de: '  if (variantes > 0) {',
+    de: '  } else if (variantes > 0) {',
+    vers: '  } else if (false) {' },
+
+  { nom: '🔴 des variantes a stock zero passent pour fabriquees a la demande',
+    fichier: COPIE,
+    de: '  if (variantes > 0 && variantesSansStock) {',
+    vers: '  if (variantes > 0) {' },
+
+  // ─── (22/10) AUDIT R4 : DUPLIQUER GARDE LES PRIX PAR TAILLE ──────────────
+  { nom: '🔴 R4 : un prix dont la taille manque est ecrit quand meme',
+    fichier: COPIE,
+    de: '        if (valeurId == null || tailleId == null || !Number.isFinite(Number(p?.prix))) { perdus++; continue }',
+    vers: '        if (valeurId == null) { perdus++; continue }' },
+  { nom: '🔴 R4 : les options de la copie se retrouvent sans leur groupe',
+    fichier: COPIE,
+    de: '    for (const v of g?.valeurs || []) if (v?.id != null) idSurCopie[cle(g, v)] = v.id',
+    vers: '    for (const v of g?.valeurs || []) if (v?.id != null) idSurCopie[cleNom(v?.nom)] = v.id' },
+  { nom: '🔴 R4 : des prix perdus ne levent plus la fenetre',
+    fichier: COPIE,
+    de: '  if (prixTaillePerdus > 0) {',
+    vers: '  if (false) {' },
+  { nom: '🔴 R4 : la duplication ne recopie plus les prix par taille',
+    fichier: ECRAN,
+    de: '    const prixT = prixTailleDeLaCopie(source, groupesCopie)',
+    vers: '    const prixT = { lignes: [], perdus: 0 }' },
+  { nom: '🟡 J1 : une lecture ratee des options donne une copie nue',
+    fichier: ECRAN,
+    de: '    if (errLecture) { toast(',
+    vers: '    if (false) { toast(' },
+  { nom: '🟡 J1 : un double clic fait deux copies',
+    fichier: ECRAN,
+    de: '    if (duplicationEnCours.current) return',
+    vers: '' },
+  { nom: '🟡 J1 : la copie retombe en fin de categorie',
+    fichier: ECRAN,
+    de: '    if (Number.isFinite(Number(a.ordre))) payload.ordre = Number(a.ordre)',
+    vers: '' },
+  { nom: '🔴 R2 : un groupe partage accepte « 3 parmi 1 »',
+    fichier: COPIE,
+    de: '  if ((bornes.choix_min || 0) > valeurs.length) {',
     vers: '  if (false) {' },
 
   { nom: '⚠️ elle ne dit plus la consequence : rien ne se vend',

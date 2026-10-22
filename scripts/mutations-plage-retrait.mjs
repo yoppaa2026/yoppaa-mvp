@@ -37,7 +37,8 @@ const MUTATIONS = [
   { nom: 'une saisie à l’envers passe', fichier: REGLE,
     de: "  if (plageImpossible(p)) return 'L’heure « à partir de » doit venir avant l’heure « jusqu’à ».'", vers: '' },
   { nom: '🔴 le serveur ne lit plus la plage en base', fichier: 'lib/lignes-commande.js',
-    de: 'commande_active, stock_mode, retrait_des, retrait_jusqua\'', vers: 'commande_active, stock_mode\'' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (`gere_variantes` ferme le select, audit R1).
+    de: 'commande_active, stock_mode, retrait_des, retrait_jusqua, gere_variantes\'', vers: 'commande_active, stock_mode, gere_variantes\'' },
   { nom: '🔴 le serveur ne refuse plus un créneau hors plage', fichier: ROUTE,
     de: '        if (refusPlage) {\n          return NextResponse.json({ ok: false, error: refusPlage, creneau_indisponible: true }, { status: 409 })\n        }',
     vers: '' },

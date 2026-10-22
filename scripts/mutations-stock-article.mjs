@@ -158,7 +158,8 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js', de: '    return f !== null && m !== null && m >= f', vers: '    return false' },
   { nom: '🔴 le reste saisi oublie le deja commande',
     // ⚠️ Ancre reorientee le 07/10 : le bloc a ete scinde (indentation).
-    fichier: 'app/dashboard/ConfigDashboard.js', de: '                  onSetComptoir(a.id, reste + dejaCommande)', vers: '                  onSetComptoir(a.id, reste)' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit J11 : la saisie en place remplace `window.prompt`).
+    fichier: 'app/dashboard/ConfigDashboard.js', de: "                else if (quoi === 'comptoir') onSetComptoir(a.id, n + dejaCommande)", vers: "                else if (quoi === 'comptoir') onSetComptoir(a.id, n)" },
   { nom: '🔴 la carte promet « demain » sur un stock en magasin',
     // ⚠️ Ancre reorientee le 08/10 : la condition vit dans `revient` (temps 3).
     fichier: FICHE, de: '  const revient = revientUnAutreJour(article) && (circuit === null || article.commande_active === true)', vers: '  const revient = true' },

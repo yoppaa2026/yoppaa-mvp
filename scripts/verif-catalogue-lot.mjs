@@ -230,7 +230,10 @@ const CATALOGUE = [
 {
   const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
   const i = config.indexOf('async function appliquerLot(')
-  const bloc = i >= 0 ? config.slice(i, i + 2200) : ''
+  // REPOINTÉE LE 22/10 : tout le corps (jusqu'au rangement), plus une longueur
+  // fixe qui périmait dès qu'une ligne s'ajoutait (prix des variantes, O6).
+  const finBloc = config.indexOf('async function deplacerArticle(', i)
+  const bloc = i >= 0 && finBloc > i ? config.slice(i, finBloc) : ''
   v('l’action en lot a bien été retrouvée', bloc.length > 500, String(bloc.length))
 
   // 🔴 LES RÈGLES VIENNENT DU MODULE : une copie dans l'écran, et le résumé lu
@@ -243,7 +246,8 @@ const CATALOGUE = [
   v('le refus est consulté AVANT de calculer et d’écrire, pour le prix comme pour le reste',
     // ⚠️ REPOINTÉE LE 15/10 : la liste des actions qui ont un refus est nommée
     // (`ACTIONS_AVEC_REFUS`), partagée par l'aperçu et l'écriture.
-    /if \(ACTIONS_AVEC_REFUS\.includes\(lotAction\)\) \{\s*const refus = refusDuLot\(\{ action: lotAction, articles: vises, valeur \}\)\s*if \(refus\) \{ toast\(refus, 'error'\); return \}/.test(bloc)
+    // REPOINTÉE LE 22/10 : le refus lit aussi les prix propres des variantes (O4).
+    /if \(ACTIONS_AVEC_REFUS\.includes\(lotAction\)\) \{\s*const refus = refusDuLot\(\{ action: lotAction, articles: vises, valeur, prixVariantes: prixVarActuels \}\)\s*if \(refus\) \{ toast\(refus, 'error'\); return \}/.test(bloc)
     && bloc.indexOf('refusDuLot(') < bloc.indexOf('patchsDuLot('))
   v('le résumé affiché vient du module', /resumeDuLot\(/.test(config))
   v('🔴 la grille est remplacée par le geste « Revenir à la quantité par défaut » (jours fermés gardés), relu',
@@ -252,11 +256,13 @@ const CATALOGUE = [
   // ⚠️ REPOINTÉE LE 21/10 : + les articles à tailles (« Stock N » pose N sur
   // chaque taille, `variantesDuLot`).
   v('🔴 le compte annoncé = articles, grilles ou articles à tailles touchés',
-    /const touches = new Set\(\[\.\.\.patchs\.map\(p => String\(p\.id\)\), \.\.\.\(grilles\?\.articleIds \|\| \[\]\)\.map\(String\), \.\.\.varLot\.ids\.map\(String\)\]\)/.test(bloc))
+    // REPOINTÉE LE 22/10 : + les articles dont seuls les prix de variantes bougent (O4).
+    /const touches = new Set\(\[\.\.\.patchs\.map\(p => String\(p\.id\)\), \.\.\.\(grilles\?\.articleIds \|\| \[\]\)\.map\(String\), \.\.\.varLot\.ids\.map\(String\), \.\.\.prixVar\.map\(p => String\(p\.article_id\)\)\]\)/.test(bloc))
   v('🔴 L’ÉCRAN DIT LE REFUS AVANT TOUT (le 0 disait « déjà ce stock » et le bouton ne faisait rien)',
     // ⚠️ REPOINTÉE LE 15/10 : le résumé reçoit aussi les articles écartés.
     // ⚠️ REPOINTÉE LE 21/10 : + la phrase des articles à tailles.
-    /\{refus \|\| \[\s*patchs\.length > 0 \|\| \(grilles\?\.articleIds \|\| \[\]\)\.length > 0 \|\| varLot\.ids\.length === 0\s*\? resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles, ecarts \}\) : '',\s*phraseVariantesDuLot\(varLot\),\s*\]\.filter\(Boolean\)\.join\(' '\)\}/.test(config)
+    // ⚠️ REPOINTÉE LE 22/10 : + les prix propres des variantes (`variantes`).
+    /\{refus \|\| \[\s*patchs\.length > 0 \|\| \(grilles\?\.articleIds \|\| \[\]\)\.length > 0 \|\| varLot\.ids\.length === 0\s*\? resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles, ecarts, variantes: resumeVariantes \}\) : '',\s*phraseVariantesDuLot\(varLot\),\s*\]\.filter\(Boolean\)\.join\(' '\)\}/.test(config)
     && /disabled=\{lotEnCours \|\| !!refus \|\| touches\.size === 0\}/.test(config))
   v('une croix referme l’article ouvert dans Personnalisation (en haut et en bas)',
     (config.match(/onClick=\{e => e\.currentTarget\.closest\('details'\)\?\.removeAttribute\('open'\)\}/g) || []).length === 2)
@@ -351,9 +357,11 @@ const CATALOGUE = [
   // ── L'écran ──
   const ecran = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
   v('🔴 l’écran passe `deuxCircuits` au lot, à l’aperçu ET à l’écriture',
-    (ecran.match(/patchsDuLot\(\{ action: lotAction, articles: vises, valeur, deuxCircuits \}\)/g) || []).length === 2
+    // REPOINTÉE LE 22/10 : + le catalogue (une catégorie changée range l'article à la fin, J10).
+    (ecran.match(/patchsDuLot\(\{ action: lotAction, articles: vises, valeur, deuxCircuits, catalogue: articles \}\)/g) || []).length === 2
       && (ecran.match(/ecartsDuLot\(\{ action: lotAction, articles: vises, valeur, deuxCircuits \}\)/g) || []).length === 2)
-  v('🔴 le résumé reçoit les articles écartés', (ecran.match(/resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles, ecarts \}\)/g) || []).length === 2)
+  // REPOINTÉE LE 22/10 : + les prix propres des variantes.
+  v('🔴 le résumé reçoit les articles écartés', (ecran.match(/resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles, ecarts, variantes: resumeVariantes \}\)/g) || []).length === 2)
   v('🔴 le jour même et la commande ne sont proposés qu’à l’alimentaire',
     /\.\.\.\(deuxCircuits \? \[\s*\{ val: 'jour_meme'/.test(ecran))
   v('les cartes du lot sont celles de la fiche article',

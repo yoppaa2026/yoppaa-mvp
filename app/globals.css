@@ -449,3 +449,17 @@ input, textarea, select {
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   }
 }
+
+/* ── Un libellé qui cède la place sur téléphone (22/10, audit O13) ─────────
+   « Dupliquer » en toutes lettres élargissait la colonne d'actions de la
+   carte article : le contenu tombait à 180 px sur un écran de 390. Mobile
+   d'abord : l'icône seule, le mot au seuil bureau (le bouton garde son nom
+   pour les lecteurs d'écran, et le socle n'admet que ce seuil). */
+.libelle-large {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .libelle-large {
+    display: inline;
+  }
+}

@@ -190,6 +190,7 @@ import {
   parentParNom, resoudreParent, cleParent, choixDeParent, enfantsDe, phraseEnfantsEmportes,
   prixTailleDeLaCopie,
 } from '@/lib/catalogue-copie'
+import { articlesACorriger, titreACorriger } from '@/lib/catalogue-a-corriger'
 // ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
 // commerçant lit avant de valider. Le prix ne se défait pas, la règle non plus.
@@ -197,6 +198,7 @@ import {
   articlesDuLot, patchsDuLot, resumeDuLot, refusDuLot, TVA_INCHANGEE, grillesARemplacer,
   ecartsDuLot, VENTE_EN_LIGNE, VENTE_VITRINE, DELAI_JOURS_MAX,
   variantesDuLot, phraseVariantesDuLot,
+  MODES_PRIX_LOT, prixDesVariantesDuLot, variantesAPrixPropre, lirePrixLot,
 } from '@/lib/catalogue-lot'
 
 // Les actions groupées qui ont un refus à elles (`refusDuLot`), vérifié avant
@@ -477,6 +479,31 @@ function ChoixCartes({ label, choix, estChoisi, onChoisir, colonnes = 180 }) {
   )
 }
 
+// 🟡 (22/10, audit J11) UNE SAISIE RAPIDE EN PLACE, à la place de
+// `window.prompt` (illisible sur téléphone, et qui bloque toute la page) : un
+// champ, « Enregistrer », « Annuler ». Entrée valide, Échap annule.
+function SaisieRapide({ libelle, aide = null, valeurInitiale = '', onValider, onAnnuler }) {
+  const [valeur, setValeur] = useState(valeurInitiale)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', background: '#F8F6FF', border: `1px solid ${T.hairline}`, borderRadius: 10, padding: '6px 8px', margin: '4px 0 8px', flexBasis: '100%' }}>
+      <label style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        {libelle}
+        <input autoFocus type="number" min="0" step="1" value={valeur} onChange={e => setValeur(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); onValider(valeur) }
+            if (e.key === 'Escape') { e.preventDefault(); onAnnuler() }
+          }}
+          style={{ width: 72, fontSize: 13, padding: '4px 6px', borderRadius: 8, border: `1.5px solid ${T.hairline}`, textAlign: 'center', fontFamily: 'inherit' }}/>
+      </label>
+      <button type="button" onClick={() => onValider(valeur)}
+        style={{ fontSize: 12, fontWeight: 800, color: '#fff', background: T.bgPanel, border: 'none', padding: '5px 10px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>Enregistrer</button>
+      <button type="button" onClick={onAnnuler}
+        style={{ fontSize: 12, fontWeight: 700, color: T.muted, background: '#fff', border: '1px solid #E5E7EB', padding: '5px 10px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+      {aide && <span style={{ fontSize: 11.5, color: T.muted, flexBasis: '100%' }}>{aide}</span>}
+    </div>
+  )
+}
+
 // Une section du formulaire : un titre lisible, une phrase qui dit à quoi elle
 // sert, et ses champs en dessous. Le cadre et la bande de titre la rendent
 // repérable d'un coup d'œil, comme un formulaire Odoo.
@@ -603,8 +630,9 @@ function TabMenu({ commercantId, commercant, toast }) {
   }, [commercantId, commercant?.mode_capacite])
   // Écrit la liste et la pose à l'écran SEULEMENT si la base l'a acceptée.
   async function ecrireListeCats(liste) {
-    const { error } = await supabase.from('commercants').update({ ordre_categories: liste }).eq('id', commercantId)
-    if (error) { toast(`La liste des catégories n’a pas pu être enregistrée : ${error.message}`, 'error'); return false }
+    // (22/10, audit O6) relu : zéro ligne = refusé.
+    const { data, error } = await supabase.from('commercants').update({ ordre_categories: liste }).eq('id', commercantId).select('id')
+    if (error || (data?.length || 0) !== 1) { toast(`La liste des catégories n’a pas pu être enregistrée : ${error?.message || 'modification refusée'}`, 'error'); return false }
     setListeCats(liste)
     return true
   }
@@ -627,7 +655,9 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [lotIds, setLotIds] = useState([])
   const [enLot, setEnLot] = useState(false)
   const [lotAction, setLotAction] = useState(null)
-  const [lotValeur, setLotValeur] = useState('')       // le pourcentage
+  const [lotValeur, setLotValeur] = useState('')       // la saisie du prix
+  // (22/10, Alex) « En % », « Mettre à 12 € », « Ajouter ou retirer 0,50 € ».
+  const [lotPrixMode, setLotPrixMode] = useState('pourcent')
   const [lotCategorie, setLotCategorie] = useState('') // la catégorie visée
   const [lotEnCours, setLotEnCours] = useState(false)
   // 10/10 : le stock, la TVA et le temps de préparation se règlent aussi d'un coup.
@@ -645,7 +675,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [lotPlage, setLotPlage] = useState({ de: '', a: '' })
   // La valeur que l'action choisie applique : une seule source pour l'aperçu,
   // le refus et l'écriture.
-  const valeurDuLot = (action) => action === 'prix' ? lotValeur
+  const valeurDuLot = (action) => action === 'prix' ? { mode: lotPrixMode, saisie: lotValeur }
     : action === 'categorie' ? lotCategorie
     : action === 'stock' ? lotStock
     : action === 'tva' ? lotTva
@@ -772,7 +802,8 @@ function TabMenu({ commercantId, commercant, toast }) {
     const ids = idsAVariantes.current
     if (ids.length === 0) { setVariantesParArticle({}); return }
     const { data, error } = await toutesLesLignes(() => supabase.from('article_variantes')
-      .select('id, article_id, axe1_valeur, axe2_valeur, stock, actif, ordre')
+      // (22/10) `prix` : les prix en lot suivent les prix propres des variantes (O4).
+      .select('id, article_id, axe1_valeur, axe2_valeur, stock, actif, ordre, prix')
       .in('article_id', ids).order('article_id').order('ordre').order('id'))
     if (error) return
     const map = {}
@@ -821,19 +852,26 @@ function TabMenu({ commercantId, commercant, toast }) {
 
   // Upsert le stock pour un (article, jour). Si la contrainte unique n'existe
   // pas, on fait delete puis insert.
-  async function setStockJour(articleId, jourSemaine, stock, actif) {
+  async function setStockJour(articleId, jourSemaine, stock, actif, { silencieux = false } = {}) {
     const payload = { commercant_id: commercantId, article_id: articleId, jour_semaine: jourSemaine, stock: Math.max(0, parseInt(stock) || 0), actif: !!actif }
-    const { error } = await supabase
+    // 🟠 (22/10, audit O6) relu, repli compris : un jour refusé ne s'affiche
+    // plus comme enregistré. Rend `true` si la base a la ligne.
+    const { data, error } = await supabase
       .from('article_stock_jour')
       .upsert(payload, { onConflict: 'article_id,jour_semaine' })
+      .select('id')
+    let ecrit = !error && (data?.length || 0) === 1
     if (error) {
       await supabase.from('article_stock_jour').delete().eq('article_id', articleId).eq('jour_semaine', jourSemaine)
-      await supabase.from('article_stock_jour').insert(payload)
+      const { data: inseree, error: errIns } = await supabase.from('article_stock_jour').insert(payload).select('id')
+      ecrit = !errIns && (inseree?.length || 0) === 1
     }
+    if (!ecrit) { if (!silencieux) toast(`La quantité du ${jourSemaine} n’a pas été enregistrée. Recharge la page.`, 'error'); return false }
     setStockParJourMap(prev => ({
       ...prev,
       [articleId]: { ...(prev[articleId] || {}), [jourSemaine]: { stock: payload.stock, actif: payload.actif } },
     }))
+    return true
   }
 
   // Applique un dispo aux jours d'OUVERTURE (les jours fermés au Profil sont
@@ -841,11 +879,14 @@ function TabMenu({ commercantId, commercant, toast }) {
   async function setStockTousJours(articleId, dispo, consoParJour = {}) {
     const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
     const ouverts = JOURS.filter(j => !joursFermes.includes(j))
-    await Promise.all(ouverts.map(j => {
+    const resultats = await Promise.all(ouverts.map(j => {
       // Brut = dispo saisi + déjà commandé POUR CE JOUR de retrait (bug 14)
       const brut = dispo + (consoParJour[j] || 0)
-      return setStockJour(articleId, j, brut, true)
+      return setStockJour(articleId, j, brut, true, { silencieux: true })
     }))
+    // (22/10, audit O6) Le succès ne se dit que s'il est vrai, jour par jour.
+    const rates = resultats.filter(r => !r).length
+    if (rates > 0) { toast(`${rates === 1 ? '1 jour n’a' : `${rates} jours n’ont`} pas été enregistré${rates > 1 ? 's' : ''}. Recharge la page.`, 'error'); return }
     toast(joursFermes.length > 0 ? 'Stock appliqué aux jours d\'ouverture' : 'Stock appliqué aux 7 jours')
   }
 
@@ -953,26 +994,62 @@ function TabMenu({ commercantId, commercant, toast }) {
     return () => { annule = true }
   }, [])
 
-  function openNew() {
+  // 🟠 (22/10, audit O12) LES SAISIES NE SE PERDENT PLUS EN SILENCE :
+  // « Annuler », un autre article ou « + Article » remplaçaient le formulaire
+  // en cours, et les photos de galerie en attente restaient dans le stockage.
+  // On compare au formulaire tel qu'il s'est ouvert (`formDepart`).
+  const formDepart = useRef('')
+  function poserFormulaire(f) { setForm(f); formDepart.current = JSON.stringify(f) }
+  async function peutQuitterFormulaire() {
+    if (!showForm) return true
+    // (Nom propre à cette fonction : `enAttente` est aussi celui de l'enregistrement.)
+    const photosEnAttente = galerie.filter(p => p.enAttente)
+    if (JSON.stringify(form) === formDepart.current && photosEnAttente.length === 0) return true
+    const okQuitterFormulaire = await confirme(confirmationSimple({
+      titre: 'Quitter sans enregistrer ?',
+      message: `Tes modifications de « ${form.nom?.trim() || 'cet article'} » seront perdues${photosEnAttente.length ? `, et ${photosEnAttente.length === 1 ? 'la photo de galerie ajoutée' : `les ${photosEnAttente.length} photos de galerie ajoutées`} aussi` : ''}.`,
+      action: 'Oui, quitter',
+    }))
+    if (!okQuitterFormulaire) return false
+    // Les fichiers des photos jamais rattachées quittent le stockage (au mieux).
+    const chemins = photosEnAttente.map(p => p.chemin).filter(Boolean)
+    if (chemins.length > 0) supabase.storage.from('logos').remove(chemins).catch(() => {})
+    setGalerie([])
+    return true
+  }
+  async function fermerFormulaire() { if (await peutQuitterFormulaire()) setShowForm(false) }
+
+  async function openNew() {
+    if (!await peutQuitterFormulaire()) return
     // ✅ TEMPS 3 : un nouvel article de l'alimentaire se vend le jour même, ET
     // sur commande pour demain quand le commerce prend les commandes à deux
     // jours (le défaut). C'est ce que faisait tout article avant les deux
     // circuits, et ce que la migration a donné à l'existant (Alex, 08/10).
     const demainCommandable = deuxCircuits && (Number(commercant?.horizon_commande) || 2) >= 2
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '', gere_variantes: false })
+    poserFormulaire({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '', gere_variantes: false })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
-  function openEdit(a) {
+  async function openEdit(a) {
+    if (showForm && String(editId) === String(a.id)) return
+    if (!await peutQuitterFormulaire()) return
     // ⚠️ « Sans limite » n'a pas de quantité : le champ repart vide si l'on
     // change d'avis, au lieu d'afficher le 0 technique qui la représente.
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '', gere_variantes: a.gere_variantes === true })
+    poserFormulaire({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '', gere_variantes: a.gere_variantes === true })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
   }
 
-  async function saveArticle() {
+  // (22/10) Après l'enregistrement, ouvrir sa Personnalisation (variantes,
+  // options), dépliée et sous les yeux.
+  function ouvrirPersonnalisation(id) {
+    setSubTab('personnalisation')
+    setPanneauxOuverts(p => ({ ...p, [id]: true }))
+    setTimeout(() => document.getElementById(`perso-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200)
+  }
+
+  async function saveArticle({ personnaliser = false } = {}) {
     // ✅ LE PRIX EST TOUJOURS FERME, EN VITRINE AUSSI (Alex, 30/09) : plus de
     // « prix indicatif », donc plus d'article sans prix.
     if (!form.nom.trim() || !(parseFloat(form.prix) > 0)) return toast('Nom et prix obligatoires', 'error')
@@ -1071,6 +1148,7 @@ function TabMenu({ commercantId, commercant, toast }) {
         setSaving(false)
         toast(`Enregistré, mais aucun de tes créneaux ne tient dans « ${libellePlage(plageReglee).toLowerCase()} » : cet article ne pourra pas être commandé. Ajoute un créneau dans cette plage, ou élargis-la.`, 'error')
         setShowForm(false); fetchArticles(); chargerVentesMagasin()
+        if (personnaliser) ouvrirPersonnalisation(cree.id)
         return
       }
     }
@@ -1084,9 +1162,12 @@ function TabMenu({ commercantId, commercant, toast }) {
       if (errJours) { setSaving(false); toast(`Article enregistré, mais ses quantités par jour n’ont pas pu être retirées : ${errJours.message}`, 'error'); fetchArticles(); return }
     }
     setSaving(false)
-    toast(editId ? 'Article mis à jour' : 'Article ajouté')
+    toast(personnaliser
+      ? `${editId ? 'Article mis à jour' : 'Article ajouté'} : règle maintenant ses ${variantesCategorie ? 'variantes et ses options' : 'options'}.`
+      : (editId ? 'Article mis à jour' : 'Article ajouté'))
     // Un stock qui baisse ressaisi repart de zéro vente : on relit le compte.
     setShowForm(false); fetchArticles(); chargerVentesMagasin()
+    if (personnaliser) ouvrirPersonnalisation(cree.id)
   }
 
   async function ajouterCategorie() {
@@ -1154,7 +1235,13 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (catActive === cat) setCatActive('Tous')
   }
 
-  async function toggleActif(a) { await supabase.from('articles').update({ actif: !a.actif }).eq('id', a.id); fetchArticles() }
+  // 🟠 (22/10, audit O6) relu : ni erreur lue ni ligne comptée avant, l'écran
+  // repassait simplement à l'état de la base sans rien dire.
+  async function toggleActif(a) {
+    const { data, error } = await supabase.from('articles').update({ actif: !a.actif }).eq('id', a.id).select('id')
+    if (error || (data?.length || 0) !== 1) toast(`« ${a.nom} » n’a pas changé : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error')
+    fetchArticles()
+  }
 
   // ─── AGIR SUR PLUSIEURS ARTICLES D'UN COUP (Alex, 25/09) ──────────────────
   //
@@ -1189,28 +1276,35 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ 10/10 : le stock, la TVA et le temps de préparation ont leur refus
     // aussi (`refusDuLot`), avec les mots du formulaire d'un article.
     const valeur = valeurDuLot(lotAction)
+    // 🟠 (22/10, audit O4) LES PRIX PROPRES DES VARIANTES SUIVENT un
+    // pourcentage ou un montant ; un prix fixe les laisse, et le dit.
+    const prixVar = lotAction === 'prix' ? prixDesVariantesDuLot({ articles: vises, variantesParArticle, valeur }) : []
+    const prixVarActuels = lotAction === 'prix' ? vises.flatMap(a => (variantesParArticle[a.id] || []).map(v => v.prix).filter(p => p !== null && p !== undefined)) : []
     if (ACTIONS_AVEC_REFUS.includes(lotAction)) {
-      const refus = refusDuLot({ action: lotAction, articles: vises, valeur })
+      const refus = refusDuLot({ action: lotAction, articles: vises, valeur, prixVariantes: prixVarActuels })
       if (refus) { toast(refus, 'error'); return }
     }
 
-    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
+    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits, catalogue: articles }) // ce qui s'écrit
     // ✅ 15/10 : les articles qu'une règle refuse sont nommés, pas écrits.
     const ecarts = ecartsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
     // 🔴 « 15 par jour » remplace aussi la grille jour par jour (Alex, 10/10).
     const grilles = lotAction === 'stock' ? grillesARemplacer({ articles: vises, valeur, grilles: stockParJourMap }) : null
     // (21/10) « Stock N » pose aussi N sur chaque taille des articles à tailles.
     const varLot = variantesDuLot({ action: lotAction, articles: vises, valeur })
-    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String), ...varLot.ids.map(String)])
-    if (touches.size === 0) { toast(resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts }), 'error'); return }
+    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String), ...varLot.ids.map(String), ...prixVar.map(p => String(p.article_id))])
+    const resumeVariantes = lotAction === 'prix'
+      ? { changees: prixVar.length, gardees: lirePrixLot(valeur).mode === 'fixe' ? variantesAPrixPropre({ articles: vises, variantesParArticle }) : 0 }
+      : null
+    if (touches.size === 0) { toast(resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts, variantes: resumeVariantes }), 'error'); return }
 
     if (lotAction === 'prix') {
       // ⚠️ LE VERDICT PORTE UN NOM À LUI, et ce n'est pas un détail de style :
       // `ok` apparaît trois fois dans ce fichier, et une mutation qui vise
       // « if (!ok) return » mesurerait la confirmation d'un autre écran.
       const okPrix = await confirme(confirmationSimple({
-        titre: `Changer le prix de ${patchs.length === 1 ? '1 article' : `${patchs.length} articles`} ?`,
-        message: resumeDuLot({ action: 'prix', patchs, coches: lotIds.length, valeur: lotValeur }),
+        titre: `Changer le prix de ${touches.size === 1 ? '1 article' : `${touches.size} articles`} ?`,
+        message: resumeDuLot({ action: 'prix', patchs, coches: lotIds.length, valeur, variantes: resumeVariantes }),
         action: 'Oui, changer les prix',
       }))
       if (!okPrix) return
@@ -1226,8 +1320,17 @@ function TabMenu({ commercantId, commercant, toast }) {
     }
     let rates = 0
     for (const { patch, ids } of parPatch.values()) {
-      const { error } = await supabase.from('articles').update(patch).in('id', ids)
+      // 🟠 (22/10, audit O6) relu : la permission refuse en rendant zéro ligne.
+      const { data: ecrits, error } = await supabase.from('articles').update(patch).in('id', ids).select('id')
       if (error) rates += ids.length
+      else rates += ids.length - (ecrits?.length || 0)
+    }
+    // Les prix propres des variantes, groupés par prix, relus.
+    const parPrix = new Map()
+    for (const p of prixVar) { if (!parPrix.has(p.prix)) parPrix.set(p.prix, []); parPrix.get(p.prix).push(p.id) }
+    for (const [prix, ids] of parPrix) {
+      const { data: ecrites, error: errPrix } = await supabase.from('article_variantes').update({ prix }).in('id', ids).select('id')
+      if (errPrix || (ecrites?.length || 0) !== ids.length) rates += 1
     }
     // La grille jour par jour : le geste de « Revenir à la quantité par défaut »,
     // les jours fermés restent. Relu : la RLS refuse en rendant zéro ligne.
@@ -1442,8 +1545,9 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ UN NOUVEAU STOCK EN MAGASIN REPART DE MAINTENANT (30/09) : les ventes
     // se compteront à partir de cette date, pas depuis la précédente.
     const maj = { stock_jour: n, stock_maj_le: new Date().toISOString() }
-    const { error } = await supabase.from('articles').update(maj).eq('id', id)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    // (22/10, audit O6) relu.
+    const { data, error } = await supabase.from('articles').update(maj).eq('id', id).select('id')
+    if (error || (data?.length || 0) !== 1) { toast(`Le stock n’a pas été enregistré : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error'); return }
     setArticles(prev => prev.map(a => a.id === id ? { ...a, ...maj } : a))
     // ⚠️ La saisie remet le compteur des ventes à zéro : on le relit tout de
     // suite, sinon la carte retirerait 30 s les anciennes ventes du nouveau stock.
@@ -1470,8 +1574,9 @@ function TabMenu({ commercantId, commercant, toast }) {
     const maj = brut === null
       ? { stock_comptoir: null, stock_comptoir_le: null }
       : { stock_comptoir: Math.max(0, parseInt(brut, 10) || 0), stock_comptoir_le: jourBruxelles() }
-    const { error } = await supabase.from('articles').update(maj).eq('id', id)
-    if (error) { toast(`Le comptoir n’a pas pu être enregistré : ${error.message}`, 'error'); return }
+    // (22/10, audit O6) relu.
+    const { data, error } = await supabase.from('articles').update(maj).eq('id', id).select('id')
+    if (error || (data?.length || 0) !== 1) { toast(`Le comptoir n’a pas pu être enregistré : ${error?.message || 'modification refusée'}`, 'error'); return }
     setArticles(prev => prev.map(a => a.id === id ? { ...a, ...maj } : a))
     toast(brut === null ? 'Comptoir retiré : la quantité du jour revient.' : 'Comptoir enregistré pour aujourd’hui.')
   }
@@ -1504,8 +1609,9 @@ function TabMenu({ commercantId, commercant, toast }) {
       const reste = Math.max(0, parseInt(saisiesComptoir[a.id], 10) || 0)
       const deja = commandesParArticleJour[a.id]?.[jourKey] || 0
       const maj = { stock_comptoir: reste + deja, stock_comptoir_le: jour }
-      const { error } = await supabase.from('articles').update(maj).eq('id', a.id)
-      return { id: a.id, maj, error }
+      // (22/10, audit O6) relu : zéro ligne = refusé, compté comme un échec.
+      const { data, error } = await supabase.from('articles').update(maj).eq('id', a.id).select('id')
+      return { id: a.id, maj, error: error || ((data?.length || 0) !== 1 ? { message: 'modification refusée' } : null) }
     }))
     setEnvoiComptoir(false)
     // ⚠️ SEUL CE QUE LA BASE A ACCEPTÉ S'AFFICHE : un échec ne doit pas passer
@@ -1599,7 +1705,8 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGalerie(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     if (!articleId) {
-      setGalerie(prev => [...prev, { id: `attente-${Date.now()}`, url: urlData.publicUrl, enAttente: true }])
+      // (22/10, O12) `chemin` : pour retirer le fichier si l'article n'est jamais enregistré.
+      setGalerie(prev => [...prev, { id: `attente-${Date.now()}`, url: urlData.publicUrl, enAttente: true, chemin: fileName }])
       setUploadingGalerie(false)
       return
     }
@@ -1617,7 +1724,11 @@ function TabMenu({ commercantId, commercant, toast }) {
     setGalerie(prev => prev.filter(p => p.id !== id))
   }
 
-  const articlesFiltres = catActive === 'Tous' ? articles : articles.filter(a => a.categorie === catActive)
+  // 🟡 (22/10, audit J10) UNE CATÉGORIE PARENTE MONTRE AUSSI SES
+  // SOUS-CATÉGORIES (« Vins » et « Vins · Rouges ») : sa pastille n'affichait
+  // que ses articles propres, souvent aucun.
+  const dansLaCategorie = (a, cat) => a.categorie === cat || String(a.categorie || '').startsWith(`${cat} · `)
+  const articlesFiltres = catActive === 'Tous' ? articles : articles.filter(a => dansLaCategorie(a, catActive))
   const articlesSansCat = articles.filter(a => !a.categorie)
   const articlesRecherche = searchQuery.trim()
     ? articlesFiltres.filter(a => a.nom.toLowerCase().includes(searchQuery.toLowerCase()) || (a.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
@@ -1642,6 +1753,12 @@ function TabMenu({ commercantId, commercant, toast }) {
   ]
 
   function renderArticleForm() {
+    // 🟠 (22/10, audit O10) « Coche les jours sur la carte » : la carte n'a de
+    // grille des jours que hors stock en magasin et hors variantes.
+    const aideJoursDeVente = form.stock_mode !== 'magasin' && !form.gere_variantes
+      ? ' Pour ne le vendre que certains jours, coche-les sur la carte de l’article.' : ''
+    // (22/10, audit O14) Les photos du catalogue, coupées ou non (Profil).
+    const photosSurLaFiche = commercant?.photos_catalogue_actif !== false
     return (
       <div style={s.cardActive}>
         <h3 style={{ ...s.h3, marginBottom: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1820,7 +1937,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                   }))}/>
                 {form.commande_active === true && (<>
                   <ChampFormulaire label="Délai de commande"
-                    aide="En jours : « 2 jours » veut dire commandé jeudi, retiré samedi. Tes clients le voient sur la carte, avec la date limite. Pour ne le vendre que certains jours, coche-les sur la carte de l’article.">
+                    aide={`En jours : « 2 jours » veut dire commandé jeudi, retiré samedi. Tes clients le voient sur la carte, avec la date limite.${aideJoursDeVente}`}>
                     <select
                       value={String(form.delai_minutes ?? 1440)}
                       onChange={e => setForm(p => ({ ...p, delai_minutes: e.target.value }))}
@@ -1883,12 +2000,16 @@ function TabMenu({ commercantId, commercant, toast }) {
           {/* ⚠️ HORS ALIMENTAIRE SEULEMENT depuis le temps 3 : la boutique garde
               son délai ; l'alimentaire le règle dans « Sur commande ». */}
           {!estVitrine && !deuxCircuits && form.vendable && (
-            <SectionFormulaire titre="Quand peut-on le commander ?" phrase="Pour les articles que tu prépares à l’avance : une tarte, un gâteau, un plateau, le pain du week-end.">
+            // 🟡 (22/10, audit J4) Des exemples du métier : une boutique ne
+            // prépare ni tarte ni pain du week-end.
+            <SectionFormulaire titre="Quand peut-on le commander ?" phrase={estAlimentaire
+              ? 'Pour les articles que tu prépares à l’avance : une tarte, un gâteau, un plateau, le pain du week-end.'
+              : 'Pour les articles que tu commandes ou prépares à l’avance : une retouche, une gravure, une pièce à faire venir.'}>
               {/* ⚠️ UNE LISTE, PAS UN CHAMP LIBRE : un boulanger pense « 2 jours »,
                   pas « 2880 », et la faute de frappe rendrait l'article
                   commandable par personne, en silence. */}
               <ChampFormulaire label="Délai de commande"
-                aide="En jours : « 2 jours » veut dire commandé jeudi, retiré samedi. Tes clients le voient sur la carte, avec la date limite. Pour ne le vendre que certains jours, coche-les sur la carte de l’article.">
+                aide={`En jours : « 2 jours » veut dire commandé ${estAlimentaire ? 'jeudi, retiré samedi' : 'jeudi, prêt samedi'}. Tes clients le voient sur la carte, avec la date limite.${aideJoursDeVente}`}>
                 <select
                   value={String(form.delai_minutes ?? 0)}
                   onChange={e => setForm(p => ({ ...p, delai_minutes: e.target.value }))}
@@ -1957,8 +2078,13 @@ function TabMenu({ commercantId, commercant, toast }) {
             </div>
           </SectionFormulaire>
 
-          <SectionFormulaire titre="Photos" phrase="Facultatif. Une photo aide beaucoup à vendre en ligne.">
-            <ChampFormulaire label="Photo de couverture" aide="Compressée automatiquement. Format idéal carré, minimum 800 × 800 px.">
+          {/* 🟠 (22/10, audit O14) L'aide dit vrai : le recadrage est en 4:5
+              (`preparerPhotoArticle`), et quand les photos du catalogue sont
+              coupées (Profil), la fiche ne les montre pas. */}
+          <SectionFormulaire titre="Photos" phrase={photosSurLaFiche
+            ? 'Facultatif. Une photo aide beaucoup à vendre en ligne.'
+            : 'Les photos du catalogue sont coupées dans ton Profil : elles s’enregistrent, mais ta fiche ne les montre pas tant que tu ne les rallumes pas.'}>
+            <ChampFormulaire label="Photo de couverture" aide="Compressée et recadrée automatiquement en portrait (4:5), comme un post. Minimum 800 px de large.">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', background: T.hairline, flexShrink: 0, position: 'relative', border: `1px solid ${T.hairline}` }}>
                   {form.photo_url ? (
@@ -1982,7 +2108,7 @@ function TabMenu({ commercantId, commercant, toast }) {
             {/* Galerie : dès la création (21/10, Alex), les photos d'un nouvel
                 article attendent l'enregistrement. */}
             {(
-              <ChampFormulaire label={`Galerie (${galerie.length})`} aide={editId ? 'Photos supplémentaires montrées sur ta fiche.' : 'Photos supplémentaires montrées sur ta fiche. Elles s’enregistrent avec l’article.'}>
+              <ChampFormulaire label={`Galerie (${galerie.length})`} aide={`${photosSurLaFiche ? 'Photos supplémentaires montrées sur ta fiche.' : 'Photos supplémentaires (ta fiche ne les montre pas : photos coupées dans ton Profil).'}${editId ? '' : ' Elles s’enregistrent avec l’article.'}`}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {galerie.map(p => (
                     <div key={p.id} style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}` }}>
@@ -2000,11 +2126,17 @@ function TabMenu({ commercantId, commercant, toast }) {
             )}
           </SectionFormulaire>
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>
+        {/* ✅ (22/10, Alex : « laisser le choix au commerçant quand il
+            valide ») « Enregistrer et personnaliser » enchaîne sur ses
+            variantes et ses options, sans chercher la carte puis le bouton. */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => saveArticle()} disabled={saving}>
             <Icon name="check" size={14}/> {saving ? <EnCours /> : 'Enregistrer'}
           </button>
-          <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
+          <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => saveArticle({ personnaliser: true })} disabled={saving}>
+            <Icon name="sliders" size={14}/> Enregistrer et personnaliser
+          </button>
+          <button style={{ ...s.btn, ...s.btnGhost }} onClick={fermerFormulaire}>Annuler</button>
         </div>
       </div>
     )
@@ -2053,7 +2185,7 @@ function TabMenu({ commercantId, commercant, toast }) {
         </div>
         <div className="tabmenu-header-actions">
           {subTab === 'categories' && (
-            <button style={{ ...s.btn, background: '#fff', color: T.bgPanel }} onClick={() => { setShowCatForm(v => !v); setShowForm(false) }}>
+            <button style={{ ...s.btn, background: '#fff', color: T.bgPanel }} onClick={async () => { if (!await peutQuitterFormulaire()) return; setShowCatForm(v => !v); setShowForm(false) }}>
               <Icon name="plus" size={14}/> Catégorie
             </button>
           )}
@@ -2065,7 +2197,7 @@ function TabMenu({ commercantId, commercant, toast }) {
           {/* LE MENU LU PAR L'IA (13/10) : l'alimentaire d'abord, comme la
               route ; le commerçant ou l'admin en mode admin. */}
           {estAlimentaire && subTab === 'articles' && (
-            <button style={{ ...s.btn, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.6)' }} onClick={() => { setLectureMenu(true); setShowForm(false); setShowCatForm(false) }}>
+            <button style={{ ...s.btn, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.6)' }} onClick={async () => { if (!await peutQuitterFormulaire()) return; setLectureMenu(true); setShowForm(false); setShowCatForm(false) }}>
               <Icon name="sparkles" size={14}/> Lire mon menu
             </button>
           )}
@@ -2108,10 +2240,12 @@ function TabMenu({ commercantId, commercant, toast }) {
       )}
 
       {/* ─── Barre sous-onglets ───────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, border: `1px solid ${T.hairline}`, boxShadow: '0 1px 4px rgba(22,6,54,0.04)' }}>
+      {/* 🟠 (22/10, audit O13) Les onglets passent à la ligne sur téléphone
+          (4 onglets en alimentaire débordaient d'environ 80 px). */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, border: `1px solid ${T.hairline}`, boxShadow: '0 1px 4px rgba(22,6,54,0.04)' }}>
         {SUB_TABS.map(t => (
           <button key={t.id} onClick={() => setSubTab(t.id)}
-            style={{ flex: 1, minWidth: 80, padding: '10px 6px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12.5, transition: 'all 0.2s', background: subTab === t.id ? T.bgPanel : 'transparent', color: subTab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            style={{ flex: '1 1 auto', minWidth: 0, padding: '10px 8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12.5, transition: 'all 0.2s', background: subTab === t.id ? T.bgPanel : 'transparent', color: subTab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name={t.icon} size={14} color={subTab === t.id ? '#fff' : T.muted}/>
             {t.label}
           </button>
@@ -2126,6 +2260,39 @@ function TabMenu({ commercantId, commercant, toast }) {
       {/* ───────────── SUB-TAB : ARTICLES ───────────── */}
       {subTab === 'articles' && (
         <>
+          {/* ✅ (22/10, Alex, tableau de l'audit) LE BANDEAU « À CORRIGER » :
+              les articles sur ta fiche qui ne se vendent pas comme prévu
+              (variantes absentes, éteintes ou à 0, groupe obligatoire vide,
+              ancien « par jour » sur des variantes), avec le geste. Rien
+              quand tout va bien. Règle : `lib/catalogue-a-corriger.js`. */}
+          {(() => {
+            const aCorriger = articlesACorriger({ articles, variantesParArticle, groupesParArticle })
+            if (aCorriger.length === 0) return null
+            return (
+              <details style={{ marginBottom: 14, background: '#FFFBEB', border: '1.5px solid #F59E0B88', borderRadius: 12, padding: '10px 14px' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 800, fontSize: 13.5, color: '#92400E' }}>
+                  À corriger : {titreACorriger(aCorriger)}
+                </summary>
+                <ul style={{ listStyle: 'none', padding: 0, margin: '10px 0 0', display: 'grid', gap: 8 }}>
+                  {aCorriger.map(x => {
+                    const a = articles.find(y => String(y.id) === String(x.id))
+                    return (
+                      <li key={x.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', background: '#fff', borderRadius: 10, padding: '8px 10px', border: '1px solid #F59E0B44' }}>
+                        <div style={{ flex: 1, minWidth: 180 }}>
+                          <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: T.ink }}>{x.nom}</p>
+                          {x.raisons.map((r, i) => <p key={i} style={{ margin: '2px 0 0', fontSize: 12.5, color: '#3F3A4F', lineHeight: 1.45 }}>{r.charAt(0).toUpperCase() + r.slice(1)}.</p>)}
+                        </div>
+                        <button type="button" style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 12 }}
+                          onClick={() => (x.geste === 'modifier' && a ? openEdit(a) : ouvrirPersonnalisation(x.id))}>
+                          {x.geste === 'modifier' ? 'Modifier' : 'Personnaliser'}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </details>
+            )
+          })()}
           {/* Barre filtres + recherche */}
           {articles.length > 0 && (
             <div style={{ marginBottom: 14 }}>
@@ -2220,11 +2387,25 @@ function TabMenu({ commercantId, commercant, toast }) {
                     </select>
                   )}
 
+                  {/* ✅ (22/10, Alex) TROIS FAÇONS : « En % », « Mettre à
+                      12 € », « Ajouter ou retirer 0,50 € » ; les prix propres
+                      des variantes suivent (sauf un prix fixe, qui le dit). */}
                   {lotAction === 'prix' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                      <input type="number" step="1" value={lotValeur} onChange={e => setLotValeur(e.target.value)}
-                        placeholder="-10" style={{ ...s.input, width: 90, fontSize: 13, textAlign: 'center' }}/>
-                      <span style={{ fontSize: 12.5, color: T.muted }}>% (un moins pour baisser)</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                      <div role="radiogroup" aria-label="Façon de changer le prix" style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+                        {MODES_PRIX_LOT.map(m => (
+                          <button key={m.mode} type="button" role="radio" aria-checked={lotPrixMode === m.mode}
+                            onClick={() => { setLotPrixMode(m.mode); setLotValeur('') }}
+                            style={{ ...s.btn, padding: '5px 10px', fontSize: 12, background: lotPrixMode === m.mode ? T.bgPanel : '#fff', color: lotPrixMode === m.mode ? '#fff' : T.ink, border: `1.5px solid ${lotPrixMode === m.mode ? T.bgPanel : T.hairline}` }}>
+                            {m.titre}
+                          </button>
+                        ))}
+                      </div>
+                      <input inputMode="decimal" value={lotValeur} onChange={e => setLotValeur(e.target.value)} aria-label="Valeur du changement de prix"
+                        placeholder={MODES_PRIX_LOT.find(m => m.mode === lotPrixMode)?.exemple} style={{ ...s.input, width: 90, fontSize: 13, textAlign: 'center' }}/>
+                      <span style={{ fontSize: 12.5, color: T.muted }}>
+                        {lotPrixMode === 'pourcent' ? '% (un moins pour baisser)' : lotPrixMode === 'fixe' ? '€, le nouveau prix' : '€ (un moins pour retirer)'}
+                      </span>
                     </div>
                   )}
 
@@ -2251,7 +2432,10 @@ function TabMenu({ commercantId, commercant, toast }) {
                   {lotAction === 'tva' && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8, marginBottom: 10 }}>
                       <label style={{ fontSize: 12.5, color: T.ink, fontWeight: 700 }}>
-                        TVA{commercant?.categorie === 'alimentaire' ? ' à emporter' : ''}
+                        {/* 🟡 (22/10, audit J8) Le même test que le formulaire
+                            (`estAlimentaire`) : un commerce sans catégorie
+                            voyait deux taux sur la fiche et un seul ici. */}
+                        TVA{estAlimentaire ? ' à emporter' : ''}
                         <select value={lotTva.emporter} onChange={e => setLotTva(p => ({ ...p, emporter: e.target.value }))}
                           style={{ ...s.input, cursor: 'pointer', fontSize: 13, marginTop: 4 }}>
                           <option value={TVA_INCHANGEE}>Ne pas changer</option>
@@ -2259,7 +2443,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                           {optionsTaux(tvaRefs, commercant?.categorie).map(t => <option key={t.taux} value={t.taux}>{t.texte}</option>)}
                         </select>
                       </label>
-                      {commercant?.categorie === 'alimentaire' && (
+                      {estAlimentaire && (
                         <label style={{ fontSize: 12.5, color: T.ink, fontWeight: 700 }}>
                           TVA sur place
                           <select value={lotTva.surPlace} onChange={e => setLotTva(p => ({ ...p, surPlace: e.target.value }))}
@@ -2344,15 +2528,20 @@ function TabMenu({ commercantId, commercant, toast }) {
                   {lotAction && !ACTIONS_LOT_PERSO.includes(lotAction) && (() => {
                     const vises = articlesDuLot(articles, lotIds)
                     const valeur = valeurDuLot(lotAction)
-                    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
+                    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits, catalogue: articles })
                     const ecarts = ecartsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
                     const grilles = lotAction === 'stock' ? grillesARemplacer({ articles: vises, valeur, grilles: stockParJourMap }) : null
                     const varLot = variantesDuLot({ action: lotAction, articles: vises, valeur })
-                    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String), ...varLot.ids.map(String)])
+                    // (22/10, O4) Les prix propres des variantes, comptés et dits.
+                    const prixVar = lotAction === 'prix' ? prixDesVariantesDuLot({ articles: vises, variantesParArticle, valeur }) : []
+                    const resumeVariantes = lotAction === 'prix'
+                      ? { changees: prixVar.length, gardees: lirePrixLot(valeur).mode === 'fixe' ? variantesAPrixPropre({ articles: vises, variantesParArticle }) : 0 }
+                      : null
+                    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String), ...varLot.ids.map(String), ...prixVar.map(p => String(p.article_id))])
                     // 🔴 LE REFUS SE LIT AVANT TOUT (Alex, 10/10 : « 0 : pas de
                     // message, rien ne se passe ») : il disait « déjà ce stock ».
                     const refus = ACTIONS_AVEC_REFUS.includes(lotAction) && lotIds.length > 0
-                      ? refusDuLot({ action: lotAction, articles: vises, valeur }) : null
+                      ? refusDuLot({ action: lotAction, articles: vises, valeur, prixVariantes: lotAction === 'prix' ? vises.flatMap(a => (variantesParArticle[a.id] || []).map(v => v.prix).filter(p => p !== null && p !== undefined)) : [] }) : null
                     // Rien de saisi : la consigne en gris, pas une erreur en rouge.
                     const rienSaisi = (lotAction === 'stock' && lotStock.mode !== 'illimite' && String(lotStock.quantite ?? '').trim() === '')
                       || (lotAction === 'prix' && String(lotValeur ?? '').trim() === '')
@@ -2367,7 +2556,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                           {/* (21/10) Que des articles à tailles : seule leur phrase, jamais « déjà ce stock » à côté. */}
                           {refus || [
                             patchs.length > 0 || (grilles?.articleIds || []).length > 0 || varLot.ids.length === 0
-                              ? resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts }) : '',
+                              ? resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts, variantes: resumeVariantes }) : '',
                             phraseVariantesDuLot(varLot),
                           ].filter(Boolean).join(' ')}
                         </p>
@@ -2455,7 +2644,7 @@ function TabMenu({ commercantId, commercant, toast }) {
         const col = { display: 'flex', flexWrap: 'wrap', gap: '8px 14px', alignItems: 'center' }
         return (
           <SectionFormulaire titre="Le comptoir du jour"
-            phrase="Chaque matin, indique ce qu’il te reste au comptoir pour aujourd’hui. Tes clients ne pourront pas en commander plus en ligne. Demain, la quantité par jour revient toute seule.">
+            phrase="Chaque matin, indique ce qu’il te reste au comptoir pour aujourd’hui. Tes clients ne pourront pas en commander plus en ligne. Demain, la quantité de chaque jour revient toute seule.">
             {journeeFinieAuj && (
               <p style={{ margin: 0, fontSize: 13.5, color: '#92400E', background: '#FFFBEB', border: '1.5px solid #F59E0B88', borderRadius: 10, padding: '10px 12px', lineHeight: 1.5 }}>
                 Ta journée est finie : plus rien ne se retire aujourd&rsquo;hui, le comptoir ne compte plus. Reviens demain matin.
@@ -2463,7 +2652,8 @@ function TabMenu({ commercantId, commercant, toast }) {
             )}
             {liste.length === 0 ? (
               <p style={{ margin: 0, fontSize: 13.5, color: '#3F3A4F', lineHeight: 1.5 }}>
-                Aucun article en « Quantité par jour ». Le comptoir sert aux articles préparés chaque jour (croissants, pains, plat du jour) : choisis ce mode dans la section « Le stock » de leur fiche.
+                {/* 🟡 (22/10, audit J3) Les noms que la fiche affiche en alimentaire. */}
+                Aucun article en « Se renouvelle chaque jour ». Le comptoir sert aux articles préparés chaque jour (croissants, pains, plat du jour) : choisis ce mode dans la section « Vendu le jour même » de leur fiche.
               </p>
             ) : (
               <div>
@@ -2567,6 +2757,8 @@ function TabMenu({ commercantId, commercant, toast }) {
             <div>
               {categories.map(cat => {
                 const count = articles.filter(a => a.categorie === cat).length
+                // (22/10, audit J10) Les articles de ses sous-catégories, comptés à part.
+                const dansSousCats = articles.filter(a => a.categorie !== cat && dansLaCategorie(a, cat)).length
                 const isRenaming = renamingCat === cat
                 return (
                   <div key={cat} style={{ ...s.card, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', marginBottom: 8 }}>
@@ -2601,7 +2793,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                       ) : (
                         <>
                           <p style={{ fontWeight: 800, color: T.ink, fontSize: 14, margin: 0 }}>{cat}</p>
-                          <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0' }}>{count} article{count > 1 ? 's' : ''}</p>
+                          <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0' }}>{count} article{count > 1 ? 's' : ''}{dansSousCats > 0 ? `, et ${dansSousCats} dans ses sous-catégories` : ''}</p>
                         </>
                       )}
                     </div>
@@ -2656,7 +2848,8 @@ function TabMenu({ commercantId, commercant, toast }) {
             <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 4 }}>{variantesCategorie ? 'Variantes et options par article' : 'Personnalisation par article'}</p>
             <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, margin: 0 }}>
               {variantesCategorie
-                ? 'Décline chaque produit (taille, couleur…) avec un stock, un prix et une photo par combinaison. Un article sans tailles peut aussi avoir des options (emballage cadeau…). Clique pour gérer.'
+                // (22/10) « Tailles + options » (Alex) : plus de « sans tailles ».
+                ? 'Décline chaque produit en variantes (taille, couleur, modèle…) avec un stock, un prix et une photo par combinaison, et ajoute-lui des options (emballage cadeau, gravure…). Clique pour gérer.'
                 : 'Configure les groupes d’options de chaque article (sauces obligatoires, suppléments payants…). Clique pour gérer.'}
             </p>
           </div>
@@ -2686,7 +2879,7 @@ function TabMenu({ commercantId, commercant, toast }) {
               // 🟠 (22/10, audit O2) Le panneau des variantes ne se monte qu'à
               // l'ouverture : monté fermé, chacun faisait 2 lectures (120 pour
               // une boutique de 60 articles) à chaque affichage de l'onglet.
-              <details key={a.id} style={{ ...s.card, padding: 0, overflow: 'hidden' }}
+              <details key={a.id} id={`perso-${a.id}`} open={!!panneauxOuverts[a.id]} style={{ ...s.card, padding: 0, overflow: 'hidden', scrollMarginTop: 80 }}
                 onToggle={e => { const ouvert = e.currentTarget.open; setPanneauxOuverts(p => (!!p[a.id] === ouvert ? p : { ...p, [a.id]: ouvert })) }}>
                 <summary style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, listStyle: 'none' }}>
                   <div style={{ width: 32, height: 32, borderRadius: 8, background: T.bgPanel, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -3224,7 +3417,7 @@ function ChampsNombreDeChoix({ form, setForm, nomGroupe = '' }) {
         <input type="number" min="1" max="30" value={form.choix_max ?? ''} aria-label={`Maximum de choix${nomGroupe ? ` pour ${nomGroupe}` : ''}`}
           onChange={e => setForm(f => ({ ...f, choix_max: e.target.value }))} style={champ}/>
       </label>
-      <span style={{ fontSize: 12, color: T.muted }}>vide = sans limite · ex. Calzone : 3 et 3</span>
+      <span style={{ fontSize: 12, color: T.muted }}>vide = sans limite · ex. « 3 au choix » : 3 et 3</span>
     </div>
   )
 }
@@ -3252,7 +3445,7 @@ function ChampParent({ valeur = null, choix = [], verrou = false, onChange }) {
       <span style={{ fontSize: 12, color: T.muted }}>
         {verrou
           ? 'Ce groupe fait déjà apparaître un autre groupe : il reste toujours affiché.'
-          : 'ex. « Choix de crudités » seulement si « Avec crudités »'}
+          : 'ex. « Choix de crudités » seulement si « Avec crudités », « Texte gravé » seulement si « Avec gravure »'}
       </span>
     </label>
   )
@@ -3467,7 +3660,7 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
     <div style={{ ...s.card, padding: 14, marginBottom: 16, border: `1.5px solid ${T.bgPanel}` }}>
       <p style={{ fontSize: 12, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 10px' }}>Nouveau groupe d&rsquo;options</p>
       <div style={{ display: 'grid', gap: 10 }}>
-        <input value={form.nom} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))} placeholder="Nom du groupe : Sauces, Taille, Garnitures…"
+        <input value={form.nom} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))} placeholder="Nom du groupe : Sauces, Garnitures, Emballage…"
           aria-label="Nom du groupe" style={{ ...s.input, fontSize: 14 }}/>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {[['unique', '1 choix'], ['multiple', 'Plusieurs choix']].map(([t, l]) => (
@@ -3485,7 +3678,7 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
           <p style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, margin: 0 }}>Les options</p>
           {form.options.map((o, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input value={o.nom} onChange={e => majOption(i, { nom: e.target.value })} placeholder="Ketchup, Grande, Jambon…"
+              <input value={o.nom} onChange={e => majOption(i, { nom: e.target.value })} placeholder="Ketchup, Jambon, Papier cadeau…"
                 aria-label={`Option ${i + 1}`} style={{ ...s.input, flex: 1, fontSize: 13 }}/>
               <input value={o.prix_supplement} onChange={e => majOption(i, { prix_supplement: e.target.value })} placeholder="+€" inputMode="decimal"
                 aria-label={`Supplément de l’option ${i + 1}`} style={{ ...s.input, width: 80, fontSize: 13, textAlign: 'center' }}/>
@@ -3693,7 +3886,9 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                     {phraseDeBibliotheque(entree)}
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                {/* (22/10, audit O13) Les trois boutons passent à la ligne sur
+                    téléphone (environ 350 px pour 280 utiles). */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {/* 🔴 MODIFIER, UNE FOIS, SUR TOUTES LES COPIES (Alex, 10/10). */}
                   <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
                     onClick={() => { setEnEdition(enEdition === entree.nom ? null : entree.nom); setChoisi(null) }}>
@@ -4896,6 +5091,10 @@ const titreBlocCarte = { fontSize: 11, fontWeight: 800, color: T.muted, textTran
 
 function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, onCopieOptions = null, groupesParArticle = {}, groupesCharges = true, erreurGroupes = false, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {}, venduDepuisSaisie = 0, variantes = [], onVariantesChange = null }) {
   const [showOptions, setShowOptions] = useState(false)
+  // (22/10, audit J11) La saisie rapide en place : { quoi: 'rayon' | 'comptoir' | 'tous', valeur }.
+  const [saisieCarte, setSaisieCarte] = useState(null)
+  // (22/10, audit J6) Une boutique n'a ni comptoir ni « jour même » à dire.
+  const motsBoutique = estDetail || estVitrine
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
   // ✅ LE STOCK ET LA VITRINE SE LISENT SUR L'ARTICLE (30/09) : vendu en ligne
@@ -5038,7 +5237,8 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{a.nom}</span>
-            <span style={{ ...s.tag, background: a.actif ? T.bgPanel : '#F3F4F6', color: a.actif ? '#fff' : T.muted }}>{a.actif ? 'Actif' : 'Inactif'}</span>
+            {/* 🟡 (22/10, audit J5) Les mots du formulaire et du lot. */}
+            <span style={{ ...s.tag, background: a.actif ? T.bgPanel : '#F3F4F6', color: a.actif ? '#fff' : T.muted, whiteSpace: 'nowrap' }}>{a.actif ? 'Sur ta fiche' : 'Masqué'}</span>
             {/* ⚠️ ICI ON NE MONTRE QUE CE QUI EXISTE, contrairement à l'écran
                 de personnalisation. Sur la liste de tous les jours, une
                 pastille « pas d'options » sur chaque article serait du bruit :
@@ -5095,7 +5295,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
               const st = Math.max(0, (a.stock_jour || 0) - venduDepuisSaisie)
               return (
                 <button type="button" title="Corriger le stock (ce que tu as en rayon maintenant)"
-                  onClick={() => { const v = window.prompt('Combien en as-tu en rayon, maintenant ?', String(st)); if (v !== null) onUpdateStock(a.id, v) }}
+                  onClick={() => setSaisieCarte({ quoi: 'rayon', valeur: String(st) })}
                   style={{ fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: st === 0 ? '#DC2626' : st <= 2 ? '#EA580C' : '#10B981', background: st === 0 ? '#FEE2E2' : st <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 9px', borderRadius: 100 }}>
                   {st === 0 ? 'Épuisé' : `Stock : ${st}`}{venduDepuisSaisie > 0 ? ` (${venduDepuisSaisie} vendu${venduDepuisSaisie > 1 ? 's' : ''})` : ''}
                 </button>
@@ -5106,7 +5306,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
           {/* 🔴 LE JOUR MÊME : son bloc titré (Alex, 10/10). Ce qui reste
               aujourd'hui, le geste du comptoir, puis la grille « Quantité chaque
               jour » ; « Sur commande » vient après, dans le sien. */}
-          {parJours && <p style={titreBlocCarte}>Le jour même</p>}
+          {parJours && <p style={titreBlocCarte}>{motsBoutique ? 'Aujourd’hui et chaque jour' : 'Le jour même'}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
             {parJours && !venteJour && (
               <span style={{ fontSize: 13, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 9px', borderRadius: 100 }}>Pas vendu le jour même</span>
@@ -5141,14 +5341,12 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
                 n'aurait aucun effet. */}
             {parJours && venteJour && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (
               <button type="button"
-                onClick={() => {
-                  const v = window.prompt('Combien en reste-t-il au comptoir, maintenant ?\nPour aujourd’hui seulement. Demain, la quantité de la grille « Quantité chaque jour » revient.', effAuj.comptoir ? String(stockRestant) : '')
-                  if (v === null || String(v).trim() === '') return
-                  const reste = Math.max(0, parseInt(v, 10) || 0)
-                  onSetComptoir(a.id, reste + dejaCommande)
-                }}
+                onClick={() => setSaisieCarte({ quoi: 'comptoir', valeur: effAuj.comptoir ? String(stockRestant) : '' })}
                 style={{ fontSize: 11, fontWeight: 700, color: T.main, background: '#fff', border: `1px solid ${T.main}44`, padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
-                {effAuj.comptoir ? 'Modifier le comptoir' : 'Reste au comptoir aujourd’hui'}
+                {/* 🟡 (22/10, audit J6) En boutique, pas de « comptoir ». */}
+                {motsBoutique
+                  ? (effAuj.comptoir ? 'Modifier ce qu’il reste' : 'Il en reste aujourd’hui')
+                  : (effAuj.comptoir ? 'Modifier le comptoir' : 'Reste au comptoir aujourd’hui')}
               </button>
             )}
             {/* ⚠️ « RETIRER » RESTE VISIBLE TANT QU'UN COMPTOIR EST SAISI, soir
@@ -5162,6 +5360,26 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
             )}
           </div>
 
+          {/* (22/10, audit J11) La saisie rapide, en place. */}
+          {saisieCarte && (
+            <SaisieRapide key={saisieCarte.quoi} valeurInitiale={saisieCarte.valeur}
+              libelle={saisieCarte.quoi === 'rayon' ? 'En rayon maintenant :'
+                : saisieCarte.quoi === 'tous' ? 'Chaque jour :'
+                : motsBoutique ? 'Il en reste aujourd’hui :' : 'Reste au comptoir :'}
+              aide={saisieCarte.quoi === 'comptoir' ? 'Pour aujourd’hui seulement. Demain, la quantité de chaque jour revient.'
+                : saisieCarte.quoi === 'tous' ? 'Sur tous tes jours d’ouverture.' : null}
+              onAnnuler={() => setSaisieCarte(null)}
+              onValider={(v) => {
+                const quoi = saisieCarte.quoi
+                setSaisieCarte(null)
+                if (String(v ?? '').trim() === '') return
+                const n = Math.max(0, parseInt(v, 10) || 0)
+                if (quoi === 'rayon') onUpdateStock(a.id, String(n))
+                else if (quoi === 'comptoir') onSetComptoir(a.id, n + dejaCommande)
+                else onSetStockTousJours(a.id, n, consoParJour)
+              }}/>
+          )}
+
           {/* Un article SUR COMMANDE SEULEMENT : son bloc avant ses jours de vente. */}
           {!venteJour && blocSurCommande()}
 
@@ -5171,13 +5389,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
           {parJours && <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{sansQuantite ? 'Jours de vente' : 'Quantité chaque jour'}</span>
-              {!sansQuantite && <button onClick={() => {
-                const v = window.prompt('Stock disponible à appliquer aux 7 jours :', String(stockRestant))
-                if (v !== null) {
-                  const dispo = Math.max(0, parseInt(v) || 0)
-                  onSetStockTousJours(a.id, dispo, consoParJour)
-                }
-              }} style={{ ...s.btn, ...s.btnGhost, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
+              {!sansQuantite && <button onClick={() => setSaisieCarte({ quoi: 'tous', valeur: String(stockRestant) })} style={{ ...s.btn, ...s.btnGhost, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
                 Même quantité tous les jours
               </button>}
             </div>
@@ -5324,8 +5536,9 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
             // 🔴 IL EXISTAIT, PERSONNE NE LE TROUVAIT (Alex, 10/10 : « il faudrait
             // pouvoir dupliquer des articles »). Une icône seule, sans un mot :
             // le bouton dit maintenant son geste.
-            <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => onDupliquer(a)} title="Dupliquer cet article, avec ses options">
-              <Copy size={14} strokeWidth={1.8} color={T.bgPanel}/> Dupliquer
+            // (22/10, audit O13) Sur téléphone, l'icône seule (`libelle-large`).
+            <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => onDupliquer(a)} title="Dupliquer cet article, avec ses options" aria-label={`Dupliquer ${a.nom}`}>
+              <Copy size={14} strokeWidth={1.8} color={T.bgPanel}/> <span className="libelle-large">Dupliquer</span>
             </button>
           )}
           <button style={{ ...s.btn, ...s.btnDanger, padding: '6px 10px', fontSize: 12 }} onClick={() => onDelete(a.id)} title="Supprimer">

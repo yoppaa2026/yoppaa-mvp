@@ -65,10 +65,13 @@ export default function OrdreCategories({ commercantId, ordre = null, onEnregist
     // On ne garde que des noms qui existent vraiment : une liste qui traîne des
     // catégories supprimées grossit à chaque saison et ne dit plus rien.
     const aEcrire = ordrePourEnregistrer(liste, categories)
-    const { error } = await supabase
+    // (22/10, audit O6) relu : la permission refuse en rendant zéro ligne.
+    const { data, error: errEcriture } = await supabase
       .from('commercants')
       .update({ ordre_categories: aEcrire })
       .eq('id', commercantId)
+      .select('id')
+    const error = errEcriture || ((data?.length || 0) !== 1 ? { message: 'modification refusée. Recharge la page.' } : null)
     setEnvoi(false)
     // ⚠️ ON LIT L'ERREUR, ET ON LA DIT. Un `update` non lu est un espoir, pas
     // une action : le commerçant croirait son classement enregistré et

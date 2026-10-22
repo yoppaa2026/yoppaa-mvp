@@ -394,8 +394,9 @@ const MUTATIONS = [
   { nom: '🔴 une baisse de 100 % passe',
     fichier: LOT,
     banc: 'verif:lot',
-    de: "  if (p <= -100) return 'Un article ne peut pas tomber à 0 €. Choisis une baisse plus petite.'",
-    vers: '  if (false) return null' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (trois façons de changer un prix, `lirePrixLot`).
+    de: "    if (n <= -100) return 'Un article ne peut pas tomber à 0 €. Choisis une baisse plus petite.'",
+    vers: '    if (false) return null' },
 
   { nom: '⚠️ une baisse sous le centime passe',
     fichier: LOT,
@@ -421,8 +422,9 @@ const MUTATIONS = [
   { nom: '🔴 le resume oublie de dire que les anciens prix sont perdus',
     fichier: LOT,
     banc: 'verif:lot',
-    de: '  return `Le prix de ${quoi} ${sens} de ${Math.abs(p)} %. Les anciens prix ne sont pas conservés.`',
-    vers: '  return `Le prix de ${quoi} ${sens} de ${Math.abs(p)} %.`' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 : la phrase finale est commune aux trois façons.
+    de: '  const fin = `${suiteVariantes} Les anciens prix ne sont pas conservés.`',
+    vers: '  const fin = suiteVariantes' },
 
   { nom: '⚠️ rendre indisponible ne dit plus la consequence visible',
     fichier: LOT,
@@ -555,7 +557,8 @@ const MUTATIONS = [
 
   { nom: '⚠️ le bouton Dupliquer redevient une icône muette',
     fichier: ECRAN,
-    de: '<Copy size={14} strokeWidth={1.8} color={T.bgPanel}/> Dupliquer',
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (le mot se cache sous le seuil bureau, O13).
+    de: '<Copy size={14} strokeWidth={1.8} color={T.bgPanel}/> <span className="libelle-large">Dupliquer</span>',
     vers: '<Copy size={14} strokeWidth={1.8} color={T.bgPanel}/>' },
 
   // ─── 13/10 : le nombre de choix voyage avec le groupe ────────────────────
@@ -641,8 +644,10 @@ const MUTATIONS = [
     vers: '  return phrase' },
   { nom: '🔴 l ecran oublie deuxCircuits a l ecriture',
     fichier: ECRAN, banc: 'verif:lot',
-    de: '    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })\n    // ✅ 15/10',
-    vers: '    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur })\n    // ✅ 15/10' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 : une seule ligne (l'ancienne en prenait
+    // deux), rendue unique par son commentaire de fin.
+    de: "deuxCircuits, catalogue: articles }) // ce qui s'écrit",
+    vers: "catalogue: articles }) // ce qui s'écrit" },
   { nom: '🔴 le refus des nouvelles actions n est plus verifie avant d ecrire',
     fichier: ECRAN, banc: 'verif:lot',
     // REPOINTÉE LE 19/10 : la liste porte aussi `plage` (heures de retrait).

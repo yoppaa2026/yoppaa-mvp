@@ -520,8 +520,10 @@ v('le tableau de bord nomme le statut souhaite sans parler de dette',
   // commerçant croirait son classement enregistré et retrouverait l'ancien au
   // rechargement, sans rien comprendre. C'est le défaut du crédit de fidélité,
   // corrigé le matin même.
+  // REPOINTÉE LE 22/10 (audit O6) : l'erreur ET le nombre de lignes écrites.
   v('il lit l’erreur de l’enregistrement',
-    /const \{ error \} = await supabase/.test(ecran) && /if \(error\)/.test(ecran))
+    /const \{ data, error: errEcriture \} = await supabase/.test(ecran)
+    && /const error = errEcriture \|\| \(\(data\?\.length \|\| 0\) !== 1 \?/.test(ecran) && /if \(error\)/.test(ecran))
   // 🔴 ET CETTE GARDE VISAIT UNE FORME, PAS UNE RÈGLE (corrigé le 25/09).
   // Elle exigeait littéralement `toast?.({ type: 'error'…`, c'est-à-dire la
   // signature exacte que le tableau de bord n'accepte PAS : elle a donc gravé
@@ -593,7 +595,8 @@ v('le tableau de bord nomme le statut souhaite sans parler de dette',
   v('🔴 les catégories se déduisent des articles ET de la liste enregistrée',
     /const categories = categoriesDuCommerce\(articles, listeCats\)/.test(config) && !/setCategories\(/.test(config))
   v('🔴 la liste n’est posée à l’écran qu’après une écriture acceptée',
-    /async function ecrireListeCats\(liste\) \{\s*const \{ error \} = await supabase\.from\('commercants'\)\.update\(\{ ordre_categories: liste \}\)\.eq\('id', commercantId\)\s*if \(error\) \{[\s\S]{0,200}?return false \}\s*setListeCats\(liste\)/.test(config))
+    // REPOINTÉE LE 22/10 (audit O6) : relu, zéro ligne = refusé.
+    /async function ecrireListeCats\(liste\) \{\s*const \{ data, error \} = await supabase\.from\('commercants'\)\.update\(\{ ordre_categories: liste \}\)\.eq\('id', commercantId\)\.select\('id'\)\s*if \(error \|\| \(data\?\.length \|\| 0\) !== 1\) \{[\s\S]{0,220}?return false \}\s*setListeCats\(liste\)/.test(config))
   v('🔴 créer enregistre', /const liste = listeApresAjout\(categories, nom\)[\s\S]{0,200}if \(!await ecrireListeCats\(liste\)\) return/.test(config))
   v('🔴 renommer réécrit chaque article (enfants compris), puis la liste',
     /for \(const \{ de, vers \} of r\.correspondances\) \{[\s\S]{0,300}\.update\(\{ categorie: vers \}\)[\s\S]{0,200}\.eq\('categorie', de\)/.test(config)

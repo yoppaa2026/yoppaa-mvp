@@ -92,7 +92,9 @@ const v = (nom, cond, detail = '') => {
   // ajoutée à l'enregistrement et oubliée ici donnerait une copie muette sur ce
   // réglage, sans que personne ne le voie. On compare les deux listes.
   const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
-  const i = config.indexOf('async function saveArticle()')
+  // ⚠️ REPOINTÉE LE 22/10 : `saveArticle({ personnaliser = false } = {})`
+  // (« Enregistrer et personnaliser »).
+  const i = config.indexOf('async function saveArticle({ personnaliser = false } = {})')
   // ⚠️ REPOINTÉE LE 21/10 : l'enregistrement relit l'id créé (galerie d'un
   // nouvel article), `const { data: cree, error } = editId`.
   const bloc = i >= 0 ? config.slice(i, config.indexOf('const { data: cree, error } = editId', i)) : ''
@@ -878,7 +880,9 @@ const v = (nom, cond, detail = '') => {
     const corps = i >= 0 ? panneau.slice(i, panneau.indexOf('\n  }\n', i)) : ''
     v(`🔴 « ${f} » prévient le parent`, corps.length > 0 && /apresEcriture\(\)/.test(corps) && !/fetchGroupes\(\)/.test(corps))
   }
-  v('🔴 le bouton « Dupliquer » dit son geste', /<Copy size=\{14\} strokeWidth=\{1\.8\} color=\{T\.bgPanel\}\/> Dupliquer/.test(config))
+  // REPOINTÉE LE 22/10 (audit O13) : le mot se cache sous 480 px, le bouton garde son nom.
+  v('🔴 le bouton « Dupliquer » dit son geste', /<Copy size=\{14\} strokeWidth=\{1\.8\} color=\{T\.bgPanel\}\/> <span className="libelle-large">Dupliquer<\/span>/.test(config)
+    && /aria-label=\{`Dupliquer \$\{a\.nom\}`\}/.test(config))
 }
 
 // ═══ L'ORDRE DES ARTICLES DANS UNE CATÉGORIE (Alex, 10/10), EXÉCUTÉ ═════════

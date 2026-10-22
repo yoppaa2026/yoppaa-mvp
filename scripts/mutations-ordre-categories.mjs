@@ -102,8 +102,9 @@ const MUTATIONS = [
     vers: '' },
   { nom: '🔴 la liste se pose a l ecran meme si la base refuse',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '    if (error) { toast(`La liste des catégories n’a pas pu être enregistrée : ${error.message}`, \'error\'); return false }',
-    vers: '    if (error) { toast(`La liste des catégories n’a pas pu être enregistrée : ${error.message}`, \'error\') }' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit O6 : zéro ligne écrite = refusé aussi).
+    de: "modification refusée'}`, 'error'); return false }",
+    vers: "modification refusée'}`, 'error') }" },
 
   // ─── LA FICHE PUBLIQUE ───────────────────────────────────────────────────
   { nom: '🔴 la fiche cesse de lire l ordre voulu par le commercant',
@@ -114,8 +115,9 @@ const MUTATIONS = [
   // ─── L ECRAN DU COMMERCANT ───────────────────────────────────────────────
   { nom: '🔴 l enregistrement ne lit plus son erreur : le classement se perd en silence',
     fichier: ECRAN,
-    de: '    const { error } = await supabase',
-    vers: '    const { error: _ignore } = await supabase; const error = null; void _ignore; await (async () => supabase' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit O6 : l'erreur ET le nombre de lignes).
+    de: "    const error = errEcriture || ((data?.length || 0) !== 1 ? { message: 'modification refusée. Recharge la page.' } : null)",
+    vers: '    const error = null' },
 
   // 🔴 LE DEFAUT DU 25/09, REJOUE TEL QUEL. Alex : « page blanche, back et
   // reload ». Un objet passe a `toast` arrive dans `toastMsg`, `<Toast>` le

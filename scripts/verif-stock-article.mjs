@@ -221,7 +221,8 @@ const code = (f) => sansProse(lire(f))
 // ═══ 7) LE TABLEAU DE BORD ══════════════════════════════════════════════════
 {
   const bord = code('app/dashboard/ConfigDashboard.js')
-  const i = bord.indexOf('async function saveArticle()')
+  // REPOINTÉE LE 22/10 : `saveArticle({ personnaliser = false } = {})`.
+  const i = bord.indexOf('async function saveArticle({ personnaliser = false } = {})')
   const save = i >= 0 ? bord.slice(i, bord.indexOf('async function ajouterCategorie()', i)) : ''
   v('l’enregistrement d’un article a été retrouvé', save.length > 500, String(save.length))
   v('🔴 le prix est obligatoire, vitrine comprise', /if \(!form\.nom\.trim\(\) \|\| !\(parseFloat\(form\.prix\) > 0\)\) return toast\(/.test(save))
@@ -245,8 +246,9 @@ const code = (f) => sansProse(lire(f))
   // compare le serveur), avec l'erreur lue, et retirable.
   v('🔴 le comptoir s’écrit daté du jour belge, ou se retire',
     /\? \{ stock_comptoir: null, stock_comptoir_le: null \}\s*: \{ stock_comptoir: Math\.max\(0, parseInt\(brut, 10\) \|\| 0\), stock_comptoir_le: jourBruxelles\(\) \}/.test(bord))
-  v('et une écriture refusée se dit', /if \(error\) \{ toast\(`Le comptoir n’a pas pu être enregistré : \$\{error\.message\}`, 'error'\); return \}/.test(bord))
-  v('🔴 il saisit ce qui RESTE : on enregistre le reste plus le déjà commandé', /onSetComptoir\(a\.id, reste \+ dejaCommande\)/.test(bord))
+  // REPOINTÉES LE 22/10 (audit O6 : relu ; J11 : saisie en place, plus `window.prompt`).
+  v('et une écriture refusée se dit', /if \(error \|\| \(data\?\.length \|\| 0\) !== 1\) \{ toast\(`Le comptoir n’a pas pu être enregistré : /.test(bord))
+  v('🔴 il saisit ce qui RESTE : on enregistre le reste plus le déjà commandé', /else if \(quoi === 'comptoir'\) onSetComptoir\(a\.id, n \+ dejaCommande\)/.test(bord))
   v('🔴 la carte lit le comptoir d’aujourd’hui par la règle partagée', /const comptoirAuj = comptoirDuJour\(a, jourBruxelles\(\)\)/.test(bord))
   v('la carte reçoit la fonction', /onSetComptoir=\{setComptoir\}/.test(bord))
   // 🔴 CACHÉ LE SOIR (Alex, 07/10) : boutique fermée pour la journée, le
@@ -274,8 +276,9 @@ const code = (f) => sansProse(lire(f))
   // (10/10, réorientée) « Vendu en ligne par jour » n'était pas clair (Alex) :
   // deux blocs titrés, « Le jour même » puis « Sur commande, à l'avance ».
   v('les libellés disent le jour même, la quantité chaque jour et le comptoir',
+    // REPOINTÉE LE 22/10 (audit J6) : une boutique lit ses propres mots.
     /'Jours de vente' : 'Quantité chaque jour'/.test(bord) && /'Reste au comptoir aujourd’hui'/.test(bord)
-    && /\{parJours && <p style=\{titreBlocCarte\}>Le jour même<\/p>\}/.test(bord) && !/Vendu en ligne par jour/.test(bord))
+    && /\{parJours && <p style=\{titreBlocCarte\}>\{motsBoutique \? 'Aujourd’hui et chaque jour' : 'Le jour même'\}<\/p>\}/.test(bord) && !/Vendu en ligne par jour/.test(bord))
   v('🔴 « Sur commande, à l’avance » a son bloc : APRÈS la grille quand l’article se vend aussi le jour même, AVANT sinon',
     /<p style=\{titreBlocCarte\}>Sur commande, à l&rsquo;avance<\/p>/.test(bord)
     && /\{!venteJour && blocSurCommande\(\)\}/.test(bord) && /\{venteJour && blocSurCommande\(\)\}/.test(bord)
@@ -789,7 +792,8 @@ const code = (f) => sansProse(lire(f))
   // La galerie d'un nouvel article (tous les métiers).
   v('🔴 la galerie s’ouvre dès la création : la photo attend l’article, puis s’y rattache',
     !/\{editId && \(\s*<ChampFormulaire label=\{`Galerie/.test(bord)
-    && /if \(!articleId\) \{\s*setGalerie\(prev => \[\.\.\.prev, \{ id: `attente-\$\{Date\.now\(\)\}`, url: urlData\.publicUrl, enAttente: true \}\]\)/.test(bord)
+    // REPOINTÉE LE 22/10 (audit O12) : la photo en attente garde son chemin, pour être retirée.
+    && /if \(!articleId\) \{\s*setGalerie\(prev => \[\.\.\.prev, \{ id: `attente-\$\{Date\.now\(\)\}`, url: urlData\.publicUrl, enAttente: true, chemin: fileName \}\]\)/.test(bord)
     && /const enAttente = galerie\.filter\(p => p\.enAttente\)\s*if \(!editId && enAttente\.length > 0 && cree\?\.id\) \{/.test(bord)
     && /: await supabase\.from\('articles'\)\.insert\(payload\)\.select\('id'\)\.single\(\)/.test(bord))
 }

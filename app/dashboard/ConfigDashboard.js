@@ -1081,8 +1081,12 @@ function TabMenu({ commercantId, commercant, toast }) {
     // reste, pour le jour où l'article repasse en vente.
     // ⚠️ SUR COMMANDE SEULEMENT (B sans A) : la quantité du jour ne sert plus,
     // mais on ne l'efface pas, pour le jour où il revient au comptoir.
+    // 🔴 (22/10, test C d'Alex) LE STOCK GÉNÉRAL D'UN ARTICLE À VARIANTES
+    // PASSE À ZÉRO, LE COMPTOIR AUSSI : la réservation en base le compte
+    // encore hors « stock qui baisse » (« 6 disponible(s) » sur un article
+    // fabriqué à la demande). Zéro = « non géré » pour elle.
     const stock = aVariantes
-      ? { stock_mode: formStock.stock_mode, stock_jour: avant ? Math.max(0, Number(avant.stock_jour) || 0) : 0 }
+      ? { stock_mode: formStock.stock_mode, stock_jour: 0, stock_comptoir: null, stock_comptoir_le: null }
       : form.vendable && venteJour
       ? champsStock({ mode: form.stock_mode, saisie: form.stock_jour, avant })
       : form.vendable
@@ -4817,6 +4821,10 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
     setGere(v)
     const patch = { gere_variantes: v }
     if (v && !axesEnBase.current?.axe1_nom) { patch.axe1_nom = axe1Nom.trim() || 'Taille'; setAxe1Nom(patch.axe1_nom) }
+    // 🔴 (22/10, test C d'Alex) Le stock général et le comptoir ne servent plus
+    // (le stock vit sur chaque variante) ; laissés là, la réservation en base
+    // plafonnerait l'article entier hors « stock qui baisse ».
+    if (v) Object.assign(patch, { stock_jour: 0, stock_comptoir: null, stock_comptoir_le: null })
     if (!await saveAxes(patch)) { setGere(!v); return }
     if (v) await creerCombinaisons(combinaisonsManquantes({ articleId: article.id, axe1Valeurs, axe2Valeurs, variantes }))
   }

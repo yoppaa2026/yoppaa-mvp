@@ -57,6 +57,25 @@ function v(nom, condition, detail = '') {
   v('un article masqué ou en vitrine n’est jamais signalé', !par[6] && !par[7])
   v('🔴 l’ancien « par jour » sur des variantes : signalé, geste « modifier »', /par jour/.test(par[8]?.raisons?.[0] || '') && par[8].geste === 'modifier')
   v('une variante en stock suffit', !par[9])
+  // (22/10, test C d'Alex) Un ancien stock général sur un article à variantes.
+  const anciens = articlesACorriger({
+    articles: [
+      { id: 20, nom: 'Boucles', gere_variantes: true, stock_mode: 'illimite', stock_jour: 6, actif: true },
+      { id: 21, nom: 'Jupe magasin', gere_variantes: true, stock_mode: 'magasin', stock_jour: 6, actif: true },
+      { id: 22, nom: 'Comptoir', gere_variantes: true, stock_mode: 'illimite', stock_jour: 0, stock_comptoir: 2, actif: true },
+    ],
+    variantesParArticle: { 20: [{ actif: true, stock: 0 }], 21: [{ actif: true, stock: 3 }], 22: [{ actif: true, stock: 0 }] },
+  })
+  v('🔴 un ancien stock général sur un article à variantes « à la demande » : signalé, geste « modifier »',
+    anciens.length === 2 && /ancien stock général \(6\)/.test(anciens[0].raisons[0]) && anciens[0].geste === 'modifier' && /ancien stock général \(2\)/.test(anciens[1].raisons[0]), JSON.stringify(anciens))
+  const lc = code('lib/lignes-commande.js')
+  const bordC = code('app/dashboard/ConfigDashboard.js')
+  v('🔴 le serveur ignore le stock général d’un article à variantes (stock qui baisse ET jour même)',
+    (lc.match(/if \(art\?\.gere_variantes === true\) continue/g) || []).length === 2
+    && lc.indexOf('if (art?.gere_variantes === true) continue', lc.indexOf('const comptoir = comptoirParArticle[artId]') - 400) < lc.indexOf('const comptoir = comptoirParArticle[artId]'))
+  v('🔴 la fiche d’un article à variantes et l’activation des variantes remettent le stock général et le comptoir à zéro',
+    /\? \{ stock_mode: formStock\.stock_mode, stock_jour: 0, stock_comptoir: null, stock_comptoir_le: null \}/.test(bordC)
+    && /if \(v\) Object\.assign\(patch, \{ stock_jour: 0, stock_comptoir: null, stock_comptoir_le: null \}\)/.test(bordC))
   v('l’ordre de la liste suit le catalogue', liste.map(x => x.id).join() === '1,2,3,5,8', liste.map(x => x.id).join())
   v('le titre compte, au singulier comme au pluriel',
     titreACorriger(liste) === '5 articles ne se vendent pas comme prévu' && titreACorriger([{}]) === '1 article ne se vend pas comme prévu' && titreACorriger([]) === '')

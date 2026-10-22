@@ -857,7 +857,8 @@ const code = (f) => sansProse(lire(f))
   v('🔴 R3 formulaire : à variantes, deux choix de stock et aucune quantité générale',
     /form\.gere_variantes && \(\s*<ChoixCartes label="Comment se compte le stock de ses variantes \?" choix=\{CHOIX_STOCK_VARIANTES\}/.test(bord)
     && /&& !form\.gere_variantes && \(<>/.test(bord)
-    && /\? \{ stock_mode: formStock\.stock_mode, stock_jour: avant \? Math\.max\(0, Number\(avant\.stock_jour\) \|\| 0\) : 0 \}/.test(bord))
+    // REPOINTÉE LE 22/10 (test C d'Alex) : le stock général et le comptoir repassent à zéro.
+    && /\? \{ stock_mode: formStock\.stock_mode, stock_jour: 0, stock_comptoir: null, stock_comptoir_le: null \}/.test(bord))
   v('🔴 R3 panneau : « à la demande » cache le stock des variantes', (bord.match(/\{!sansLimite && \(/g) || []).length === 2)
   v('🔴 (test C d’Alex) la carte d’un article « fabriqué à la demande » ne montre ni chiffre ni rouge par variante',
     /\{sansLimite \? it\.libelle : <>\{it\.libelle\}\{' '\}: \{it\.stock\}<\/>\}/.test(bord) && /\.\.\.\(sansLimite\s*\? \{ color: '#10B981', background: '#F0FDF4' \}/.test(bord))

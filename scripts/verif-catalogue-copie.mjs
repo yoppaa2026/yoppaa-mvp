@@ -677,7 +677,8 @@ const v = (nom, cond, detail = '') => {
   // d'options (la fiche ne les montrerait pas : les tailles priment).
   v('la bibliothèque des groupes s’affiche pour tous les métiers, les grilles de tailles pour le détail et la vitrine',
     /\{articles\.length > 0 && \(\s*<BibliothequeGroupes/.test(config) && !/!variantesCategorie && articles\.length > 0 && \([\s\S]{0,120}<BibliothequeGroupes/.test(config)
-    && /\{variantesCategorie && articles\.length > 0 && \(\s*<BibliothequeGrilles articles=\{articles\} toast=\{toast\} onApplique=\{\(\) => chargerVariantes\(\{ articles: true \}\)\}\/>/.test(config)
+    // REPOINTÉE LE 22/10 : la bibliothèque des grilles reçoit les variantes (« Modifier partout »).
+    && /\{variantesCategorie && articles\.length > 0 && \(\s*<BibliothequeGrilles articles=\{articles\} variantesParArticle=\{variantesParArticle\} toast=\{toast\} onApplique=\{\(\) => chargerVariantes\(\{ articles: true \}\)\}\/>/.test(config)
     // ⚠️ REPOINTÉE LE 22/10 (Alex : « tailles + options ») : les options
     // s'affichent aussi sur un article à variantes, partout.
     // REPOINTÉE LE 22/10 (audit O2) : le panneau des variantes se monte à l'ouverture.

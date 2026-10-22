@@ -174,6 +174,75 @@ function v(nom, condition, detail = '') {
   v('🟡 J11 : plus aucun `window.prompt` dans le tableau de bord des articles', !/window\.prompt\(/.test(bord) && /<SaisieRapide key=\{saisieCarte\.quoi\}/.test(bord))
 }
 
+// ═══ 4. LES GRILLES : CRÉER, MODIFIER PARTOUT, RETIRER (22/10, Alex) ════════
+{
+  const G = await import('../lib/variantes-grille.js')
+  v('les valeurs tapées se découpent aux virgules, points-virgules et lignes', JSON.stringify(G.valeursSaisies(' S, M ;L\nXL ,, ')) === '["S","M","L","XL"]')
+  const n1 = G.grilleDeSaisie({ axe1Nom: 'Taille', axe1Texte: '36, 38, 40', axe2Nom: 'Couleur', axe2Texte: 'Bleu, Rose' })
+  v('🔴 une nouvelle grille a la forme de la bibliothèque (et sa signature)',
+    n1.ok && JSON.stringify(n1.grille.axe1_valeurs) === '["36","38","40"]' && n1.grille.axe2_nom === 'Couleur'
+    && n1.grille.cle === G.signatureDeGrille({ axe1_nom: 'Taille', axe1_valeurs: ['36', '38', '40'], axe2_nom: 'Couleur', axe2_valeurs: ['Bleu', 'Rose'] }), JSON.stringify(n1))
+  v('🔴 sans valeur : refus en mots', /au moins une valeur/.test(G.grilleDeSaisie({ axe1Texte: ' , ' }).error || ''))
+  v('🔴 une valeur tapée deux fois : refus', /tapé deux fois/.test(G.grilleDeSaisie({ axe1Texte: 'S, m, M' }).error || ''))
+  v('🔴 un 2e axe sans nom : refus', /nom au 2e axe/.test(G.grilleDeSaisie({ axe1Texte: 'S', axe2Texte: 'Bleu' }).error || ''))
+  v('le 1er axe sans nom s’appelle « Taille »', G.grilleDeSaisie({ axe1Texte: 'S' }).grille.axe1_nom === 'Taille')
+  // Modifier partout : deux articles qui portent « S, M » sans couleur.
+  const grille = { axe1_nom: 'Taille', axe1_valeurs: ['S', 'M'], axe2_nom: '', axe2_valeurs: [], articles: [1, 2] }
+  const vpa = {
+    1: [{ id: 'a', axe1_valeur: 'S', axe2_valeur: null, ordre: 0, stock: 3 }, { id: 'b', axe1_valeur: 'M', axe2_valeur: null, ordre: 1, stock: 2 }],
+    2: [{ id: 'c', axe1_valeur: 'S', axe2_valeur: null, ordre: 0, stock: 0 }],
+  }
+  const aj = G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'ajouter', axe: 1, valeur: 'L' } })
+  v('🔴 ajouter « L » : l’axe de tous, et une combinaison par article',
+    aj.ok && JSON.stringify(aj.axes) === '{"axe1_valeurs":["S","M","L"]}' && aj.aCreer.map(x => `${x.article_id}|${x.axe1_valeur}`).join() === '1|L,2|L', JSON.stringify(aj))
+  v('ajouter une valeur déjà là : refus', /déjà dans la grille/.test(G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'ajouter', axe: 1, valeur: 's' } }).error || ''))
+  const coul = G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'ajouter', axe: 2, valeur: 'Bleu', nomAxe2: 'Couleur' } })
+  v('🔴 la première couleur : convertie partout (stock gardé), nom du 2e axe posé, M de l’article 2 créée',
+    coul.ok && JSON.stringify(coul.aConvertir) === '{"ids":["a","b","c"],"valeur":"Bleu"}' && coul.axes.axe2_nom === 'Couleur'
+    && coul.aCreer.map(x => `${x.article_id}|${x.axe1_valeur}|${x.axe2_valeur}`).join() === '2|M|Bleu', JSON.stringify(coul))
+  v('🔴 la première couleur sans nom d’axe : refus', /nom au 2e axe/.test(G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'ajouter', axe: 2, valeur: 'Bleu' } }).error || ''))
+  const ren = G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'renommer', axe: 1, valeur: 'S', nouveau: 'Small' } })
+  v('🔴 renommer : l’axe de tous, et les combinaisons renommées (rien n’est recréé)',
+    ren.ok && JSON.stringify(ren.axes) === '{"axe1_valeurs":["Small","M"]}' && JSON.stringify(ren.renommer) === '{"col":"axe1_valeur","de":"S","vers":"Small"}' && ren.aCreer.length === 0)
+  v('renommer vers une valeur prise : refus', !G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'renommer', axe: 1, valeur: 'S', nouveau: 'm' } }).ok)
+  const dep = G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'deplacer', axe: 1, valeur: 'M', sens: -1 } })
+  v('🔴 ranger : l’axe de tous, et l’ordre des combinaisons suit',
+    dep.ok && JSON.stringify(dep.axes) === '{"axe1_valeurs":["M","S"]}' && JSON.stringify(dep.ordres) === '[{"id":"b","ordre":0},{"id":"a","ordre":1}]', JSON.stringify(dep))
+  v('ranger au bout : rien à écrire', G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'deplacer', axe: 1, valeur: 'S', sens: -1 } }).axes === null)
+  const ret = G.planGrille({ grille, variantesParArticle: vpa, op: { type: 'retirer', axe: 1, valeur: 'S' } })
+  v('🔴 retirer « S » : ses combinaisons partout, et le stock qui part est compté',
+    ret.ok && JSON.stringify(ret.aSupprimer) === '["a","c"]' && ret.stockRetire === 3 && JSON.stringify(ret.axes) === '{"axe1_valeurs":["M"]}', JSON.stringify(ret))
+  v('🔴 la dernière valeur du 1er axe ne se retire pas ici (« Retirer de… »)',
+    /dernière valeur/.test(G.planGrille({ grille: { ...grille, axe1_valeurs: ['S'] }, variantesParArticle: vpa, op: { type: 'retirer', axe: 1, valeur: 'S' } }).error || ''))
+  const g2 = { axe1_nom: 'Taille', axe1_valeurs: ['S'], axe2_nom: 'Couleur', axe2_valeurs: ['Bleu'], articles: [1] }
+  const der = G.planGrille({ grille: g2, variantesParArticle: { 1: [{ id: 'x', axe1_valeur: 'S', axe2_valeur: 'Bleu', stock: 4 }] }, op: { type: 'retirer', axe: 2, valeur: 'Bleu' } })
+  v('🔴 la dernière couleur retirée : rien n’est supprimé, la combinaison la perd (stock gardé), le nom d’axe part',
+    der.ok && der.aSupprimer.length === 0 && JSON.stringify(der.aConvertir) === '{"ids":["x"],"valeur":null}' && der.axes.axe2_nom === null, JSON.stringify(der))
+  v('une grille sans article : refus', !G.planGrille({ grille: { axe1_valeurs: ['S'], articles: [] }, op: { type: 'ajouter', axe: 1, valeur: 'M' } }).ok)
+  // Retirer la grille d'articles.
+  v('🔴 retirer une grille : plus de variantes, axes vidés, article masqué',
+    JSON.stringify(G.RETRAIT_DE_GRILLE) === '{"gere_variantes":false,"axe1_valeurs":[],"axe2_nom":null,"axe2_valeurs":[],"actif":false}' && Object.isFrozen(G.RETRAIT_DE_GRILLE))
+  v('la phrase de retrait dit les combinaisons, le stock et le masquage',
+    G.phraseRetraitDeGrille({ articles: 2, combinaisons: 10, stock: 7 }).startsWith('2 articles perdent leurs 10 combinaisons (stock : 7). Ils sont masqués'))
+
+  // L'écran.
+  const bord = code('app/dashboard/ConfigDashboard.js')
+  const i = bord.indexOf('function BibliothequeGrilles(')
+  const bib = i >= 0 ? bord.slice(i, bord.indexOf('\nfunction ', i + 10)) : ''
+  v('🔴 la bibliothèque reçoit les variantes, et s’affiche même sans grille', /<BibliothequeGrilles articles=\{articles\} variantesParArticle=\{variantesParArticle\}/.test(bord) && !/if \(grilles\.length === 0\) return null/.test(bib))
+  v('🔴 « Nouvelle grille » passe par la saisie contrôlée et la pose commune, avec au moins un article',
+    /const r = grilleDeSaisie\(nouvelle \|\| \{\}\)/.test(bib) && /if \(cibles\.length === 0\) \{ toast\(/.test(bib) && /await poserGrille\(\{ grille: r\.grille, cibles, articles, remplacer, toast \}\)/.test(bib))
+  v('🔴 « Modifier partout » passe par le plan, et une valeur retirée se confirme',
+    /const plan = planGrille\(\{ grille: g, variantesParArticle, op \}\)/.test(bib) && /if \(!okRetraitGrille\) return/.test(bib) && /const ok = await ecrirePlanGrille\(g\.articles, plan\)/.test(bib))
+  v('🔴 le plan s’écrit relu : suppressions, conversions, axes de TOUS les articles, créations, ordre',
+    /\.delete\(\)\.in\('id', plan\.aSupprimer\)\.select\('id'\)/.test(bib) && /\.update\(\{ axe2_valeur: plan\.aConvertir\.valeur \}\)\.in\('id', plan\.aConvertir\.ids\)\.select\('id'\)/.test(bib)
+    && /if \(errArts \|\| \(arts\?\.length \|\| 0\) !== ids\.length\) return false/.test(bib) && /\.insert\(plan\.aCreer\)\.select\('id'\)/.test(bib)
+    && bib.indexOf('plan.aSupprimer).select') < bib.indexOf('.insert(plan.aCreer)'))
+  v('🔴 « Retirer de… » se confirme, retire les combinaisons puis pose le retrait, relu',
+    /if \(!okRetirerGrille\) return/.test(bib) && /\.from\('article_variantes'\)\.delete\(\)\.in\('article_id', ids\)\.select\('id'\)/.test(bib)
+    && /\.from\('articles'\)\.update\(RETRAIT_DE_GRILLE\)\.in\('id', ids\)\.select\('id'\)/.test(bib))
+}
+
 console.log(`\nAudit du catalogue, suite : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

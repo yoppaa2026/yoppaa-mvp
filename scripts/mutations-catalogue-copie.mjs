@@ -31,7 +31,8 @@ const MUTATIONS = [
   { nom: '🔴 une boutique ne voit plus les options sur la carte de ses articles',
     fichier: ECRAN, de: '{showOptions && <OptionsArticle articleId={a.id}', vers: '{showOptions && !(estDetail || estVitrine) && <OptionsArticle articleId={a.id}' },
   { nom: '🔴 le détail perd la bibliothèque de grilles',
-    fichier: ECRAN, de: '<BibliothequeGrilles articles={articles} toast={toast} onApplique={() => chargerVariantes({ articles: true })}/>', vers: '' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (la bibliothèque reçoit les variantes).
+    fichier: ECRAN, de: '<BibliothequeGrilles articles={articles} variantesParArticle={variantesParArticle} toast={toast} onApplique={() => chargerVariantes({ articles: true })}/>', vers: '' },
   // ─── LE GROUPE DÉPENDANT (21/10) ─────────────────────────────────────────
   { nom: '🔴 un article sans l’option parente reçoit un groupe toujours affiché',
     fichier: COPIE, de: '      if (!lien) { sansParent.push(id); continue }', vers: '      if (!lien) { sansParent.push(id) }' },

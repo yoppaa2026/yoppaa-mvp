@@ -46,6 +46,7 @@ import {
   deplacerValeur, renommerValeur, ordreDesVariantes, variantesDeLaValeur, phraseRetraitValeur,
   ciblesDeMasse, variantesVisees, quantiteSaisie, prixSaisiMasse, lignesDeStock,
   bibliothequeDeGrilles, libelleDeGrille, axesDeGrille, combinaisonsDeGrille, repartirGrille,
+  grilleDeSaisie, planGrille, RETRAIT_DE_GRILLE, phraseRetraitDeGrille,
   ciblesVariantesDuLot,
   combinaisonsManquantes, combinaisonsDeLaValeur, retraitDeValeur, cleDesAxes,
 } from '@/lib/variantes-grille'
@@ -2861,7 +2862,7 @@ function TabMenu({ commercantId, commercant, toast }) {
               tête du détail et de la vitrine, comme la bibliothèque des
               groupes en alimentaire. */}
           {variantesCategorie && articles.length > 0 && (
-            <BibliothequeGrilles articles={articles} toast={toast} onApplique={() => chargerVariantes({ articles: true })}/>
+            <BibliothequeGrilles articles={articles} variantesParArticle={variantesParArticle} toast={toast} onApplique={() => chargerVariantes({ articles: true })}/>
           )}
           {/* ⚠️ LA BIBLIOTHÈQUE PASSE DEVANT LA LISTE (Alex, 25/09) : le
               commerçant pense « mes garnitures », pas « les garnitures de la
@@ -3146,17 +3147,27 @@ function LotPersonnalisation({ action, articles = [], lotIds = [], tousLesGroupe
   )
 }
 
-function BibliothequeGrilles({ articles = [], toast, onApplique }) {
+function BibliothequeGrilles({ articles = [], variantesParArticle = {}, toast, onApplique }) {
   const [choisie, setChoisie] = useState(null)
   const [cibles, setCibles] = useState([])
   const [remplacer, setRemplacer] = useState(false)
   const [envoi, setEnvoi] = useState(false)
+  // ✅ (22/10, Alex, tableau) CRÉER, MODIFIER PARTOUT, RETIRER. Une grille
+  // reste ce que les articles portent (`bibliothequeDeGrilles`), sans table.
+  // Le panneau ouvert suit un ARTICLE de la grille, pas sa clé : la clé change
+  // à chaque modification, l'article non.
+  const [nouvelle, setNouvelle] = useState(null)   // { axe1Nom, axe1Texte, axe2Nom, axe2Texte } ou null
+  const [modifDe, setModifDe] = useState(null)     // id d'un article de la grille modifiée
+  const [retraitDe, setRetraitDe] = useState(null) // id d'un article de la grille à retirer
+  const [aRetirer, setARetirer] = useState([])
+  const [ajouts, setAjouts] = useState({ 1: '', 2: '', nomAxe2: '' })
+  const [renommageGrille, setRenommageGrille] = useState(null) // { axe, valeur, saisie }
   const grilles = bibliothequeDeGrilles(articles)
   // 🟠 (22/10, audit O9) LA VITRINE AUSSI : la fiche montre ses variantes et
   // ses options (à lire, sans « Ajouter »). La boutique en vitrine qui pose
   // 36-44 sur vingt robes n'en voyait aucune.
   const listeCibles = ciblesDeCopie(articles)
-  if (grilles.length === 0) return null
+  const fermerTout = () => { setChoisie(null); setModifDe(null); setRetraitDe(null); setNouvelle(null); setCibles([]); setRemplacer(false); setARetirer([]); setRenommageGrille(null) }
 
   async function appliquer(g) {
     if (envoi) return
@@ -3164,53 +3175,287 @@ function BibliothequeGrilles({ articles = [], toast, onApplique }) {
     const r = await poserGrille({ grille: g, cibles, articles, remplacer, toast })
     setEnvoi(false)
     if (r.ok || r.partiel) onApplique?.()
-    if (r.ok) { setChoisie(null); setCibles([]); setRemplacer(false) }
+    if (r.ok) fermerTout()
   }
+
+  // « + Nouvelle grille » : tapée, puis posée comme une grille existante.
+  async function creer() {
+    if (envoi) return
+    const r = grilleDeSaisie(nouvelle || {})
+    if (!r.ok) { toast(r.error, 'error'); return }
+    if (cibles.length === 0) { toast('Coche au moins un article : une grille vit sur les articles qui la portent.', 'error'); return }
+    setEnvoi(true)
+    const p = await poserGrille({ grille: r.grille, cibles, articles, remplacer, toast })
+    setEnvoi(false)
+    if (p.ok || p.partiel) onApplique?.()
+    if (p.ok) fermerTout()
+  }
+
+  // « Modifier partout » : une modification, sur tous les articles de la grille.
+  async function modifier(g, op) {
+    if (envoi) return
+    const plan = planGrille({ grille: g, variantesParArticle, op })
+    if (!plan.ok) { toast(plan.error, 'error'); return }
+    if (!plan.axes) return
+    if (op.type === 'retirer' && plan.aSupprimer.length > 0) {
+      const okRetraitGrille = await confirme(confirmationSimple({
+        titre: `Retirer « ${op.valeur} » de la grille ?`,
+        message: `Sur ${g.articles.length === 1 ? '1 article' : `les ${g.articles.length} articles`} qui la portent, ${plan.aSupprimer.length === 1 ? '1 combinaison part' : `${plan.aSupprimer.length} combinaisons partent`} (stock : ${plan.stockRetire}). Les commandes déjà passées ne changent pas.`,
+        action: 'Oui, retirer',
+      }))
+      if (!okRetraitGrille) return
+    }
+    setEnvoi(true)
+    const ok = await ecrirePlanGrille(g.articles, plan)
+    setEnvoi(false)
+    onApplique?.()
+    if (!ok) { toast('La grille n’a pas été modifiée partout. Recharge la page et vérifie ses articles.', 'error'); return }
+    if (op.type === 'ajouter') setAjouts(p => ({ ...p, [op.axe]: '', nomAxe2: op.axe === 2 ? '' : p.nomAxe2 }))
+    toast(`Grille modifiée sur ${g.articles.length === 1 ? '1 article' : `${g.articles.length} articles`}${plan.aCreer.length ? `, ${plan.aCreer.length === 1 ? '1 combinaison créée' : `${plan.aCreer.length} combinaisons créées`} à stock zéro` : ''}.`)
+  }
+
+  // Les écritures d'un plan, dans l'ordre qui respecte l'unicité des
+  // combinaisons, chacune relue (zéro ligne = refusé).
+  async function ecrirePlanGrille(ids, plan) {
+    if (plan.aSupprimer.length > 0) {
+      const { data, error } = await supabase.from('article_variantes').delete().in('id', plan.aSupprimer).select('id')
+      if (error || (data?.length || 0) !== plan.aSupprimer.length) return false
+    }
+    if (plan.aConvertir.ids.length > 0) {
+      const { data, error } = await supabase.from('article_variantes').update({ axe2_valeur: plan.aConvertir.valeur }).in('id', plan.aConvertir.ids).select('id')
+      if (error || (data?.length || 0) !== plan.aConvertir.ids.length) return false
+    }
+    if (plan.renommer) {
+      const { error } = await supabase.from('article_variantes').update({ [plan.renommer.col]: plan.renommer.vers }).in('article_id', ids).eq(plan.renommer.col, plan.renommer.de).select('id')
+      if (error) return false
+    }
+    const { data: arts, error: errArts } = await supabase.from('articles').update(plan.axes).in('id', ids).select('id')
+    if (errArts || (arts?.length || 0) !== ids.length) return false
+    if (plan.aCreer.length > 0) {
+      const { data, error } = await supabase.from('article_variantes').insert(plan.aCreer).select('id')
+      if (error || (data?.length || 0) !== plan.aCreer.length) return false
+    }
+    for (let i = 0; i < plan.ordres.length; i += 10) {
+      const paquet = plan.ordres.slice(i, i + 10)
+      const res = await Promise.all(paquet.map(o => supabase.from('article_variantes').update({ ordre: o.ordre }).eq('id', o.id).select('id')))
+      if (res.some(r => r.error || (r.data?.length || 0) !== 1)) return false
+    }
+    return true
+  }
+
+  // « Retirer de… » : la grille quitte les articles cochés (confirmé).
+  async function retirer(g) {
+    if (envoi || aRetirer.length === 0) return
+    const ids = aRetirer
+    const vars = ids.flatMap(id => variantesParArticle[id] || variantesParArticle[String(id)] || [])
+    const okRetirerGrille = await confirme(confirmationSimple({
+      titre: `Retirer la grille de ${ids.length === 1 ? '1 article' : `${ids.length} articles`} ?`,
+      message: phraseRetraitDeGrille({ articles: ids.length, combinaisons: vars.length, stock: vars.reduce((s, v) => s + Math.max(0, Number(v.stock) || 0), 0) }),
+      action: 'Oui, retirer la grille',
+    }))
+    if (!okRetirerGrille) return
+    setEnvoi(true)
+    const { error: errSup } = await supabase.from('article_variantes').delete().in('article_id', ids).select('id')
+    const { data: arts, error: errArts } = errSup ? { data: [], error: errSup } : await supabase.from('articles').update(RETRAIT_DE_GRILLE).in('id', ids).select('id')
+    setEnvoi(false)
+    onApplique?.()
+    if (errSup || errArts || (arts?.length || 0) !== ids.length) { toast(`La grille n’a pas été retirée partout : ${(errSup || errArts)?.message || 'modification refusée'}. Recharge la page.`, 'error'); return }
+    fermerTout()
+    toast(`Grille retirée de ${ids.length === 1 ? '1 article, masqué' : `${ids.length} articles, masqués`} de ta fiche.`)
+  }
+
+  // Les valeurs d'un axe de la grille, à ranger, renommer, retirer, compléter.
+  function axeDeGrille(g, n) {
+    const valeurs = n === 1 ? g.axe1_valeurs : g.axe2_valeurs
+    const fleche = (actif) => ({ width: 22, height: 22, borderRadius: 7, border: `1px solid ${actif ? T.hairline : 'transparent'}`, background: actif ? '#F8F6FF' : 'transparent', cursor: actif ? 'pointer' : 'default', color: actif ? T.deep : T.hairline, fontSize: 13, fontWeight: 800, padding: 0, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' })
+    return (
+      <div style={{ background: '#FAFAFA', borderRadius: 10, padding: 10, border: `1px solid ${T.hairline}`, marginBottom: 8 }}>
+        <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', margin: '0 0 6px' }}>
+          {n === 1 ? (g.axe1_nom || 'Taille') : (g.axe2_nom || '2e axe (optionnel)')}
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+          {valeurs.map((val, i) => {
+            const enRenommage = renommageGrille && renommageGrille.axe === n && renommageGrille.valeur === val
+            return (
+              <span key={val} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 6px', fontSize: 12 }}>
+                <button type="button" onClick={() => modifier(g, { type: 'deplacer', axe: n, valeur: val, sens: -1 })} disabled={i === 0 || envoi} aria-label={`Avancer ${val}`} style={fleche(i > 0)}>←</button>
+                {enRenommage ? (
+                  <input autoFocus value={renommageGrille.saisie} aria-label={`Nouveau nom pour ${val}`}
+                    onChange={e => setRenommageGrille(r => ({ ...r, saisie: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); const r = renommageGrille; setRenommageGrille(null); modifier(g, { type: 'renommer', axe: n, valeur: val, nouveau: r.saisie }) }
+                      if (e.key === 'Escape') { e.preventDefault(); setRenommageGrille(null) }
+                    }}
+                    style={{ ...s.input, width: Math.max(48, renommageGrille.saisie.length * 8 + 20), fontSize: 12, padding: '2px 6px' }}/>
+                ) : (
+                  <span style={{ color: T.ink, fontWeight: 700, padding: '0 3px' }}>{val}</span>
+                )}
+                <button type="button" onClick={() => modifier(g, { type: 'deplacer', axe: n, valeur: val, sens: 1 })} disabled={i === valeurs.length - 1 || envoi} aria-label={`Reculer ${val}`} style={fleche(i < valeurs.length - 1)}>→</button>
+                <button type="button" onClick={() => setRenommageGrille({ axe: n, valeur: val, saisie: val })} aria-label={`Renommer ${val} partout`} title="Renommer partout"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, fontSize: 11, padding: '0 2px', lineHeight: 1 }}>✎</button>
+                <button type="button" onClick={() => modifier(g, { type: 'retirer', axe: n, valeur: val })} aria-label={`Retirer ${val} partout`} title="Retirer partout"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
+              </span>
+            )
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {n === 2 && valeurs.length === 0 && (
+            <input value={ajouts.nomAxe2} onChange={e => setAjouts(p => ({ ...p, nomAxe2: e.target.value }))} placeholder="Nom : Couleur, Modèle…" aria-label="Nom du 2e axe"
+              style={{ ...s.input, width: 150, fontSize: 12, padding: '5px 8px' }}/>
+          )}
+          <input value={ajouts[n]} onChange={e => setAjouts(p => ({ ...p, [n]: e.target.value }))} aria-label={`Valeur à ajouter (axe ${n})`}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); modifier(g, { type: 'ajouter', axe: n, valeur: ajouts[n], nomAxe2: ajouts.nomAxe2 }) } }}
+            placeholder={n === 1 ? 'Ajouter : XXL, 46…' : 'Ajouter : Bleu, Rose…'} style={{ ...s.input, flex: 1, minWidth: 120, fontSize: 12, padding: '5px 8px' }}/>
+          <button type="button" disabled={envoi} style={{ ...s.btn, ...s.btnPrimary, padding: '5px 10px', fontSize: 12 }}
+            onClick={() => modifier(g, { type: 'ajouter', axe: n, valeur: ajouts[n], nomAxe2: ajouts.nomAxe2 })}>+</button>
+        </div>
+      </div>
+    )
+  }
+
+  // La liste des articles à cocher, pour poser une grille (existante ou nouvelle).
+  function listeAPoser(g) {
+    const porte = new Set((g?.articles || []).map(String))
+    return (
+      <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 2, margin: '10px 0 8px' }}>
+        {listeCibles.map(a => {
+          const coche = cibles.some(id => String(id) === String(a.id))
+          const deja = porte.has(String(a.id))
+          const autre = !deja && a.gere_variantes && (a.axe1_valeurs || []).length > 0
+          return (
+            <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: deja ? 'default' : 'pointer', background: coche ? T.pale : 'transparent', opacity: deja ? 0.6 : 1 }}>
+              <input type="checkbox" checked={coche || deja} disabled={deja} style={{ width: 15, height: 15 }}
+                onChange={() => setCibles(prev => (coche ? prev.filter(id => String(id) !== String(a.id)) : [...prev, a.id]))}/>
+              <span style={{ fontSize: 12, color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
+              {(deja || autre) && (
+                <span style={{ fontSize: 10, fontWeight: 800, color: T.muted, background: '#F3F4F6', borderRadius: 100, padding: '2px 7px', flexShrink: 0 }}>{deja ? 'a déjà cette grille' : 'autre grille'}</span>
+              )}
+            </label>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const saisieNouvelle = nouvelle ? grilleDeSaisie(nouvelle) : null
+  const repNouvelle = saisieNouvelle?.ok ? repartirGrille({ grille: saisieNouvelle.grille, cibles, articles, remplacer }) : null
 
   return (
     <div style={{ ...s.card, padding: 14, marginBottom: 16 }}>
       {/* (22/10, Alex : « penser large ») Une variante n'est pas qu'une
           taille : couleur, modèle, longueur, parfum… */}
-      <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1.2px', margin: '0 0 4px' }}>Tes grilles de variantes</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+        <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1.2px', margin: 0 }}>Tes grilles de variantes</p>
+        <button type="button" style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+          onClick={() => { const ouvrir = !nouvelle; fermerTout(); if (ouvrir) setNouvelle({ axe1Nom: 'Taille', axe1Texte: '', axe2Nom: '', axe2Texte: '' }) }}>
+          <Icon name="plus" size={12} color={T.bgPanel}/> {nouvelle ? 'Fermer' : 'Nouvelle grille'}
+        </button>
+      </div>
       <p style={{ fontSize: 12, color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
-        Tailles, couleurs, modèles… Pose une grille déjà utilisée sur d&rsquo;autres articles, sans la réécrire. Les variantes naissent à stock zéro.
+        Tailles, couleurs, modèles… Une grille vit sur les articles qui la portent : crée-la en la posant, modifie-la partout d&rsquo;un coup, retire-la des articles qui n&rsquo;en veulent plus. Les nouvelles variantes naissent à stock zéro.
       </p>
+
+      {nouvelle && (
+        <div style={{ border: `1.5px solid ${T.bgPanel}`, borderRadius: 10, padding: 12, background: '#FAFAFA', marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: T.ink }}>1er axe
+              <input value={nouvelle.axe1Nom} onChange={e => setNouvelle(p => ({ ...p, axe1Nom: e.target.value }))} placeholder="Taille" style={{ ...s.input, fontSize: 13, marginTop: 4 }}/>
+            </label>
+            <label style={{ fontSize: 12, fontWeight: 700, color: T.ink }}>Ses valeurs
+              <input value={nouvelle.axe1Texte} onChange={e => setNouvelle(p => ({ ...p, axe1Texte: e.target.value }))} placeholder="S, M, L, XL" style={{ ...s.input, fontSize: 13, marginTop: 4 }}/>
+            </label>
+            <label style={{ fontSize: 12, fontWeight: 700, color: T.ink }}>2e axe (optionnel)
+              <input value={nouvelle.axe2Nom} onChange={e => setNouvelle(p => ({ ...p, axe2Nom: e.target.value }))} placeholder="Couleur" style={{ ...s.input, fontSize: 13, marginTop: 4 }}/>
+            </label>
+            <label style={{ fontSize: 12, fontWeight: 700, color: T.ink }}>Ses valeurs
+              <input value={nouvelle.axe2Texte} onChange={e => setNouvelle(p => ({ ...p, axe2Texte: e.target.value }))} placeholder="Bleu, Rose" style={{ ...s.input, fontSize: 13, marginTop: 4 }}/>
+            </label>
+          </div>
+          <p style={{ fontSize: 11.5, color: T.muted, margin: '6px 0 0' }}>Sépare les valeurs par des virgules, dans l&rsquo;ordre où ton client les lira.</p>
+          {listeAPoser(null)}
+          {repNouvelle && repNouvelle.ignores.length + repNouvelle.aRemplacer.length > 0 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.ink, margin: '0 0 6px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={remplacer} onChange={e => setRemplacer(e.target.checked)} style={{ width: 15, height: 15 }}/>
+              Remplacer leur grille ({repNouvelle.ignores.length + repNouvelle.aRemplacer.length} article{repNouvelle.ignores.length + repNouvelle.aRemplacer.length > 1 ? 's' : ''} avec une autre grille, à stock zéro)
+            </label>
+          )}
+          <p style={{ fontSize: 11.5, color: saisieNouvelle && !saisieNouvelle.ok && (nouvelle.axe1Texte || nouvelle.axe2Texte) ? '#B91C1C' : T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+            {!saisieNouvelle?.ok
+              ? (nouvelle.axe1Texte || nouvelle.axe2Texte ? saisieNouvelle.error : 'Tape tes valeurs, puis coche les articles qui reçoivent la grille.')
+              : `${libelleDeGrille(saisieNouvelle.grille)}. ${repNouvelle.aPoser.length + repNouvelle.aRemplacer.length === 0 ? 'Coche les articles qui la reçoivent.' : `Elle sera posée sur ${repNouvelle.aPoser.length + repNouvelle.aRemplacer.length === 1 ? '1 article' : `${repNouvelle.aPoser.length + repNouvelle.aRemplacer.length} articles`}, à stock zéro.`}`}
+          </p>
+          <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={creer} disabled={envoi || !saisieNouvelle?.ok || repNouvelle.aPoser.length + repNouvelle.aRemplacer.length === 0}>
+            <Icon name="plus" size={13}/> Créer et poser
+            {envoi && <DotsAttente couleur="#fff" taille={4} label="Enregistrement"/>}
+          </button>
+        </div>
+      )}
+
+      {grilles.length === 0 && !nouvelle && (
+        <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic', margin: 0 }}>Aucune grille pour l&rsquo;instant : crée la première avec « Nouvelle grille ».</p>
+      )}
       <div style={{ display: 'grid', gap: 8 }}>
         {grilles.map(g => {
           const ouverte = choisie === g.cle
+          const enModif = modifDe != null && g.articles.some(id => String(id) === String(modifDe))
+          const enRetrait = retraitDe != null && g.articles.some(id => String(id) === String(retraitDe))
           const rep = repartirGrille({ grille: g, cibles, articles, remplacer })
-          const porte = new Set(g.articles.map(String))
           return (
-            <div key={g.cle} style={{ border: `1px solid ${ouverte ? T.bgPanel : T.hairline}`, borderRadius: 10, padding: 10, background: '#fff' }}>
+            <div key={g.cle} style={{ border: `1px solid ${ouverte || enModif || enRetrait ? T.bgPanel : T.hairline}`, borderRadius: 10, padding: 10, background: '#fff' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p style={{ fontWeight: 800, fontSize: 13, color: T.ink, margin: 0 }}>{libelleDeGrille(g)}</p>
                   <p style={{ fontSize: 11.5, color: T.muted, margin: '3px 0 0' }}>{g.articles.length === 1 ? 'sur 1 article' : `sur ${g.articles.length} articles`}</p>
                 </div>
-                <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
-                  onClick={() => { setChoisie(ouverte ? null : g.cle); setCibles([]); setRemplacer(false) }}>
-                  <Copy size={13} strokeWidth={1.8}/> {ouverte ? 'Fermer' : 'Appliquer à…'}
-                </button>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                    onClick={() => { const o = !ouverte; fermerTout(); if (o) setChoisie(g.cle) }}>
+                    <Copy size={13} strokeWidth={1.8}/> {ouverte ? 'Fermer' : 'Appliquer à…'}
+                  </button>
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                    onClick={() => { const o = !enModif; fermerTout(); if (o) setModifDe(g.articles[0]) }}>
+                    <Icon name="edit" size={13} color={T.bgPanel}/> {enModif ? 'Fermer' : 'Modifier partout'}
+                  </button>
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                    onClick={() => { const o = !enRetrait; fermerTout(); if (o) { setRetraitDe(g.articles[0]); setARetirer([...g.articles]) } }}>
+                    <Icon name="trash" size={13} color="#DC2626"/> {enRetrait ? 'Fermer' : 'Retirer de…'}
+                  </button>
+                </div>
               </div>
-              {ouverte && (
-                <>
-                  <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 2, margin: '10px 0 8px' }}>
-                    {listeCibles.map(a => {
-                      const coche = cibles.some(id => String(id) === String(a.id))
-                      const deja = porte.has(String(a.id))
-                      const autre = !deja && a.gere_variantes && (a.axe1_valeurs || []).length > 0
+              {enModif && (
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 8px', lineHeight: 1.5 }}>
+                    Chaque changement vaut pour {g.articles.length === 1 ? 'son article' : `ses ${g.articles.length} articles`} : une valeur ajoutée crée ses combinaisons à stock zéro, un nom changé garde le stock, une valeur retirée emporte ses combinaisons (confirmé).
+                  </p>
+                  {axeDeGrille(g, 1)}
+                  {axeDeGrille(g, 2)}
+                </div>
+              )}
+              {enRetrait && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ display: 'grid', gap: 2, marginBottom: 8 }}>
+                    {g.articles.map(id => {
+                      const a = articles.find(x => String(x.id) === String(id))
+                      const coche = aRetirer.some(x => String(x) === String(id))
                       return (
-                        <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: deja ? 'default' : 'pointer', background: coche ? T.pale : 'transparent', opacity: deja ? 0.6 : 1 }}>
-                          <input type="checkbox" checked={coche || deja} disabled={deja} style={{ width: 15, height: 15 }}
-                            onChange={() => setCibles(prev => (coche ? prev.filter(id => String(id) !== String(a.id)) : [...prev, a.id]))}/>
-                          <span style={{ fontSize: 12, color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
-                          {(deja || autre) && (
-                            <span style={{ fontSize: 10, fontWeight: 800, color: T.muted, background: '#F3F4F6', borderRadius: 100, padding: '2px 7px', flexShrink: 0 }}>{deja ? 'a déjà cette grille' : 'autre grille'}</span>
-                          )}
+                        <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: coche ? '#FEF2F2' : 'transparent' }}>
+                          <input type="checkbox" checked={coche} style={{ width: 15, height: 15 }}
+                            onChange={() => setARetirer(prev => (coche ? prev.filter(x => String(x) !== String(id)) : [...prev, id]))}/>
+                          <span style={{ fontSize: 12, color: T.ink, fontWeight: 600 }}>{a?.nom || 'Article'}</span>
                         </label>
                       )
                     })}
                   </div>
+                  <button style={{ ...s.btn, ...s.btnDanger, padding: '6px 12px', fontSize: 12 }} onClick={() => retirer(g)} disabled={envoi || aRetirer.length === 0}>
+                    Retirer la grille de {aRetirer.length === 1 ? '1 article' : `${aRetirer.length} articles`}
+                  </button>
+                </div>
+              )}
+              {ouverte && (
+                <>
+                  {listeAPoser(g)}
                   {rep.ignores.length + rep.aRemplacer.length > 0 && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.ink, margin: '0 0 6px', cursor: 'pointer' }}>
                       <input type="checkbox" checked={remplacer} onChange={e => setRemplacer(e.target.checked)} style={{ width: 15, height: 15 }}/>

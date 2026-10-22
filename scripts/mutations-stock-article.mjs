@@ -125,7 +125,12 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js', de: 'stock_comptoir_le: jourBruxelles() }', vers: 'stock_comptoir_le: new Date().toISOString().slice(0, 10) }' },
   { nom: '🔴 le bouton du comptoir reste visible le soir',
     // ⚠️ Ancre reorientee le 08/10 : `venteJour` s ajoute (temps 3).
-    fichier: 'app/dashboard/ConfigDashboard.js', de: '            {parJours && venteJour && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (', vers: '            {parJours && venteJour && onSetComptoir && !effAuj.ferme && !congeAuj && (' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 (test C d'Alex : pas de comptoir sur un article à variantes).
+    fichier: 'app/dashboard/ConfigDashboard.js', de: '            {parJours && venteJour && onSetComptoir && !a.gere_variantes && !effAuj.ferme && !congeAuj && !journeeFinie && (', vers: '            {parJours && venteJour && onSetComptoir && !a.gere_variantes && !effAuj.ferme && !congeAuj && (' },
+  { nom: '🔴 le comptoir revient sur un article à variantes (il plafonnerait toutes les tailles)',
+    fichier: 'app/dashboard/ConfigDashboard.js', de: '            {parJours && venteJour && onSetComptoir && !a.gere_variantes && !effAuj.ferme && !congeAuj && !journeeFinie && (', vers: '            {parJours && venteJour && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (' },
+  { nom: '🔴 la carte redit « XS : 0 » en rouge sur un article fabriqué à la demande',
+    fichier: 'app/dashboard/ConfigDashboard.js', de: "                        {sansLimite ? it.libelle : <>{it.libelle}{' '}: {it.stock}</>}", vers: "                        {<>{it.libelle}{' '}: {it.stock}</>}" },
   { nom: '🔴 la grille affiche de nouveau le comptoir (« Mer 3 »)',
     fichier: 'app/dashboard/ConfigDashboard.js', de: '    if (avecComptoir && jour === jourActuelKey && comptoirAuj !== null) {', vers: '    if (jour === jourActuelKey && comptoirAuj !== null) {' },
   { nom: '🔴 « Retirer le comptoir » disparait le soir',

@@ -255,7 +255,8 @@ const code = (f) => sansProse(lire(f))
   // comptoir n'a plus d'effet et piégeait le test du mercredi soir.
   v('🔴 le bouton du comptoir disparaît quand la journée est finie',
     // ⚠️ RÉORIENTÉE LE 08/10 : `venteJour` s'ajoute (temps 3).
-    /\{parJours && venteJour && onSetComptoir && !effAuj\.ferme && !congeAuj && !journeeFinie && \(/.test(bord)
+    // ⚠️ REPOINTÉE LE 22/10 (test C d'Alex) : ni sur un article à variantes.
+    /\{parJours && venteJour && onSetComptoir && !a\.gere_variantes && !effAuj\.ferme && !congeAuj && !journeeFinie && \(/.test(bord)
     && /journeeFinie=\{journeeFinieAuj\}/.test(bord))
   v('🔴 « journée finie » lit la fermeture du jour (dernière plage) à l’heure belge',
     /const f = fermetureDuJour\(commercant\?\.horaires_detail, nom\)\s*const m = minutesBruxelles\(\)\s*return f !== null && m !== null && m >= f/.test(bord))
@@ -858,6 +859,8 @@ const code = (f) => sansProse(lire(f))
     && /&& !form\.gere_variantes && \(<>/.test(bord)
     && /\? \{ stock_mode: formStock\.stock_mode, stock_jour: avant \? Math\.max\(0, Number\(avant\.stock_jour\) \|\| 0\) : 0 \}/.test(bord))
   v('🔴 R3 panneau : « à la demande » cache le stock des variantes', (bord.match(/\{!sansLimite && \(/g) || []).length === 2)
+  v('🔴 (test C d’Alex) la carte d’un article « fabriqué à la demande » ne montre ni chiffre ni rouge par variante',
+    /\{sansLimite \? it\.libelle : <>\{it\.libelle\}\{' '\}: \{it\.stock\}<\/>\}/.test(bord) && /\.\.\.\(sansLimite\s*\? \{ color: '#10B981', background: '#F0FDF4' \}/.test(bord))
   v('🟠 O11 : supprimer une combinaison se confirme', /const okSuppressionVariante = await confirme\(confirmationSimple\(\{/.test(bord) && /if \(!okSuppressionVariante\) return/.test(bord))
   v('🟡 J11 : renommer passe par un vrai champ, plus `window.prompt`',
     !/window\.prompt\(`Nouveau nom pour/.test(bord) && /onClick=\{\(\) => ouvrirRenommage\(n, val\)\}/.test(bord) && /if \(!renommageOuvert\.current\) return/.test(bord))

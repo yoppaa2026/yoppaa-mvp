@@ -5531,9 +5531,14 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
                     {groupe.titre && <span style={{ fontSize: 12, fontWeight: 800, color: T.ink, minWidth: 70 }}>{groupe.titre}</span>}
                     {groupe.items.map(it => (
                       <span key={it.id} style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 100,
-                        color: it.stock === 0 ? '#DC2626' : it.stock <= 2 ? '#EA580C' : '#10B981', background: it.stock === 0 ? '#FEE2E2' : it.stock <= 2 ? '#FFF7ED' : '#F0FDF4' }}>
+                        // 🔴 (22/10, Alex, test C) « Fabriqué à la demande » : rien ne
+                        // se compte, donc ni chiffre ni rouge (« XS : 0 » faisait croire
+                        // à une taille épuisée).
+                        ...(sansLimite
+                          ? { color: '#10B981', background: '#F0FDF4' }
+                          : { color: it.stock === 0 ? '#DC2626' : it.stock <= 2 ? '#EA580C' : '#10B981', background: it.stock === 0 ? '#FEE2E2' : it.stock <= 2 ? '#FFF7ED' : '#F0FDF4' }) }}>
                         {/* (21/10, Alex) « 36 : 3 », pas « 36 3 » : la taille et la quantité se confondaient. */}
-                        {it.libelle}{' '}: {it.stock}
+                        {sansLimite ? it.libelle : <>{it.libelle}{' '}: {it.stock}</>}
                       </span>
                     ))}
                   </span>
@@ -5588,7 +5593,10 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
             {/* ⚠️ CACHÉ LE SOIR (Alex, 07/10) : boutique fermée pour la
                 journée, plus rien ne se retire aujourd'hui, le comptoir
                 n'aurait aucun effet. */}
-            {parJours && venteJour && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (
+            {/* 🔴 (22/10, Alex, test C) PAS SUR UN ARTICLE À VARIANTES : ce
+                chiffre plafonnerait l'article entier, toutes tailles confondues
+                (le serveur lit le comptoir avant tout). Le stock y vit par variante. */}
+            {parJours && venteJour && onSetComptoir && !a.gere_variantes && !effAuj.ferme && !congeAuj && !journeeFinie && (
               <button type="button"
                 onClick={() => setSaisieCarte({ quoi: 'comptoir', valeur: effAuj.comptoir ? String(stockRestant) : '' })}
                 style={{ fontSize: 11, fontWeight: 700, color: T.main, background: '#fff', border: `1px solid ${T.main}44`, padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>

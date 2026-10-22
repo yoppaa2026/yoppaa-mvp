@@ -2587,6 +2587,8 @@ function TabMenu({ commercantId, commercant, toast }) {
                       || (lotAction === 'vente' && lotVente === null)
                       || (lotAction === 'jour_meme' && lotJourMeme === null)
                       || (lotAction === 'sur_commande' && lotCommande.actif === null)
+                      // (22/10) Rien de choisi : la consigne en gris, pas en rouge.
+                      || (lotAction === 'heure_limite' && lotHorsLimite === null)
                     const rouge = !!refus && !rienSaisi
                     return (
                       <>

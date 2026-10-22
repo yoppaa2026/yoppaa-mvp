@@ -238,9 +238,11 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /\{showOptions && hasOptions && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<OptionsVitrine groupes=\{groupes\}\/>/.test(FICHE)
       && /function OptionsVitrine\(\{ groupes \}\)/.test(FICHE)
       && !/function OptionsVitrine[\s\S]{0,1500}Ajouter à ma commande[\s\S]{0,200}function VariantesVitrine/.test(FICHE))
+  // ⚠️ REPOINTÉE LE 22/10 : sur une carte à lire, la version ET ses options
+  // se lisent (sans « Ajouter »).
   verifier('🔴 même chose pour les versions d’un article',
     /\{showOptions && hasVariantes && !article\.est_vitrine && !modeVitrine && \(\s*<VariantesSelector/.test(FICHE)
-      && /\{showOptions && hasVariantes && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<VariantesVitrine/.test(FICHE))
+      && /\{showOptions && hasVariantes && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<>\s*<VariantesVitrine/.test(FICHE))
   // ⚠️ REPOINTÉE LE 16/10 soir : « Tes coups de cœur » est une troisième liste
   // de cartes. CHAQUE liste, comptée contre le nombre de listes.
   verifier('et la fiche dit à chaque carte quand on ne peut pas commander',

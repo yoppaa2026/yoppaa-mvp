@@ -35,7 +35,12 @@ const MUTATIONS = [
   { nom: '🔴 le choix d un autre article compte', fichier: REGLE,
     de: '          if (!grp || grp.article_id !== article.id) continue', vers: '          if (!grp) continue' },
   { nom: '🔴 une offre (lot) exige aussi les options : les invendus deviennent invendables', fichier: REGLE,
-    de: '    if (!deal && !variante && groupesOptions) {', vers: '    if (!variante && groupesOptions) {' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 : une version exige maintenant ses options.
+    de: '    if (!deal && groupesOptions) {', vers: '    if (groupesOptions) {' },
+  { nom: '🔴 une version (taille, couleur) n exige plus ses options', fichier: REGLE,
+    de: '    if (!deal && groupesOptions) {', vers: '    if (!deal && !variante && groupesOptions) {' },
+  { nom: '🔴 deux lignes de la même variante passent chacune sur un stock de 1', fichier: REGLE,
+    de: '      if ((variante.stock ?? 0) < dejaParVariante[variante.id]) {', vers: '      if ((variante.stock ?? 0) < quantite) {' },
   { nom: '🔴 la consommation d un lot redevient le nombre de lots', fichier: REGLE,
     de: '      quantite_stock: quantite * (deal?.unites_par_deal || 1),', vers: '      quantite_stock: quantite,' },
   // ─── (21/10) le groupe dépendant ────────────────────────────────────────

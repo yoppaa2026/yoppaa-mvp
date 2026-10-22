@@ -46,6 +46,7 @@ import {
   deplacerValeur, renommerValeur, ordreDesVariantes, variantesDeLaValeur, phraseRetraitValeur,
   ciblesDeMasse, variantesVisees, quantiteSaisie, prixSaisiMasse, lignesDeStock,
   bibliothequeDeGrilles, libelleDeGrille, axesDeGrille, combinaisonsDeGrille, repartirGrille,
+  ciblesVariantesDuLot,
 } from '@/lib/variantes-grille'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 import {
@@ -2131,21 +2132,30 @@ function TabMenu({ commercantId, commercant, toast }) {
 
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: lotAction ? 10 : 0 }}>
                     {[
-                      // ✅ 15/10 : les mots de la fiche article (« Sur ta fiche » / « Masqué »).
-                      { val: 'disponible', label: 'Mettre sur ta fiche' },
-                      { val: 'indisponible', label: 'Masquer' },
+                      // ✅ 22/10 (Alex, tableau) : chaque bouton dit son geste.
+                      // VISIBLE (sur la fiche ou masqué) n'est pas COMMANDABLE
+                      // (en ligne, ou en vitrine : visible sans bouton).
+                      { val: 'disponible', label: 'Afficher sur ta fiche' },
+                      { val: 'indisponible', label: 'Masquer de ta fiche' },
                       { val: 'categorie', label: 'Changer de catégorie' },
                       { val: 'prix', label: 'Ajuster les prix' },
                       // ✅ 15/10 (Alex) : la façon de vendre, d'un coup.
-                      { val: 'vente', label: 'En ligne ou vitrine' },
+                      { val: 'vente', label: 'Commandable en ligne ou vitrine' },
                       ...(deuxCircuits ? [
                         { val: 'jour_meme', label: 'Le jour même' },
                         { val: 'sur_commande', label: 'Sur commande' },
                         { val: 'plage', label: 'Heures de retrait' },
                       ] : []),
-                      { val: 'stock', label: 'Stock et quantités' },
+                      { val: 'stock', label: variantesCategorie ? 'Stock (et variantes)' : 'Stock et quantités' },
                       { val: 'tva', label: 'Taux de TVA' },
-                      { val: 'temps_prepa', label: 'Temps de préparation' },
+                      // ⚠️ L'alimentaire seulement : une boutique l'enregistre à 0.
+                      ...(!variantesCategorie ? [{ val: 'temps_prepa', label: 'Temps de préparation' }] : []),
+                      // ✅ 22/10 (Alex) : la personnalisation, en lot aussi.
+                      ...(variantesCategorie ? [
+                        { val: 'grille', label: 'Poser une grille de variantes' },
+                        { val: 'stock_variante', label: 'Stock d’une variante' },
+                      ] : []),
+                      { val: 'groupe', label: 'Poser ou retirer un groupe d’options' },
                     ].map(act => (
                       <button key={act.val} onClick={() => setLotAction(lotAction === act.val ? null : act.val)}
                         disabled={lotIds.length === 0}
@@ -2275,7 +2285,16 @@ function TabMenu({ commercantId, commercant, toast }) {
                     </div>
                   )}
 
-                  {lotAction && (() => {
+                  {ACTIONS_LOT_PERSO.includes(lotAction) && (
+                    <LotPersonnalisation key={lotAction} action={lotAction} articles={articles} lotIds={lotIds}
+                      tousLesGroupes={tousLesGroupes} groupesParArticle={groupesParArticle} toast={toast}
+                      onFini={(quoi = {}) => {
+                        if (quoi.groupes) noterOptionsTouchees(quoi.groupes)
+                        if (quoi.articles) fetchArticles(); else if (quoi.variantes) chargerVariantes()
+                      }}/>
+                  )}
+
+                  {lotAction && !ACTIONS_LOT_PERSO.includes(lotAction) && (() => {
                     const vises = articlesDuLot(articles, lotIds)
                     const valeur = valeurDuLot(lotAction)
                     const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
@@ -2659,10 +2678,9 @@ function TabMenu({ commercantId, commercant, toast }) {
                     </button>
                   </div>
                   {variantesCategorie && <VariantesArticle article={a} articles={articles} onChange={chargerVariantes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
-                  {/* (21/10, lot C) En détail, les options pour un article SANS
-                      tailles : la fiche ne montre pas d'options à côté des
-                      tailles (les tailles priment). */}
-                  {(!variantesCategorie || !a.gere_variantes) && <OptionsArticle articleId={a.id} articles={articles} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                  {/* ✅ (22/10, Alex) Variantes ET options : la fiche montre
+                      les options sous la variante (emballage cadeau d'une robe). */}
+                  <OptionsArticle articleId={a.id} articles={articles} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
                     <button type="button" aria-label={`Refermer ${a.nom}`}
                       onClick={e => e.currentTarget.closest('details')?.removeAttribute('open')}
@@ -2688,6 +2706,197 @@ function TabMenu({ commercantId, commercant, toast }) {
 // (`bibliothequeDeGrilles`). Les combinaisons naissent à stock 0, au prix de
 // l'article. Un article qui porte une AUTRE grille n'est remplacé que sur
 // demande, confirmée.
+// L'écriture d'une grille, PARTAGÉE par la bibliothèque et l'action groupée
+// (22/10) : deux copies du même geste finiraient par écrire deux choses
+// différentes. Rend { ok, combien, ignores } ; { ok: false } si rien n'est
+// fait (refus, annulation, erreur dite).
+async function poserGrille({ grille: g, cibles = [], articles = [], remplacer = false, toast }) {
+  const { aPoser, aRemplacer, ignores } = repartirGrille({ grille: g, cibles, articles, remplacer })
+  const tous = [...aPoser, ...aRemplacer]
+  if (tous.length === 0) {
+    toast(ignores.length ? 'Ces articles ont déjà une autre grille : coche « Remplacer leur grille » pour l’écraser.' : 'Aucun article à équiper : ils ont déjà cette grille.', 'error')
+    return { ok: false }
+  }
+  if (aRemplacer.length > 0) {
+    const n = aRemplacer.length
+    const okGrille = await confirme(confirmationSimple({
+      titre: `Remplacer la grille de ${n === 1 ? '1 article' : `${n} articles`} ?`,
+      message: 'Leurs variantes, leurs prix par variante et leurs stocks actuels sont supprimés, puis remplacés par cette grille, à stock zéro. Les commandes déjà passées ne changent pas.',
+      action: 'Oui, remplacer',
+    }))
+    if (!okGrille) return { ok: false }
+  }
+  // Les combinaisons d'avant partent (celles d'une grille remplacée, et les
+  // restes invisibles d'un article dont les variantes étaient coupées) :
+  // une combinaison n'existe qu'une fois par article.
+  const { error: errSup } = await supabase.from('article_variantes').delete().in('article_id', tous)
+  if (errSup) { toast(`Les anciennes combinaisons n’ont pas pu être retirées : ${errSup.message}`, 'error'); return { ok: false } }
+  const { error: errAxes } = await supabase.from('articles').update(axesDeGrille(g)).in('id', tous)
+  if (errAxes) { toast(`La grille n’a pas pu être posée : ${errAxes.message}`, 'error'); return { ok: false, partiel: true } }
+  const lignes = tous.flatMap(id => combinaisonsDeGrille(g, id))
+  const { error: errComb } = await supabase.from('article_variantes').insert(lignes)
+  if (errComb) { toast(`La grille est posée mais ses combinaisons n’ont pas pu être créées : ${errComb.message}`, 'error'); return { ok: false, partiel: true } }
+  toast(`Grille posée sur ${tous.length === 1 ? '1 article' : `${tous.length} articles`}, à stock zéro${ignores.length ? ` (${ignores.length} ignoré${ignores.length > 1 ? 's' : ''} : autre grille)` : ''}.`)
+  return { ok: true, combien: tous.length, ignores: ignores.length }
+}
+
+// ─── LES ACTIONS GROUPÉES DE LA PERSONNALISATION (22/10, Alex) ──────────────
+// Cocher des articles, puis : poser une grille de variantes, poser ou retirer
+// un groupe d'options, ou mettre le stock d'UNE variante (« toutes les M à
+// 2 ») sur tous. Les mêmes écritures que leurs écrans (`poserGrille`,
+// `ecrireCopiesDeGroupe`), relues.
+const ACTIONS_LOT_PERSO = ['grille', 'groupe', 'stock_variante']
+
+function LotPersonnalisation({ action, articles = [], lotIds = [], tousLesGroupes = [], groupesParArticle = {}, toast, onFini }) {
+  const [cleGrille, setCleGrille] = useState('')
+  const [remplacer, setRemplacer] = useState(false)
+  const [nomGroupe, setNomGroupe] = useState('')
+  const [modeGroupe, setModeGroupe] = useState('poser')
+  const [cibleVar, setCibleVar] = useState('')
+  const [qte, setQte] = useState('')
+  const [envoi, setEnvoi] = useState(false)
+  const ids = lotIds.map(String)
+  const vises = articles.filter(a => ids.includes(String(a.id)))
+  const grilles = bibliothequeDeGrilles(articles)
+  const biblio = bibliothequeDeGroupes(tousLesGroupes)
+  const ciblesVar = ciblesVariantesDuLot(vises)
+  const champ = { ...s.input, width: 'auto', maxWidth: '100%', cursor: 'pointer', fontSize: 13 }
+
+  // Ce que l'enregistrement fera, en une phrase, avant le clic.
+  let phrase = ''
+  let pret = false
+  if (action === 'grille') {
+    const g = grilles.find(x => x.cle === cleGrille)
+    if (!g) phrase = grilles.length ? 'Choisis la grille à poser.' : 'Aucune grille encore : crée-en une sur un article (Personnalisation).'
+    else {
+      const rep = repartirGrille({ grille: g, cibles: lotIds, articles, remplacer })
+      const n = rep.aPoser.length + rep.aRemplacer.length
+      pret = n > 0
+      phrase = n === 0
+        ? (rep.ignores.length ? `${rep.ignores.length === 1 ? '1 article a' : `${rep.ignores.length} articles ont`} déjà une autre grille : coche « Remplacer leur grille ».` : 'Ces articles ont déjà cette grille.')
+        : `La grille sera posée sur ${n === 1 ? '1 article' : `${n} articles`}${rep.aRemplacer.length ? `, dont ${rep.aRemplacer.length} remplacée${rep.aRemplacer.length > 1 ? 's' : ''}` : ''}, à stock zéro${rep.ignores.length ? `. ${rep.ignores.length} ignoré${rep.ignores.length > 1 ? 's' : ''} (autre grille)` : ''}.`
+    }
+  } else if (action === 'groupe') {
+    const e = biblio.find(x => x.nom === nomGroupe)
+    if (!e) phrase = biblio.length ? 'Choisis le groupe d’options.' : 'Aucun groupe encore : crée-en un dans Personnalisation.'
+    else if (modeGroupe === 'poser') {
+      const conflits = conflitsDeGroupe(e.nom, lotIds, groupesParArticle)
+      const aCopier = repartirCibles(lotIds, conflits).aCopier
+      pret = aCopier.length > 0
+      phrase = aCopier.length === 0 ? `Ces articles ont déjà « ${e.nom} ».` : `« ${e.nom} » sera posé sur ${aCopier.length === 1 ? '1 article' : `${aCopier.length} articles`}${conflits.length ? ` (${conflits.length} l’avai${conflits.length > 1 ? 'ent' : 't'} déjà)` : ''}.`
+    } else {
+      const copies = (e.copies || []).filter(g => ids.includes(String(g.article_id)))
+      pret = copies.length > 0
+      phrase = copies.length === 0 ? `Aucun de ces articles n’a « ${e.nom} ».` : `« ${e.nom} » sera retiré de ${copies.length === 1 ? '1 article' : `${copies.length} articles`}, avec ses options.`
+    }
+  } else if (action === 'stock_variante') {
+    const c = ciblesVar.find(x => x.cle === cibleVar)
+    const q = quantiteSaisie(qte)
+    if (ciblesVar.length === 0) phrase = 'Aucun des articles cochés n’a de variantes.'
+    else if (!c) phrase = 'Choisis la variante.'
+    else if (q === null) phrase = 'Indique le stock : un nombre entier, 0 ou plus.'
+    else { pret = true; phrase = `« ${c.libelle} » passera à ${q} sur ${c.articles === 1 ? '1 article' : `${c.articles} articles`}.` }
+  }
+
+  async function enregistrer() {
+    if (envoi || !pret) return
+    setEnvoi(true)
+    try {
+      if (action === 'grille') {
+        const g = grilles.find(x => x.cle === cleGrille)
+        const r = await poserGrille({ grille: g, cibles: lotIds, articles, remplacer, toast })
+        if (r.ok || r.partiel) onFini?.({ articles: true })
+        return
+      }
+      if (action === 'groupe') {
+        const e = biblio.find(x => x.nom === nomGroupe)
+        if (modeGroupe === 'poser') {
+          const aCopier = repartirCibles(lotIds, conflitsDeGroupe(e.nom, lotIds, groupesParArticle)).aCopier
+          const r = await ecrireCopiesDeGroupe(e.modele, aCopier, groupesParArticle)
+          onFini?.({ groupes: aCopier })
+          if (!r.ok) { toast(r.erreur, 'error'); return }
+          toast(`« ${e.nom} » posé sur ${r.combien === 1 ? '1 article' : `${r.combien} articles`}.`)
+          direSansParent(toast, r, articles)
+          return
+        }
+        const copies = (e.copies || []).filter(g => ids.includes(String(g.article_id)))
+        const emportes = phraseEnfantsEmportes(copies.flatMap(g => enfantsDe((g.valeurs || []).map(v => v.id), groupesParArticle[String(g.article_id)] || []).map(f => f.nom)))
+        // ⚠️ UN NOM À LUI (`okRetraitLot`) : `okRetrait` vit déjà dans la
+        // bibliothèque, et une mutation qui le vise doit tomber sur elle.
+        const okRetraitLot = await confirme(confirmationSimple({
+          titre: `Retirer « ${e.nom} » de ${copies.length === 1 ? '1 article' : `${copies.length} articles`} ?`,
+          message: `Le groupe et ses options partent de ces articles.${emportes ? ` ${emportes}` : ''} Les commandes déjà passées ne changent pas.`,
+          action: 'Oui, retirer',
+        }))
+        if (!okRetraitLot) return
+        const { data, error } = await supabase.from('article_options_groupes').delete().in('id', copies.map(g => g.id)).select('id')
+        onFini?.({ groupes: copies.map(g => g.article_id) })
+        if (error || (data?.length || 0) !== copies.length) { toast(`Retrait incomplet : ${error?.message || 'refusé par les permissions'}.`, 'error'); return }
+        toast(`« ${e.nom} » retiré de ${copies.length === 1 ? '1 article' : `${copies.length} articles`}.`)
+        return
+      }
+      if (action === 'stock_variante') {
+        const c = ciblesVar.find(x => x.cle === cibleVar)
+        const q = quantiteSaisie(qte)
+        const col = c.axe === 2 ? 'axe2_valeur' : 'axe1_valeur'
+        const avecVariantes = vises.filter(a => a.gere_variantes).map(a => a.id)
+        const { data, error } = await supabase.from('article_variantes').update({ stock: q })
+          .in('article_id', avecVariantes).eq(col, c.valeur).select('id')
+        onFini?.({ variantes: true })
+        if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+        if (!data?.length) { toast(`Aucune variante « ${c.libelle} » n’a été trouvée sur ces articles (génère d’abord leurs combinaisons).`, 'error'); return }
+        toast(`« ${c.libelle} » à ${q} : ${data.length === 1 ? '1 variante modifiée' : `${data.length} variantes modifiées`}.`)
+      }
+    } finally {
+      setEnvoi(false)
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      {action === 'grille' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          <select value={cleGrille} onChange={e => setCleGrille(e.target.value)} aria-label="Grille à poser" style={champ}>
+            <option value="">— Choisis une grille —</option>
+            {grilles.map(g => <option key={g.cle} value={g.cle}>{libelleDeGrille(g)}</option>)}
+          </select>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.ink, cursor: 'pointer' }}>
+            <input type="checkbox" checked={remplacer} onChange={e => setRemplacer(e.target.checked)} style={{ width: 15, height: 15 }}/>
+            Remplacer leur grille s&rsquo;ils en ont déjà une
+          </label>
+        </div>
+      )}
+      {action === 'groupe' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          <select value={nomGroupe} onChange={e => setNomGroupe(e.target.value)} aria-label="Groupe d’options" style={champ}>
+            <option value="">— Choisis un groupe —</option>
+            {biblio.map(e => <option key={e.nom} value={e.nom}>{e.nom}</option>)}
+          </select>
+          {[['poser', 'Le poser'], ['retirer', 'Le retirer']].map(([m, l]) => (
+            <button key={m} type="button" onClick={() => setModeGroupe(m)} aria-pressed={modeGroupe === m}
+              style={{ ...s.btn, padding: '6px 12px', fontSize: 12, background: modeGroupe === m ? T.bgPanel : '#fff', color: modeGroupe === m ? '#fff' : T.ink, border: `1.5px solid ${modeGroupe === m ? T.bgPanel : T.hairline}` }}>{l}</button>
+          ))}
+        </div>
+      )}
+      {action === 'stock_variante' && ciblesVar.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          <select value={cibleVar} onChange={e => setCibleVar(e.target.value)} aria-label="Variante" style={champ}>
+            <option value="">— Choisis la variante —</option>
+            {ciblesVar.map(c => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
+          </select>
+          <input type="number" min="0" step="1" value={qte} onChange={e => setQte(e.target.value)} placeholder="Stock" aria-label="Stock"
+            style={{ ...s.input, width: 90, fontSize: 13, textAlign: 'center' }}/>
+        </div>
+      )}
+      <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>{phrase}</p>
+      <button style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        onClick={enregistrer} disabled={envoi || !pret}>
+        Appliquer{envoi && <DotsAttente couleur="#fff" taille={4} label="Enregistrement"/>}
+      </button>
+    </div>
+  )
+}
+
 function BibliothequeGrilles({ articles = [], toast, onApplique }) {
   const [choisie, setChoisie] = useState(null)
   const [cibles, setCibles] = useState([])
@@ -2699,43 +2908,20 @@ function BibliothequeGrilles({ articles = [], toast, onApplique }) {
 
   async function appliquer(g) {
     if (envoi) return
-    const { aPoser, aRemplacer, ignores } = repartirGrille({ grille: g, cibles, articles, remplacer })
-    const tous = [...aPoser, ...aRemplacer]
-    if (tous.length === 0) {
-      toast(ignores.length ? 'Ces articles ont déjà une autre grille : coche « Remplacer leur grille » pour l’écraser.' : 'Coche au moins un article.', 'error')
-      return
-    }
-    if (aRemplacer.length > 0) {
-      const n = aRemplacer.length
-      const okGrille = await confirme(confirmationSimple({
-        titre: `Remplacer la grille de ${n === 1 ? '1 article' : `${n} articles`} ?`,
-        message: 'Leurs tailles, leurs prix par taille et leurs stocks actuels sont supprimés, puis remplacés par cette grille, à stock zéro. Les commandes déjà passées ne changent pas.',
-        action: 'Oui, remplacer',
-      }))
-      if (!okGrille) return
-    }
     setEnvoi(true)
-    // Les combinaisons d'avant partent (celles d'une grille remplacée, et les
-    // restes invisibles d'un article dont les variantes étaient coupées) :
-    // une combinaison n'existe qu'une fois par article.
-    const { error: errSup } = await supabase.from('article_variantes').delete().in('article_id', tous)
-    if (errSup) { setEnvoi(false); toast(`Les anciennes combinaisons n’ont pas pu être retirées : ${errSup.message}`, 'error'); return }
-    const { error: errAxes } = await supabase.from('articles').update(axesDeGrille(g)).in('id', tous)
-    if (errAxes) { setEnvoi(false); toast(`La grille n’a pas pu être posée : ${errAxes.message}`, 'error'); onApplique?.(); return }
-    const lignes = tous.flatMap(id => combinaisonsDeGrille(g, id))
-    const { error: errComb } = await supabase.from('article_variantes').insert(lignes)
+    const r = await poserGrille({ grille: g, cibles, articles, remplacer, toast })
     setEnvoi(false)
-    onApplique?.()
-    if (errComb) { toast(`La grille est posée mais ses combinaisons n’ont pas pu être créées : ${errComb.message}`, 'error'); return }
-    setChoisie(null); setCibles([]); setRemplacer(false)
-    toast(`Grille posée sur ${tous.length === 1 ? '1 article' : `${tous.length} articles`}, à stock zéro${ignores.length ? ` (${ignores.length} ignoré${ignores.length > 1 ? 's' : ''} : autre grille)` : ''}.`)
+    if (r.ok || r.partiel) onApplique?.()
+    if (r.ok) { setChoisie(null); setCibles([]); setRemplacer(false) }
   }
 
   return (
     <div style={{ ...s.card, padding: 14, marginBottom: 16 }}>
-      <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1.2px', margin: '0 0 4px' }}>Tes grilles de tailles</p>
+      {/* (22/10, Alex : « penser large ») Une variante n'est pas qu'une
+          taille : couleur, modèle, longueur, parfum… */}
+      <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1.2px', margin: '0 0 4px' }}>Tes grilles de variantes</p>
       <p style={{ fontSize: 12, color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
-        Pose une grille déjà utilisée sur d&rsquo;autres articles, sans la réécrire. Les tailles naissent à stock zéro.
+        Tailles, couleurs, modèles… Pose une grille déjà utilisée sur d&rsquo;autres articles, sans la réécrire. Les variantes naissent à stock zéro.
       </p>
       <div style={{ display: 'grid', gap: 8 }}>
         {grilles.map(g => {
@@ -4084,10 +4270,10 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
     const next = list.filter(x => x !== val)
     const combos = variantesDeLaValeur(variantes, axe, val)
     if (combos.length > 0) {
-      const okRetrait = await confirme(confirmationSimple({
+      const okRetraitValeur = await confirme(confirmationSimple({
         titre: `Retirer « ${val} » ?`, message: phraseRetraitValeur(val, combos), action: 'Oui, retirer',
       }))
-      if (!okRetrait) return
+      if (!okRetraitValeur) return
       const { data, error } = await supabase.from('article_variantes').delete().in('id', combos.map(v => v.id)).select('id')
       if (error || (data?.length || 0) !== combos.length) { toast(`Retrait incomplet : ${error?.message || 'refusé par les permissions'}. Recharge la page.`, 'error'); fetchVariantes(); return }
     }
@@ -4258,20 +4444,23 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
           <input value={nom} onChange={e => setNom(e.target.value)} onBlur={() => saveNom(n)} placeholder={n === 1 ? 'Taille' : 'Couleur'} style={{ ...s.input, fontSize: 12, padding: '5px 8px', width: 130 }}/>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-          {/* (21/10) Ranger (‹ ›), renommer (✎) sans perdre le stock, retirer
-              (×, ses combinaisons partent après confirmation). */}
-          {valeurs.map((val, i) => (
-            <span key={val} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 6px 3px 6px', fontSize: 12 }}>
-              <button type="button" onClick={() => bougerValeur(n, val, -1)} disabled={i === 0} aria-label={`Avancer ${val}`} title="Avancer"
-                style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? T.hairline : T.muted, fontSize: 12, padding: '0 2px', lineHeight: 1 }}>‹</button>
-              <span style={{ color: T.ink, fontWeight: 600, padding: '0 2px' }}>{val}</span>
-              <button type="button" onClick={() => bougerValeur(n, val, 1)} disabled={i === valeurs.length - 1} aria-label={`Reculer ${val}`} title="Reculer"
-                style={{ background: 'none', border: 'none', cursor: i === valeurs.length - 1 ? 'default' : 'pointer', color: i === valeurs.length - 1 ? T.hairline : T.muted, fontSize: 12, padding: '0 2px', lineHeight: 1 }}>›</button>
+          {/* (21/10) Ranger, renommer (✎) sans perdre le stock, retirer (×,
+              ses combinaisons partent après confirmation). (22/10, Alex) Les
+              flèches ← → bien visibles : l'ordre de la fiche n'est plus
+              celui de l'encodage. */}
+          {valeurs.map((val, i) => {
+            const fleche = (actif) => ({ width: 22, height: 22, borderRadius: 7, border: `1px solid ${actif ? T.hairline : 'transparent'}`, background: actif ? '#F8F6FF' : 'transparent', cursor: actif ? 'pointer' : 'default', color: actif ? T.deep : T.hairline, fontSize: 13, fontWeight: 800, padding: 0, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' })
+            return (
+            <span key={val} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 6px', fontSize: 12 }}>
+              <button type="button" onClick={() => bougerValeur(n, val, -1)} disabled={i === 0} aria-label={`Avancer ${val}`} title="Avancer" style={fleche(i > 0)}>←</button>
+              <span style={{ color: T.ink, fontWeight: 700, padding: '0 3px' }}>{val}</span>
+              <button type="button" onClick={() => bougerValeur(n, val, 1)} disabled={i === valeurs.length - 1} aria-label={`Reculer ${val}`} title="Reculer" style={fleche(i < valeurs.length - 1)}>→</button>
               <button type="button" onClick={() => renommerUneValeur(n, val)} aria-label={`Renommer ${val}`} title="Renommer"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, fontSize: 11, padding: '0 2px', lineHeight: 1 }}>✎</button>
               <button type="button" onClick={() => removeValeur(n, val)} aria-label={`Retirer ${val}`} title="Retirer" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
             </span>
-          ))}
+            )
+          })}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <input value={input} onChange={e => setInput(e.target.value)}
@@ -4932,8 +5121,8 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
         </div>
       </div>
       {showOptions && (estDetail || estVitrine) && <VariantesArticle article={a} articles={articles} onChange={onVariantesChange} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
-      {/* (21/10, lot C) Les options aussi en détail, pour un article SANS tailles. */}
-      {showOptions && (!(estDetail || estVitrine) || !a.gere_variantes) && <OptionsArticle articleId={a.id} articles={articles} onCopie={onCopieOptions} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+      {/* ✅ (22/10, Alex) Les options aussi en détail, avec ou sans variantes. */}
+      {showOptions && <OptionsArticle articleId={a.id} articles={articles} onCopie={onCopieOptions} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
     </div>
   )
 }

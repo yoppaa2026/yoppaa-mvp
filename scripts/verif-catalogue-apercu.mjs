@@ -113,8 +113,14 @@ const v = (nom, cond, detail = '') => {
   v('et elle est marquée comme telle', sans.vide === true)
 
   const varVide = apercuContenu({ variantes: true, article: { gere_variantes: false } })
+  // ⚠️ REPOINTÉE LE 22/10 (Alex) : en boutique, la ligne dit les variantes
+  // ET les options ; rien des deux se dit « Ni variantes ni options ».
   v('côté variantes, l’absence se dit avec ses mots',
-    varVide.texte === 'Pas de variantes' && varVide.vide === true, JSON.stringify(varVide))
+    varVide.texte === 'Ni variantes ni options' && varVide.vide === true, JSON.stringify(varVide))
+  const varEtOptions = apercuContenu({ variantes: true, article: { gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['S'] },
+    groupes: [{ nom: 'Emballage cadeau', valeurs: [{ nom: 'Oui' }] }] })
+  v('🔴 en boutique, un groupe d’options se lit à côté des variantes (l’emballage cadeau n’est plus invisible)',
+    /Taille \(1\)/.test(varEtOptions.texte) && /Emballage cadeau/.test(varEtOptions.texte) && varEtOptions.vide === false, JSON.stringify(varEtOptions))
   const varPleine = apercuContenu({
     variantes: true,
     article: { gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['S', 'M'] },
@@ -211,9 +217,11 @@ const v = (nom, cond, detail = '') => {
     && !/select\('id, article_id, nom, type, obligatoire, valeurs:article_options_valeurs\(\*\)'\)/.test(config))
   // ⚠️ REPOINTÉE LE 10/10 : CINQ lectures (« + Nouveau groupe » s'ajoute), toutes
   // sur les groupes du parent ; aucune ne lit la base pour son compte.
+  // ⚠️ REPOINTÉE LE 22/10 : SEPT (+ le lot « Poser un groupe », qui lit au
+  // résumé et à l'écriture), toujours sur les groupes du parent.
   v('les conflits se lisent sur les groupes du parent',
-    (config.match(/conflitsDeGroupe\([^)]*groupesParArticle\)/g) || []).length === 5
-    && (config.match(/conflitsDeGroupe\(/g) || []).length === 5,
+    (config.match(/conflitsDeGroupe\([^)]*groupesParArticle\)/g) || []).length === 7
+    && (config.match(/conflitsDeGroupe\(/g) || []).length === 7,
     String((config.match(/conflitsDeGroupe\([^)]*groupesParArticle\)/g) || []).length))
   v('la bibliothèque consomme cette lecture au lieu de la refaire',
     /function BibliothequeGroupes\(\{ articles = \[\], toast, onApplique, tousLesGroupes = \[\], groupesParArticle = \{\} \}\)/.test(config))

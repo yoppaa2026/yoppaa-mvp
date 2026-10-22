@@ -358,7 +358,10 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   v('🔴 fiche : le choix suit les bornes du serveur et le prix selon la taille',
     /const r = basculerValeur\(selections, groupe, valeur, groupes\)/.test(fiche)
     && /groupesActifs\(groupes, selections\)\.forEach\(g => \{\s*const refus = refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\s*if \(refus\) \{ errs\[g\.id\] = refus; ok = false \}/.test(fiche)
-    && /setErreurs\(errs\)\s*if \(!ok\) return\s*const choix = purgerInactifs\(selections, groupes\)\s*onAjouter\(article, Object\.keys\(choix\)\.length > 0 \? choix : null\)/.test(fiche)
+    // ⚠️ REPOINTÉE LE 22/10 : la règle vit dans `useChoixOptions`, partagée
+    // par les options seules et les variantes + options.
+    && /setErreurs\(errs\)\s*if \(!ok\) return false\s*const choix = purgerInactifs\(selections, groupes\)\s*return Object\.keys\(choix\)\.length > 0 \? choix : null/.test(fiche)
+    && /const choix = valider\(\)\s*if \(choix === false\) return\s*onAjouter\(article, choix\)/.test(fiche)
     && /const supplement = supplementDeSelection\(selections, groupes\)/.test(fiche) && /prixDeValeur\(v, idsChoisis\)/.test(fiche))
   v('🔴 fiche : le total à l’écran reçoit les prix par taille, et plus aucun prix unique additionné à la main',
     /prixTaille: prixTailleDesGroupes\(Object\.values\(optionsParArticle \|\| \{\}\)\.flat\(\)\),/.test(fiche)
@@ -546,8 +549,38 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   v('l’option qui fait apparaître un groupe se retrouve (pour « avec « Menu » »)',
     OC.optionParente(gBoisson, [gMenu, gBoisson])?.valeur?.id === 'vMenu' && OC.optionParente(gMenu, [gMenu]) === null)
 
+  // ✅ (22/10, Alex) VARIANTES + OPTIONS : « une robe en 38, et l'emballage
+  // cadeau ». Une version exige ses options comme un article simple, et le
+  // stock d'une version compte toutes ses lignes.
+  const robe = { id: 'r1', nom: 'Robe', prix: 30, actif: true, commercant_id: 'c1', tva_taux: 21, temps_prepa: 0, gere_variantes: true }
+  const v38 = { id: 'v38', article_id: 'r1', axe1_valeur: '38', stock: 1, actif: true, prix: null }
+  const gEmb = { id: 'gE', article_id: 'r1', nom: 'Emballage', obligatoire: true, type: 'unique', depend_de_valeur_id: null }
+  const valsR = [val('vOui', gEmb, 'Avec emballage', 1.5), val('vNon', gEmb, 'Sans emballage')]
+  const c3 = (panier) => construireLignesCommande({
+    panier, articlesData: [robe], optionsValeurs: valsR, variantesData: [v38], dealsData: [],
+    commercant, regime: 'emporter', dateCommande: JOUR, groupesOptions: [gEmb],
+  })
+  const sansChoix = c3([{ id: 'r1', quantite: 1, variante_id: 'v38' }])
+  v('🔴 une version exige ses options obligatoires (comme un article simple)',
+    !sansChoix.ok && sansChoix.option_manquante === true, JSON.stringify(sansChoix))
+  const avecEmb = c3([{ id: 'r1', quantite: 1, variante_id: 'v38', options: [{ valeur_ids: ['vOui'] }] }])
+  v('🔴 version + option : 30 + 1,50 = 31,50 €, la version d’abord sur le ticket',
+    avecEmb.ok && avecEmb.totalCents === 3150 && avecEmb.lignes[0].options.map(o => o.valeur_nom).join(',') === '38,Avec emballage', JSON.stringify(avecEmb))
+  const deuxLignes = c3([
+    { id: 'r1', quantite: 1, variante_id: 'v38', options: [{ valeur_ids: ['vOui'] }] },
+    { id: 'r1', quantite: 1, variante_id: 'v38', options: [{ valeur_ids: ['vNon'] }] },
+  ])
+  v('🔴 la même version sur deux lignes (emballée et nue) : le stock de 1 compte les deux, refusé',
+    !deuxLignes.ok && /Stock insuffisant/.test(deuxLignes.error), JSON.stringify(deuxLignes))
+
   // Les écrans branchent ces règles.
   const fiche = code('app/commander/[slug]/page.js')
+  v('🔴 fiche : la version et ses options se choisissent ensemble, le panier compte toutes les lignes d’une version',
+    /function VariantesSelector\(\{ article, variantes, groupes = \[\], onAjouter \}\)/.test(fiche)
+    && /const choix = groupes\.length > 0 \? options\.valider\(\) : null\s*if \(choix === false\) return\s*onAjouter\(article, varianteChoisie, choix\)/.test(fiche)
+    && /<VariantesSelector article=\{article\} variantes=\{variantes\} groupes=\{groupes\}/.test(fiche)
+    && /if \(\(variante\.stock \?\? 0\) <= qteDeLaVariante\(variante\.id\)\) return/.test(fiche)
+    && /if \(\(item\.variante\.stock \?\? 0\) <= qteDeLaVariante\(item\.variante\.id\)\) return/.test(fiche))
   v('🔴 fiche : un groupe dépendant s’affiche en retrait, la carte à lire dit « avec … »',
     /const sousGroupe = estDependant\(g\)/.test(fiche) && /optionParente\(g, groupes\) && <span/.test(fiche))
   v('🔴 le catalogue de l’encodage lit la condition d’affichage',

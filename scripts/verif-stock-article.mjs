@@ -202,7 +202,8 @@ const code = (f) => sansProse(lire(f))
   // ⚠️ REPOINTÉES LE 15/10 : la carte à lire d'un commerce où l'on ne commande
   // pas (`modeVitrine`, Alex, le Bistrologue) suit la même règle que la vitrine.
   v('🔴 en vitrine, le sélecteur d’ACHAT des versions ne s’ouvre pas', /\{showOptions && hasVariantes && !article\.est_vitrine && !modeVitrine && \(\s*<VariantesSelector/.test(fiche))
-  v('en vitrine, les versions se lisent', /\{showOptions && hasVariantes && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<VariantesVitrine/.test(fiche) && /function VariantesVitrine\(/.test(fiche))
+  // ⚠️ REPOINTÉE LE 22/10 : les versions ET leurs options se lisent.
+  v('en vitrine, les versions se lisent', /\{showOptions && hasVariantes && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<>\s*<VariantesVitrine/.test(fiche) && /function VariantesVitrine\(/.test(fiche))
   // ⚠️ RÉORIENTÉE LE 07/10 : `!etatJour` suit sur les deux pastilles (l'article
   // hors du jour choisi a sa propre ligne). La condition vitrine reste visée.
   v('🔴 en vitrine, aucune pastille de stock', /\{hasVariantes && !article\.est_vitrine && !etatJour \? \(\(\) => \{/.test(fiche) && /\{!hasVariantes && stockGere && !article\.est_vitrine && !etatJour && \(\(\) => \{/.test(fiche))
@@ -701,7 +702,8 @@ const code = (f) => sansProse(lire(f))
   const arts = [{ id: 1, gere_variantes: true, stock_mode: 'magasin' }, { id: 2, gere_variantes: false, stock_mode: 'magasin' }]
   const vl = L.variantesDuLot({ action: 'stock', articles: arts, valeur: { mode: 'magasin', quantite: '4' } })
   v('🔴 « Stock 4 » en lot pose 4 sur chaque taille des articles à tailles',
-    vl.ids.join() === '1' && vl.quantite === 4 && /chaque taille passera à 4/.test(L.phraseVariantesDuLot(vl)))
+    // (22/10, Alex : « penser large ») la phrase dit « variante », pas « taille ».
+    vl.ids.join() === '1' && vl.quantite === 4 && /chaque variante passera à 4/.test(L.phraseVariantesDuLot(vl)))
   v('« Sans limite » ou une autre action ne touche aucune taille',
     L.variantesDuLot({ action: 'stock', articles: arts, valeur: { mode: 'illimite' } }).ids.length === 0
     && L.variantesDuLot({ action: 'prix', articles: arts, valeur: 5 }).ids.length === 0)
@@ -709,7 +711,8 @@ const code = (f) => sansProse(lire(f))
   v('🔴 l’action groupée écrit le stock des tailles, relu',
     /\.from\('article_variantes'\)\s*\.update\(\{ stock: varLot\.quantite \}\)\.in\('article_id', varLot\.ids\)\.select\('id'\)/.test(bord))
   v('🔴 retirer une valeur supprime ses combinaisons après confirmation',
-    /const combos = variantesDeLaValeur\(variantes, axe, val\)\s*if \(combos\.length > 0\) \{\s*const okRetrait = await confirme\(/.test(bord)
+    /const combos = variantesDeLaValeur\(variantes, axe, val\)\s*if \(combos\.length > 0\) \{\s*const okRetraitValeur = await confirme\(/.test(bord)
+    && /if \(!okRetraitValeur\) return/.test(bord)
     && /\.from\('article_variantes'\)\.delete\(\)\.in\('id', combos\.map\(v => v\.id\)\)\.select\('id'\)/.test(bord))
   v('🔴 renommer met à jour les combinaisons (stock gardé), pas de recréation',
     /\.from\('article_variantes'\)\.update\(\{ \[col\]: r\.nom \}\)\.in\('id', combos\.map\(v => v\.id\)\)\.select\('id'\)/.test(bord))
@@ -746,6 +749,37 @@ const code = (f) => sansProse(lire(f))
     /if \(aRemplacer\.length > 0\) \{\s*const n = aRemplacer\.length\s*const okGrille = await confirme\(/.test(bord)
     && bord.indexOf(".from('article_variantes').delete().in('article_id', tous)") > -1
     && bord.indexOf(".from('article_variantes').delete().in('article_id', tous)") < bord.indexOf('const lignes = tous.flatMap(id => combinaisonsDeGrille(g, id))'))
+  // (22/10) La grille en double : un nom d'axe 2 sans valeur ne compte pas.
+  const doublon = G.bibliothequeDeGrilles([
+    { id: 1, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['36', '38'], axe2_nom: 'Couleur', axe2_valeurs: [] },
+    { id: 2, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['36', '38'], axe2_nom: null, axe2_valeurs: [] },
+    { id: 3, gere_variantes: true, axe1_nom: null, axe1_valeurs: ['36', '38'] },
+  ])
+  v('🔴 une seule grille « Taille : 36 · 38 » (nom d’axe 2 sans valeur, nom d’axe 1 vide = Taille)',
+    doublon.length === 1 && doublon[0].articles.join() === '1,2,3' && G.libelleDeGrille(doublon[0]) === 'Taille : 36 · 38', JSON.stringify(doublon))
+  // (22/10) « Stock d'une variante » sur plusieurs articles : chaque valeur une fois.
+  const cv = G.ciblesVariantesDuLot([
+    { id: 1, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['S', 'M'], axe2_nom: 'Couleur', axe2_valeurs: ['Bleu'] },
+    { id: 2, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['M'] },
+    { id: 3, gere_variantes: false, axe1_valeurs: ['XL'] },
+  ])
+  v('🔴 les variantes proposées en lot : chaque valeur une fois, avec le nombre d’articles, sans les articles sans variantes',
+    cv.map(c => `${c.libelle}:${c.articles}`).join() === 'Taille S:1,Taille M:2,Couleur Bleu:1', JSON.stringify(cv))
+  // Les actions groupées (22/10, tableau d'Alex).
+  v('🔴 actions groupées : intitulés Visible / Commandable, « Temps de préparation » hors boutique, nouvelles actions de personnalisation',
+    bord.includes("{ val: 'disponible', label: 'Afficher sur ta fiche' }") && bord.includes("{ val: 'indisponible', label: 'Masquer de ta fiche' }")
+    && bord.includes("{ val: 'vente', label: 'Commandable en ligne ou vitrine' }")
+    && /\.\.\.\(!variantesCategorie \? \[\{ val: 'temps_prepa', label: 'Temps de préparation' \}\] : \[\]\)/.test(bord)
+    && bord.includes("{ val: 'grille', label: 'Poser une grille de variantes' }") && bord.includes("{ val: 'stock_variante', label: 'Stock d’une variante' }")
+    && bord.includes("{ val: 'groupe', label: 'Poser ou retirer un groupe d’options' }"))
+  v('🔴 « Stock d’une variante » en lot écrit la valeur choisie sur les articles cochés, relu',
+    /\.from\('article_variantes'\)\.update\(\{ stock: q \}\)\s*\.in\('article_id', avecVariantes\)\.eq\(col, c\.valeur\)\.select\('id'\)/.test(bord))
+  v('🔴 « Poser une grille » en lot passe par la même écriture que la bibliothèque',
+    (bord.match(/await poserGrille\(\{ grille: g, cibles/g) || []).length === 2)
+  v('🔴 retirer un groupe en lot fait confirmer et relit',
+    /const okRetraitLot = await confirme\(confirmationSimple\(\{\s*titre: `Retirer « \$\{e\.nom\} » de/.test(bord)
+    && /if \(!okRetraitLot\) return/.test(bord)
+    && /\.from\('article_options_groupes'\)\.delete\(\)\.in\('id', copies\.map\(g => g\.id\)\)\.select\('id'\)/.test(bord))
   // La galerie d'un nouvel article (tous les métiers).
   v('🔴 la galerie s’ouvre dès la création : la photo attend l’article, puis s’y rattache',
     !/\{editId && \(\s*<ChampFormulaire label=\{`Galerie/.test(bord)

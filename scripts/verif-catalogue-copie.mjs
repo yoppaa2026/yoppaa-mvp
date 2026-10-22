@@ -630,8 +630,9 @@ const v = (nom, cond, detail = '') => {
   // l'un des deux se remettait à écrire pour son compte, cette garde le dirait.
   // ⚠️ REPOINTÉE LE 10/10 : TROIS écrans (« + Nouveau groupe » s'ajoute au
   // panneau d'un article et à la bibliothèque), toujours par la même écriture.
-  v('les trois écrans passent par l’écriture partagée',
-    (config.match(/await ecrireCopiesDeGroupe\(/g) || []).length === 3,
+  // ⚠️ REPOINTÉE LE 22/10 : QUATRE (+ « Poser un groupe d'options » en lot).
+  v('les quatre écrans passent par l’écriture partagée',
+    (config.match(/await ecrireCopiesDeGroupe\(/g) || []).length === 4,
     String((config.match(/await ecrireCopiesDeGroupe\(/g) || []).length))
 
   // ─── LA BIBLIOTHÈQUE ─────────────────────────────────────────────────────
@@ -673,8 +674,11 @@ const v = (nom, cond, detail = '') => {
   v('la bibliothèque des groupes s’affiche pour tous les métiers, les grilles de tailles pour le détail et la vitrine',
     /\{articles\.length > 0 && \(\s*<BibliothequeGroupes/.test(config) && !/!variantesCategorie && articles\.length > 0 && \([\s\S]{0,120}<BibliothequeGroupes/.test(config)
     && /\{variantesCategorie && articles\.length > 0 && \(\s*<BibliothequeGrilles articles=\{articles\} toast=\{toast\} onApplique=\{\(\) => chargerVariantes\(\{ articles: true \}\)\}\/>/.test(config)
-    && /\{\(!variantesCategorie \|\| !a\.gere_variantes\) && <OptionsArticle /.test(config)
-    && /\{showOptions && \(!\(estDetail \|\| estVitrine\) \|\| !a\.gere_variantes\) && <OptionsArticle /.test(config))
+    // ⚠️ REPOINTÉE LE 22/10 (Alex : « tailles + options ») : les options
+    // s'affichent aussi sur un article à variantes, partout.
+    && /\{variantesCategorie && <VariantesArticle [^\n]*\n[\s\S]{0,300}?<OptionsArticle articleId=\{a\.id\} articles=\{articles\} onCopie=\{noterOptionsTouchees\}/.test(config)
+    && /\{showOptions && <OptionsArticle articleId=\{a\.id\}/.test(config)
+    && !/!a\.gere_variantes\) && <OptionsArticle /.test(config))
   // ⚠️ RIEN À MONTRER, RIEN À DIRE : un bloc vide ferait douter de l'écran.
   v('elle se tait quand aucun groupe n’existe encore',
     /if \(biblio\.length === 0\) return null/.test(biblioEcran))
@@ -1158,8 +1162,9 @@ const v = (nom, cond, detail = '') => {
     /parentParNom\(groupe, groupesParArticle\?\.\[String\(groupe\.article_id\)\] \|\| \[\]\)/.test(ecr)
     && /if \(groupe\?\.depend_de_valeur_id && parent === undefined && !parentVoulu\) \{/.test(ecr)
     && /copiesDuGroupe\(groupe, cibleIds,\s*parentVoulu \? \{ parent: parentVoulu, groupesParArticle: groupesParArticle \|\| \{\} \} : \{\}\)/.test(ecr))
-  v('🔴 les articles écartés sont dits, aux trois portes (nouveau groupe, appliquer, copier vers)',
-    (ecr.match(/direSansParent\(toast, r, articles\)/g) || []).length === 3)
+  // ⚠️ REPOINTÉE LE 22/10 : + l'action groupée « Poser un groupe d'options ».
+  v('🔴 les articles écartés sont dits, aux quatre portes (nouveau groupe, appliquer, copier vers, lot)',
+    (ecr.match(/direSansParent\(toast, r, articles\)/g) || []).length === 4)
   v('🔴 dupliquer un article garde la condition, rattachée à l’option de la COPIE',
     /const ordre = \[\.\.\.source\.filter\(g => !g\.depend_de_valeur_id\), \.\.\.source\.filter\(g => g\.depend_de_valeur_id\)\]/.test(ecr)
     && /parent \? \{ parent, groupesParArticle: \{ \[cree\.id\]: groupesCopie \} \} : \{\}/.test(ecr))

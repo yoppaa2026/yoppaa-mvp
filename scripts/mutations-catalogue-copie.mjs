@@ -27,8 +27,9 @@ const ECRAN = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
   // ─── (21/10, lot C) LES OPTIONS AUSSI EN DÉTAIL ──────────────────────────
-  { nom: '🔴 le détail perd les options d un article sans tailles',
-    fichier: ECRAN, de: '{(!variantesCategorie || !a.gere_variantes) && <OptionsArticle ', vers: '{!variantesCategorie && <OptionsArticle ' },
+  // ⚠️ ANCRE REPOINTÉE LE 22/10 : options ET variantes ensemble (Alex).
+  { nom: '🔴 une boutique ne voit plus les options sur la carte de ses articles',
+    fichier: ECRAN, de: '{showOptions && <OptionsArticle articleId={a.id}', vers: '{showOptions && !(estDetail || estVitrine) && <OptionsArticle articleId={a.id}' },
   { nom: '🔴 le détail perd la bibliothèque de grilles',
     fichier: ECRAN, de: '<BibliothequeGrilles articles={articles} toast={toast} onApplique={() => chargerVariantes({ articles: true })}/>', vers: '' },
   // ─── LE GROUPE DÉPENDANT (21/10) ─────────────────────────────────────────

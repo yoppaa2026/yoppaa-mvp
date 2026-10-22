@@ -58,7 +58,17 @@ const MUTATIONS = [
   { nom: '🔴 une grille posée naît avec du stock', fichier: 'lib/variantes-grille.js',
     de: '    lignes.push({ article_id: articleId, axe1_valeur: v1, axe2_valeur: v2, stock: 0, actif: true, ordre: lignes.length })', vers: '    lignes.push({ article_id: articleId, axe1_valeur: v1, axe2_valeur: v2, stock: 1, actif: true, ordre: lignes.length })' },
   { nom: '🔴 remplacer une grille ne se fait plus confirmer', fichier: BORD,
-    de: '      const okGrille = await confirme(confirmationSimple({', vers: '      const okGrille = true; void (({' },
+    // ⚠️ ANCRE REPOINTÉE LE 22/10 : l'écriture vit dans `poserGrille`.
+    de: '    const okGrille = await confirme(confirmationSimple({', vers: '    const okGrille = true; void (({' },
+  // ─── (22/10) RETOURS D'ALEX SUR LES LOTS B ET C ───────────────────────────
+  { nom: '🔴 un nom d axe 2 sans valeur refait une grille en double', fichier: 'lib/variantes-grille.js',
+    de: "v2.length ? cle(a?.axe2_nom).toLowerCase() : ''", vers: 'cle(a?.axe2_nom).toLowerCase()' },
+  { nom: '🔴 le lot « stock d une variante » propose les articles sans variantes', fichier: 'lib/variantes-grille.js',
+    de: '    if (!a?.gere_variantes) continue', vers: '' },
+  { nom: '🔴 « Temps de préparation » revient en boutique', fichier: BORD,
+    de: "...(!variantesCategorie ? [{ val: 'temps_prepa', label: 'Temps de préparation' }] : []),", vers: "{ val: 'temps_prepa', label: 'Temps de préparation' }," },
+  { nom: '🔴 le lot « stock d une variante » écrit toutes les variantes', fichier: BORD,
+    de: '.in(\'article_id\', avecVariantes).eq(col, c.valeur).select(\'id\')', vers: '.in(\'article_id\', avecVariantes).select(\'id\')' },
   // ─── LA RÈGLE ────────────────────────────────────────────────────────────
   { nom: '🔴 une valeur inconnue devient « sans limite »',
     fichier: LIB, de: "  return MODES_STOCK.includes(article?.stock_mode) ? article.stock_mode : 'jour'", vers: "  return MODES_STOCK.includes(article?.stock_mode) ? article.stock_mode : 'illimite'" },

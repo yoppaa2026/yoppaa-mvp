@@ -226,7 +226,11 @@ function SkeletonArticle() {
 
 // ─── Swipe retrait : version morte supprimée le 31/07 (la version vivante,
 // côté Yopper, vit dans app/commander/page.js) ────────────────────────────────
-function OptionsSelector({ article, groupes, onAjouter }) {
+// ─── LE CHOIX DES OPTIONS, PARTAGÉ (22/10) ──────────────────────────────────
+// Le même état et la même validation pour un article à options ET pour un
+// article à variantes qui a aussi des options (Alex, 22/10 : « tailles +
+// options », l'emballage cadeau d'une robe). Une seule règle, deux écrans.
+function useChoixOptions(groupes) {
   const [selections, setSelections] = useState({})
   const [erreurs, setErreurs] = useState({})
   // (13/10) Le nombre de choix et le prix selon la taille : la règle vit dans
@@ -238,6 +242,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
     setSelections(r.selections)
     setErreurs(p => ({ ...p, [groupe.id]: r.plein ? libelleBornes(groupe) : null }))
   }
+  // Rend le choix (null = aucune option), ou `false` si un groupe refuse.
   function valider() {
     const errs = {}; let ok = true
     // (21/10) Seuls les groupes affichés sont exigés : un groupe dépendant
@@ -247,17 +252,39 @@ function OptionsSelector({ article, groupes, onAjouter }) {
       if (refus) { errs[g.id] = refus; ok = false }
     })
     setErreurs(errs)
-    if (!ok) return
+    if (!ok) return false
     const choix = purgerInactifs(selections, groupes)
-    onAjouter(article, Object.keys(choix).length > 0 ? choix : null)
+    return Object.keys(choix).length > 0 ? choix : null
   }
-  const idsChoisis = Object.values(selections).flat().map(v => v.id)
   const supplement = supplementDeSelection(selections, groupes)
+  return { selections, erreurs, toggleValeur, valider, supplement }
+}
+
+function OptionsSelector({ article, groupes, onAjouter }) {
+  const { selections, erreurs, toggleValeur, valider, supplement } = useChoixOptions(groupes)
+  function ajouter() {
+    const choix = valider()
+    if (choix === false) return
+    onAjouter(article, choix)
+  }
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
       {/* Ni « ton » ni « ta » : le genre de l'article est inconnu (« ton
           Brochette », vu par Alex le 11/10). Libellé choisi par Alex. */}
       <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Ta personnalisation : {article.nom}</p>
+      <ListeGroupesOptions groupes={groupes} selections={selections} erreurs={erreurs} onToggle={toggleValeur}/>
+      <button onClick={ajouter}
+        style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44`, marginTop: 4 }}>
+        Ajouter à ma commande{supplement > 0 ? ` (+${euros(supplement)})` : ''}
+      </button>
+    </div>
+  )
+}
+
+function ListeGroupesOptions({ groupes, selections, erreurs, onToggle }) {
+  const idsChoisis = Object.values(selections).flat().map(v => v.id)
+  return (
+    <>
       {/* (13/10, Alex) La taille d'abord (elle fixe le prix des suppléments),
           puis les groupes obligatoires, puis les facultatifs. */}
       {/* (21/10) Un groupe dépendant n'apparaît que si son option est
@@ -288,7 +315,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
               {(g.valeurs||[]).map(v => {
                 const selected = !!(selections[g.id]||[]).find(s => s.id === v.id)
                 return (
-                  <button key={v.id} onClick={() => toggleValeur(g, v)}
+                  <button key={v.id} onClick={() => onToggle(g, v)}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.55rem 0.75rem', borderRadius: 10, border: `1.5px solid ${selected ? T.main : T.pale}`, background: selected ? `${T.main}0c` : '#fff', cursor: 'pointer', transition: 'all 0.15s', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', width: '100%' }}>
                     {/* Indicateur visuel : rond plein si unique (radio), carré coché si multi (checkbox) */}
                     <span style={{ width: 18, height: 18, borderRadius: isUnique ? '50%' : 5, border: `2px solid ${selected ? T.main : '#D1D5DB'}`, background: selected ? T.main : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
@@ -310,11 +337,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
           </div>
         )
       })}
-      <button onClick={valider}
-        style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44`, marginTop: 4 }}>
-        Ajouter à ma commande{supplement > 0 ? ` (+${euros(supplement)})` : ''}
-      </button>
-    </div>
+    </>
   )
 }
 
@@ -323,9 +346,14 @@ function OptionsSelector({ article, groupes, onAjouter }) {
 // article_variantes). Le Yopper choisit une valeur par axe → la combinaison
 // donne le prix (override ou prix article) et le stock. Ajout au panier avec
 // la variante attachée (le serveur revalide prix + stock via variante_id).
-function VariantesSelector({ article, variantes, onAjouter }) {
+// ✅ (22/10, Alex) LES VARIANTES ET LES OPTIONS ENSEMBLE : « une robe en 38,
+// rose, et l'emballage cadeau ». Les groupes de l'article se choisissent sous
+// la version, avec la même règle que `OptionsSelector` (`useChoixOptions`) ;
+// `onAjouter(article, variante, options)`.
+function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
   const [choix1, setChoix1] = useState(null)
   const [choix2, setChoix2] = useState(null)
+  const options = useChoixOptions(groupes)
   const deuxAxes = !!article.axe2_nom
   const vals1 = [...new Set(variantes.map(v => v.axe1_valeur).filter(Boolean))]
   const vals2 = deuxAxes ? [...new Set(variantes.map(v => v.axe2_valeur).filter(Boolean))] : []
@@ -393,9 +421,19 @@ function VariantesSelector({ article, variantes, onAjouter }) {
           )}
         </div>
       )}
-      <button onClick={() => pret && onAjouter(article, varianteChoisie)} disabled={!pret}
+      {pret && groupes.length > 0 && (
+        <div style={{ borderTop: `1px solid ${T.pale}`, paddingTop: 12, marginBottom: 4 }}>
+          <ListeGroupesOptions groupes={groupes} selections={options.selections} erreurs={options.erreurs} onToggle={options.toggleValeur}/>
+        </div>
+      )}
+      <button onClick={() => {
+          if (!pret) return
+          const choix = groupes.length > 0 ? options.valider() : null
+          if (choix === false) return
+          onAjouter(article, varianteChoisie, choix)
+        }} disabled={!pret}
         style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: pret ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: pret ? '#fff' : '#9CA3AF', fontWeight: 800, cursor: pret ? 'pointer' : 'default', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: pret ? `0 4px 14px ${T.main}44` : 'none', marginTop: 4 }}>
-        {pret ? 'Ajouter à ma commande' : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom}` : `Choisis ${article.axe1_nom || 'ta version'}`}
+        {pret ? `Ajouter à ma commande${options.supplement > 0 ? ` (+${euros(options.supplement)})` : ''}` : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom}` : `Choisis ${article.axe1_nom || 'ta version'}`}
       </button>
     </div>
   )
@@ -427,7 +465,8 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
       </div>
       <div style={{ padding: '0.5rem 1.25rem' }}>
         {items.map(([key, item], index) => {
-          const opts = item.variante?.label || labelOptions(item.options)
+          // (22/10) La variante ET ses options : « 38 · Rose, Emballage cadeau ».
+          const opts = [item.variante?.label, labelOptions(item.options)].filter(Boolean).join(', ') || null
           // (13/10) Le supplément selon la taille choisie, même règle que le serveur.
           const prixUnitaire = item.prix + (item.options ? supplementDeSelection(item.options) : 0)
           // FIX STOCK : vérifier la limite par article dans le panier
@@ -435,7 +474,10 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
           const stockMax = item.variante ? (item.variante.stock ?? Infinity) : (getStockMax ? getStockMax(item.id, { invendu: porteUneFenetre(item.offre) }) : Infinity)
           // Une ligne deal consomme unites_par_deal unités de stock par +
           const unitesLigne = item.deal_id ? (item.unites_par_deal || 1) : 1
-          const stockAtteintPanier = stockMax !== Infinity && (item.quantite + 1) * unitesLigne > stockMax
+          // (22/10) Une variante peut avoir plusieurs lignes (options) : son
+          // stock compte toutes ses lignes.
+          const dejaVariante = item.variante ? items.reduce((n, [, l]) => n + (l?.variante?.id === item.variante.id ? (l.quantite || 0) : 0), 0) : item.quantite
+          const stockAtteintPanier = stockMax !== Infinity && (item.variante ? dejaVariante + 1 > stockMax : (item.quantite + 1) * unitesLigne > stockMax)
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.625rem 0', borderBottom: `1px solid ${T.pale}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -844,11 +886,15 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
           sélecteur d'achat y proposait « Ajouter » sur un article que le
           serveur refuse (30/09). */}
       {showOptions && hasVariantes && !article.est_vitrine && !modeVitrine && (
-        <VariantesSelector article={article} variantes={variantes}
-          onAjouter={(a, variante) => { ajouterAuPanier(a, null, variante); setShowOptions(false) }}/>
+        <VariantesSelector article={article} variantes={variantes} groupes={groupes}
+          onAjouter={(a, variante, opts) => { ajouterAuPanier(a, opts, variante); setShowOptions(false) }}/>
       )}
       {showOptions && hasVariantes && (article.est_vitrine || modeVitrine) && (
-        <VariantesVitrine article={article} variantes={variantes}/>
+        <>
+          <VariantesVitrine article={article} variantes={variantes}/>
+          {/* (22/10) Ses options se lisent aussi. */}
+          {groupes.length > 0 && <OptionsVitrine groupes={groupes}/>}
+        </>
       )}
     </div>
   )
@@ -1172,13 +1218,14 @@ function ArticleDetailModal({ article, variantes, groupes = [], photosActives, c
                 {mentionVitrine(commercant)}
               </span>
               {hasVar && <VariantesVitrine article={article} variantes={variantes}/>}
+              {hasVar && groupes.length > 0 && <OptionsVitrine groupes={groupes}/>}
             </>
           )}
           {/* Achat gaté par le plan (onAjouter/onAjouterVariante null si lecture
               seule) ET par article (est_vitrine = pas vendu en ligne) */}
           {hasVar && onAjouterVariante && !article.est_vitrine ? (
-            <VariantesSelector article={article} variantes={variantes}
-              onAjouter={(a, v) => { onAjouterVariante(a, v); onClose() }}/>
+            <VariantesSelector article={article} variantes={variantes} groupes={groupes}
+              onAjouter={(a, v, opts) => { onAjouterVariante(a, v, opts); onClose() }}/>
           ) : (!hasVar && onAjouter && !article.est_vitrine && groupes.length > 0) ? (
             // 🔴 (11/10) CE BOUTON AJOUTAIT L'ARTICLE SANS SES OPTIONS : une
             // pizza partait sans sa base obligatoire. La fiche détaillée
@@ -2693,6 +2740,12 @@ export default function CommanderSlug() {
     if (top !== null) scroll.scrollTo({ top, behavior: 'smooth' })
   }
 
+  // (22/10) Combien de pièces d'une variante le panier porte déjà, toutes
+  // lignes confondues (une variante peut avoir une ligne par jeu d'options).
+  function qteDeLaVariante(varianteId) {
+    return Object.values(panier).reduce((n, l) => n + (l?.variante?.id === varianteId ? (l.quantite || 0) : 0), 0)
+  }
+
   function ajouterAuPanier(article, options = null, variante = null) {
     // 🔴 L'ARTICLE DOIT ALLER AVEC LE JOUR CHOISI (Alex, 07/10) : son délai en
     // jours et ses jours de vente. Sinon, la fenêtre propose son premier jour.
@@ -2701,14 +2754,16 @@ export default function CommanderSlug() {
     if (refuseParPlage(article)) return
     if (variante) {
       // Item à variante : le stock de LA variante fait foi (modèle détail)
-      const key = `${article.id}_v${variante.id}`
-      const dejaPanier = panier[key]?.quantite || 0
-      if ((variante.stock ?? 0) <= dejaPanier) return
+      // ✅ (22/10) ET SES OPTIONS : une ligne par jeu d'options, et le stock
+      // de la variante compte TOUTES ses lignes (38 rose emballée + 38 rose
+      // nue = deux pièces de la même variante).
+      const key = options ? `${article.id}_v${variante.id}_${JSON.stringify(options)}` : `${article.id}_v${variante.id}`
+      if ((variante.stock ?? 0) <= qteDeLaVariante(variante.id)) return
       const prixVar = variante.prix != null
         ? prixEffectifVariante(variante.prix, article, dealsActifs)
         : prixEffectif(article, dealsActifs)
       const label = [variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · ')
-      setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: null, variante: { id: variante.id, label, stock: variante.stock }, quantite: (prev[key]?.quantite || 0) + 1 } }))
+      setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: options || null, variante: { id: variante.id, label, stock: variante.stock }, quantite: (prev[key]?.quantite || 0) + 1 } }))
       return
     }
     // FIX STOCK : vérifier la limite avant d'ajouter
@@ -2814,7 +2869,8 @@ export default function CommanderSlug() {
   // FIX STOCK : incrementerPanier vérifie aussi le stock
   function incrementerPanier(key, item) {
     if (item.variante) {
-      if ((item.variante.stock ?? 0) <= (panier[key]?.quantite || 0)) return
+      // (22/10) Toutes les lignes de la variante (avec ou sans options).
+      if ((item.variante.stock ?? 0) <= qteDeLaVariante(item.variante.id)) return
       setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
       return
     }
@@ -4275,7 +4331,7 @@ export default function CommanderSlug() {
           onClose={() => setArticleDetail(null)}
           remise={remiseSurArticle(articleDetail, dealsActifs)}
           onAjouter={peutCommander ? (a, opts = null) => ajouterAuPanier(a, opts) : null}
-          onAjouterVariante={peutCommander ? (a, v) => ajouterAuPanier(a, null, v) : null}/>
+          onAjouterVariante={peutCommander ? (a, v, opts = null) => ajouterAuPanier(a, opts, v) : null}/>
       )}
 
       {/* Modale d'achat d'un bon cadeau */}

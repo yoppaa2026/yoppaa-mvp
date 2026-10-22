@@ -553,8 +553,9 @@ const MUTATIONS = [
     fichier: ECRAN, banc: 'verif:lot',
     // ⚠️ ANCRE RECALÉE LE 15/10 : la liste est nommée (`ACTIONS_AVEC_REFUS`).
     // REPOINTÉE LE 19/10 : la liste porte aussi `plage` (heures de retrait).
-    de: "const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage']",
-    vers: "const ACTIONS_AVEC_REFUS = ['prix', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage']" },
+    // REPOINTÉE LE 22/10 : et `heure_limite` (hors de l'heure limite de la veille).
+    de: "const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage', 'heure_limite']",
+    vers: "const ACTIONS_AVEC_REFUS = ['prix', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage', 'heure_limite']" },
 
   { nom: '⚠️ le bouton Dupliquer redevient une icône muette',
     fichier: ECRAN,
@@ -652,8 +653,9 @@ const MUTATIONS = [
   { nom: '🔴 le refus des nouvelles actions n est plus verifie avant d ecrire',
     fichier: ECRAN, banc: 'verif:lot',
     // REPOINTÉE LE 19/10 : la liste porte aussi `plage` (heures de retrait).
-    de: "const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage']",
-    vers: "const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'plage']" },
+    // REPOINTÉE LE 22/10 : et `heure_limite` (hors de l'heure limite de la veille).
+    de: "const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage', 'heure_limite']",
+    vers: "const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'plage', 'heure_limite']" },
   { nom: '⚠️ le lot choisit « en ligne » d avance',
     fichier: ECRAN, banc: 'verif:lot',
     de: '  const [lotVente, setLotVente] = useState(null)', vers: '  const [lotVente, setLotVente] = useState(VENTE_EN_LIGNE)' },

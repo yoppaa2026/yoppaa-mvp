@@ -38,7 +38,8 @@ const MUTATIONS = [
     de: "  if (plageImpossible(p)) return 'L’heure « à partir de » doit venir avant l’heure « jusqu’à ».'", vers: '' },
   { nom: '🔴 le serveur ne lit plus la plage en base', fichier: 'lib/lignes-commande.js',
     // ⚠️ ANCRE REPOINTÉE LE 22/10 (`gere_variantes` ferme le select, audit R1).
-    de: 'commande_active, stock_mode, retrait_des, retrait_jusqua, gere_variantes\'', vers: 'commande_active, stock_mode, gere_variantes\'' },
+    // REPOINTÉE LE 22/10 (soir) : `hors_heure_limite` suit `commande_active`.
+    de: 'stock_mode, retrait_des, retrait_jusqua, gere_variantes\'', vers: 'stock_mode, gere_variantes\'' },
   { nom: '🔴 le serveur ne refuse plus un créneau hors plage', fichier: ROUTE,
     de: '        if (refusPlage) {\n          return NextResponse.json({ ok: false, error: refusPlage, creneau_indisponible: true }, { status: 409 })\n        }',
     vers: '' },
@@ -61,7 +62,8 @@ const MUTATIONS = [
   { nom: 'l’éditeur ne prévient plus d’une plage sans créneau', fichier: ECRAN,
     de: 'if (plageSansCreneau(plageReglee, crs || [])) {', vers: 'if (false) {' },
   { nom: 'le lot écrit sans contrôler la saisie', fichier: ECRAN,
-    de: "'sur_commande', 'plage']", vers: "'sur_commande']" },
+    // REPOINTÉE LE 22/10 : la liste finit par `heure_limite`.
+    de: "'sur_commande', 'plage', 'heure_limite']", vers: "'sur_commande', 'heure_limite']" },
   { nom: 'la copie oublie la plage', fichier: 'lib/catalogue-copie.js',
     de: "  'retrait_des', 'retrait_jusqua',\n", vers: '' },
 ]

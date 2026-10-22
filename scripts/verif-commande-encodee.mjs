@@ -303,7 +303,8 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   // Le module qui lit le calendrier : la longueur de la fiche, sur tout le catalogue.
   const cs = code('lib/calendrier-commande-server.js')
   v('🔴 le calendrier : `longueurCalendrier` sur TOUT le catalogue actif hors vitrine, jours de vente compris',
-    /\.from\('articles'\)\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, stock_mode, est_vitrine'\)\s*\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(cs)
+    // REPOINTÉE LE 22/10 : avec `hors_heure_limite` (l'article hors de l'heure limite).
+    /\.from\('articles'\)\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, hors_heure_limite, stock_mode, est_vitrine'\)\s*\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(cs)
     && /\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', false\)/.test(cs)
     && /horizon: commercant\.horizon_commande,/.test(cs) && /\.filter\(a => !a\.est_vitrine\)/.test(cs)
     && /delaiJours: delaiEnJours\(a\), indispo: offParArticle\[a\.id\] \|\| \[\], horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, commercant\)/.test(cs)

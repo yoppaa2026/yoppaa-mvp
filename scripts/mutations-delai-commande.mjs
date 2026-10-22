@@ -419,8 +419,9 @@ const MUTATIONS = [
     fichier: LIGNES,
     // ⚠️ Ancre reorientee le 08/10 : les circuits suivent le delai (temps 3).
     // REPOINTÉE LE 19/10 : le select finit par la plage de retrait.
-    de: 'tva_taux, tva_taux_sur_place, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des',
-    vers: 'tva_taux, tva_taux_sur_place, vente_jour, commande_active, stock_mode, retrait_des' },
+    // REPOINTÉE LE 22/10 : `hors_heure_limite` suit `commande_active`.
+    de: 'tva_taux, tva_taux_sur_place, delai_minutes, vente_jour, commande_active, hors_heure_limite, stock_mode, retrait_des',
+    vers: 'tva_taux, tva_taux_sur_place, vente_jour, commande_active, hors_heure_limite, stock_mode, retrait_des' },
 
   { nom: '🔴 le select des deals ne demande plus la fenetre',
     fichier: LIGNES,

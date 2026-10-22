@@ -539,9 +539,11 @@ const code = (f) => sansProse(lire(f))
     && /if \(refus\?\.raison === 'aujourdhui_seulement'\)/.test(cc))
   v('🔴 create-commande : le second article d’un duo est lu AVEC ses circuits',
     // REPOINTÉE LE 19/10 : la plage de retrait est lue avec les circuits.
-    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des, retrait_jusqua'\)/.test(cc))
+    // REPOINTÉE LE 22/10 : et `hors_heure_limite` (l'article hors de l'heure limite).
+    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, hors_heure_limite, stock_mode, retrait_des, retrait_jusqua'\)/.test(cc))
   v('🔴 create-commande : l’horizon lit les circuits du catalogue',
-    /\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, stock_mode'\)/.test(cc) && /horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, commercant\)/.test(cc))
+    // REPOINTÉE LE 22/10 : avec `hors_heure_limite`.
+    /\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, hors_heure_limite, stock_mode'\)/.test(cc) && /horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, commercant\)/.test(cc))
   const rdv = code('app/api/stripe/checkout/create-rdv-commande/route.js')
   v('🔴 create-rdv-commande : même contrôle, même réservation, mêmes refus',
     /dateCommande: date_rdv, commercant,/.test(rdv) && /p_items: itemsDeReservation\(verifStock\)/.test(rdv) && /refusDeReservation\(errStock\.message, nomParArticle\)/.test(rdv))

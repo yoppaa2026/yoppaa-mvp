@@ -170,7 +170,10 @@ const LUNDI_OUVERT = { id: 'a3', date_debut: '2026-10-19', date_fin: '2026-10-19
     dateChoisie: new Date(`${date}T12:00:00`), dureeMinutes: 30, creneaux: plages, reservations: [],
     horairesDetail: horairesPourDate(SEMAINE, date, fermetures),
   }).map(s => s.heure)
-  const normal = slots('2026-10-22', [NOEL])
+  // ⚠️ RECALÉE LE 22/10 : la date en dur était le 22/10 lui-même, et le jour
+  // même le moteur retire les créneaux passés (le soir, plus de 17:30). Un
+  // jeudi qui n'est pas aujourd'hui, sans fermeture.
+  const normal = slots('2027-01-14', [NOEL])
   verifier('un jeudi normal : des créneaux jusqu’à 17:30', normal.includes('17:30'))
   const noel = slots('2026-12-24', [NOEL])
   verifier('🔴 le 24/12 : plus rien après 13:00', noel.length > 0 && !noel.some(h => h >= '13:00') && noel.includes('12:30'))

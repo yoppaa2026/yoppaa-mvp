@@ -113,7 +113,7 @@ import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { choixDeDelai, libelleChoixDelai, HORIZONS_ARTICLE, libelleHorizonArticle } from '@/lib/delai-commande'
 import { heureDePlage, refusDeSaisiePlage, plageSansCreneau, libellePlage } from '@/lib/plage-retrait'
-import { heureLimite, refusDeSaisieLimite } from '@/lib/heure-veille'
+import { heureLimite, refusDeSaisieLimite, questionHeureLimite, choixHeureLimite } from '@/lib/heure-veille'
 import { categoriesDuCommerce, listeApresAjout, renommage, listeApresSuppression, parentDe, feuilleDe } from '@/lib/categories-catalogue'
 import { trierArticles, positionDansCategorie, deplacementDansCategorie } from '@/lib/ordre-articles'
 import { jourSemaineDe, CLOTURES_PROPOSEES, libelleDuree, phraseCloture, minutesDeCloture } from '@/lib/creneaux'
@@ -204,7 +204,7 @@ import {
 
 // Les actions groupées qui ont un refus à elles (`refusDuLot`), vérifié avant
 // d'écrire et affiché en rouge. Les autres n'ont rien à saisir.
-const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage']
+const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage', 'heure_limite']
 import OrdreCategories from '@/app/dashboard/OrdreCategories'
 import TabEquipe from '@/app/dashboard/TabEquipe'
 import { EQUIPE_DANS_LA_BARRE } from '@/lib/equipe'
@@ -674,6 +674,8 @@ function TabMenu({ commercantId, commercant, toast }) {
   // ✅ 19/10 : les heures de retrait, d'un coup (« Sandwichs : jusqu'à 15 h »).
   // Les deux vides = « tous les créneaux », pour retirer une plage.
   const [lotPlage, setLotPlage] = useState({ de: '', a: '' })
+  // ✅ 22/10 : hors de l'heure limite de la veille (true) ou non (false).
+  const [lotHorsLimite, setLotHorsLimite] = useState(null)
   // La valeur que l'action choisie applique : une seule source pour l'aperçu,
   // le refus et l'écriture.
   const valeurDuLot = (action) => action === 'prix' ? { mode: lotPrixMode, saisie: lotValeur }
@@ -685,6 +687,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     : action === 'jour_meme' ? lotJourMeme
     : action === 'sur_commande' ? lotCommande
     : action === 'plage' ? lotPlage
+    : action === 'heure_limite' ? lotHorsLimite
     : null
   // ─── QUI DOIT RELIRE SES GROUPES (Alex, 25/09) ───────────────────────────
   //
@@ -1027,7 +1030,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // jours (le défaut). C'est ce que faisait tout article avant les deux
     // circuits, et ce que la migration a donné à l'existant (Alex, 08/10).
     const demainCommandable = deuxCircuits && (Number(commercant?.horizon_commande) || 2) >= 2
-    poserFormulaire({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '', gere_variantes: false })
+    poserFormulaire({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '', hors_heure_limite: false, gere_variantes: false })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
@@ -1036,7 +1039,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (!await peutQuitterFormulaire()) return
     // ⚠️ « Sans limite » n'a pas de quantité : le champ repart vide si l'on
     // change d'avis, au lieu d'afficher le 0 technique qui la représente.
-    poserFormulaire({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '', gere_variantes: a.gere_variantes === true })
+    poserFormulaire({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '', hors_heure_limite: a.hors_heure_limite === true, gere_variantes: a.gere_variantes === true })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
@@ -1127,6 +1130,9 @@ function TabMenu({ commercantId, commercant, toast }) {
       // ✅ 19/10 : la plage de retrait, vide = aucune limite.
       retrait_des: avecPlage ? heureDePlage(form.retrait_des) : null,
       retrait_jusqua: avecPlage ? heureDePlage(form.retrait_jusqua) : null,
+      // ✅ 22/10 : hors de l'heure limite de la veille. Gardé tel quel même
+      // caché (pas d'heure réglée, pas sur commande) : il vaudra plus tard.
+      hors_heure_limite: form.hors_heure_limite === true,
     }
     const { data: cree, error } = editId
       ? await supabase.from('articles').update(payload).eq('id', editId).select('id').maybeSingle()
@@ -1957,6 +1963,19 @@ function TabMenu({ commercantId, commercant, toast }) {
                       ))}
                     </select>
                   </ChampFormulaire>
+                  {/* ✅ 22/10 (Alex, tableau) : l'heure limite de la veille se
+                      dit ICI, sur l'article, et l'article peut en sortir (les
+                      sandwichs de la 7 Abbayes). Sans heure réglée, rien. */}
+                  {heureLimite(commercant?.commande_veille_avant) && (
+                    <div>
+                      <ChoixCartes label={questionHeureLimite(commercant.commande_veille_avant)} choix={choixHeureLimite(commercant.commande_veille_avant)}
+                        estChoisi={c => (form.hors_heure_limite === true) === c.hors}
+                        onChoisir={c => setForm(p => ({ ...p, hors_heure_limite: c.hors }))}/>
+                      <p style={{ margin: '8px 0 0', fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
+                        L’heure se règle dans l’onglet Créneaux, pour tout ton commerce.
+                      </p>
+                    </div>
+                  )}
                   <ChampFormulaire label="Maximum par jour"
                     aide="Combien tu peux en préparer sur commande pour un même jour. Laisse vide pour « sans limite ». Il ne touche jamais à ce que tu vends le jour même.">
                     <Input type="number" min="1" value={form.commande_max_jour ?? ''} onChange={e => setForm(p => ({ ...p, commande_max_jour: e.target.value }))} placeholder="Vide = sans limite"/>
@@ -2162,7 +2181,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ PAS DE FLÈCHES PENDANT UNE RECHERCHE : la liste affichée n'est plus
     // la catégorie, « monter » n'y voudrait rien dire.
     const position = searchQuery.trim() ? null : positionDansCategorie(articles, a.id)
-    return <ArticleCard key={a.id} a={a} position={position} onDeplacer={deplacerArticle} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj} deuxCircuits={deuxCircuits} surCommande={commandesSurCommande[a.id] || {}} venduDepuisSaisie={venduDepuisSaisie[a.id] || 0} variantes={variantesParArticle[a.id] || []} onVariantesChange={chargerVariantes}/>
+    return <ArticleCard key={a.id} a={a} position={position} onDeplacer={deplacerArticle} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj} deuxCircuits={deuxCircuits} heureLimiteVeille={heureLimite(commercant?.commande_veille_avant)} surCommande={commandesSurCommande[a.id] || {}} venduDepuisSaisie={venduDepuisSaisie[a.id] || 0} variantes={variantesParArticle[a.id] || []} onVariantesChange={chargerVariantes}/>
   }
 
   return (
@@ -2368,6 +2387,8 @@ function TabMenu({ commercantId, commercant, toast }) {
                         { val: 'jour_meme', label: 'Le jour même' },
                         { val: 'sur_commande', label: 'Sur commande' },
                         { val: 'plage', label: 'Heures de retrait' },
+                        // ✅ 22/10 : seulement quand une heure limite est réglée.
+                        ...(heureLimite(commercant?.commande_veille_avant) ? [{ val: 'heure_limite', label: 'Heure limite de la veille' }] : []),
                       ] : []),
                       { val: 'stock', label: variantesCategorie ? 'Stock (et variantes)' : 'Stock et quantités' },
                       { val: 'tva', label: 'Taux de TVA' },
@@ -2514,6 +2535,14 @@ function TabMenu({ commercantId, commercant, toast }) {
                       <input type="time" step="300" value={lotPlage.a} onChange={e => setLotPlage(p => ({ ...p, a: e.target.value }))}
                         aria-label="Retrait jusqu’à" style={{ ...s.input, width: 110, fontSize: 13, textAlign: 'center' }}/>
                       <span style={{ fontSize: 12, color: T.muted }}>Laisse vide pour « dès le premier » ou « jusqu’au dernier » créneau.</span>
+                    </div>
+                  )}
+
+                  {lotAction === 'heure_limite' && (
+                    <div style={{ marginBottom: 10 }}>
+                      <ChoixCartes label={questionHeureLimite(commercant?.commande_veille_avant)} choix={choixHeureLimite(commercant?.commande_veille_avant)}
+                        estChoisi={c => lotHorsLimite === c.hors}
+                        onChoisir={c => setLotHorsLimite(c.hors)}/>
                     </div>
                   )}
 
@@ -5346,7 +5375,7 @@ const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 // Le titre d'un bloc de la carte (« Le jour même », « Sur commande, à l'avance »).
 const titreBlocCarte = { fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 4px' }
 
-function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, onCopieOptions = null, groupesParArticle = {}, groupesCharges = true, erreurGroupes = false, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {}, venduDepuisSaisie = 0, variantes = [], onVariantesChange = null }) {
+function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, onCopieOptions = null, groupesParArticle = {}, groupesCharges = true, erreurGroupes = false, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, heureLimiteVeille = null, surCommande = {}, venduDepuisSaisie = 0, variantes = [], onVariantesChange = null }) {
   const [showOptions, setShowOptions] = useState(false)
   // (22/10, audit J11) La saisie rapide en place : { quoi: 'rayon' | 'comptoir' | 'tous', valeur }.
   const [saisieCarte, setSaisieCarte] = useState(null)
@@ -5460,7 +5489,11 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
     const reserves = ordre
       .filter(j => (surCommande[j] || 0) > 0)
       .map(j => `${j} ${surCommande[j]}${max ? ` sur ${max}` : ''}`)
-    const quand = n === 1 ? 'Au plus tard la veille' : `Au plus tard ${n} jours avant`
+    // ✅ (22/10, Alex perdu devant « Au plus tard la veille » alors que la
+    // fiche dit « avant 17 h 45 ») L'heure limite du commerce se dit ici
+    // aussi, sauf pour l'article qui n'est pas concerné.
+    const limiteCarte = heureLimiteVeille && a.hors_heure_limite !== true ? `${n === 1 ? '' : ','} avant ${libelleHeure(heureLimiteVeille)}` : ''
+    const quand = `${n === 1 ? 'Au plus tard la veille' : `Au plus tard ${n} jours avant`}${limiteCarte}${heureLimiteVeille && a.hors_heure_limite === true ? ' (pas concerné par ton heure limite)' : ''}`
     return (
       <div style={{ marginTop: 10 }}>
         <p style={titreBlocCarte}>Sur commande, à l&rsquo;avance</p>

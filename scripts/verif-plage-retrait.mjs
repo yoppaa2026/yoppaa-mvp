@@ -171,7 +171,8 @@ verifier('la copie de catalogue emporte la plage', CHAMPS_COPIES.includes('retra
 {
   const R = code('app/api/stripe/checkout/create-commande/route.js')
   verifier('🔴 le second article d’un duo est lu avec sa plage',
-    R.includes(".from('articles').select('id, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des, retrait_jusqua')"))
+    // REPOINTÉE LE 22/10 : `hors_heure_limite` suit `commande_active`.
+    R.includes(".from('articles').select('id, delai_minutes, vente_jour, commande_active, hors_heure_limite, stock_mode, retrait_des, retrait_jusqua')"))
   const iCheck = R.indexOf('const refusPlage = refusDePlageAuCreneau(entreesPlage, creneau)')
   // ⚠️ L'INSERTION DOIT ÊTRE TROUVÉE : une garde qui ne la trouve pas
   // passerait à vide (leçon des gardes muettes).
@@ -210,7 +211,8 @@ verifier('la copie de catalogue emporte la plage', CHAMPS_COPIES.includes('retra
   verifier('l’éditeur relit la plage', C.includes("retrait_des: heureDePlage(a.retrait_des) || ''") && C.includes("retrait_jusqua: heureDePlage(a.retrait_jusqua) || ''"))
   verifier('⚠️ il prévient si la plage ne tombe sur aucun créneau', C.includes('if (plageSansCreneau(plageReglee, crs || [])) {'))
   verifier('la sélection groupée la propose en alimentaire', C.includes("{ val: 'plage', label: 'Heures de retrait' },"))
-  verifier('et la contrôle avant d’écrire', C.includes("const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage']"))
+  // REPOINTÉE LE 22/10 : la liste finit par `heure_limite`.
+  verifier('et la contrôle avant d’écrire', C.includes("const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage', 'heure_limite']"))
 }
 {
   const M = brut('migrations/MIGRATION_PLAGE_RETRAIT_ARTICLE_19_10.sql')

@@ -834,7 +834,9 @@ egal('sans nom d’article, la phrase tient debout',
   verifier('🔴 elle lit le délai du second article d’un duo, sur CE commerce',
     // REPOINTÉE LE 19/10 : la plage de retrait (`retrait_des`, `retrait_jusqua`)
     // est lue avec le délai.
-    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des, retrait_jusqua'\)\s*\.in\('id', seconds\)\.eq\('commercant_id', commercant\.id\)/.test(ROUTE)
+    // REPOINTÉE LE 22/10 : `hors_heure_limite` (l'article qui ne suit pas
+    // l'heure limite de la veille) est lu avec ses circuits.
+    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, hors_heure_limite, stock_mode, retrait_des, retrait_jusqua'\)\s*\.in\('id', seconds\)\.eq\('commercant_id', commercant\.id\)/.test(ROUTE)
     && /l\.delai_minutes = delaiDeLOffre\(\{ delai_minutes: l\.delai_minutes \}, parId\[String\(l\.deal_article2_id\)\]\)/.test(ROUTE))
   verifier('🔴 et une lecture en échec refuse au lieu de vendre pour aujourd’hui',
     /if \(errArts2\) \{\s*return NextResponse\.json/.test(ROUTE))
@@ -844,7 +846,9 @@ egal('sans nom d’article, la phrase tient debout',
     && ROUTE.indexOf('l.delai_minutes = delaiDeLOffre(') < ROUTE.indexOf('const n = delaiEnJours(l)'))
   // 🔴 L'HORIZON S'ALLONGE AVEC LE CATALOGUE, lu en entier (pas le panier).
   verifier('🔴 l’horizon se calcule sur TOUT le catalogue actif, avec ses jours de vente',
-    /supabase\.from\('articles'\)\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, stock_mode'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(ROUTE)
+    // REPOINTÉE LE 22/10 : `hors_heure_limite` (l'horizon gagne un jour après
+    // l'heure limite, sauf pour l'article qui n'est pas concerné).
+    /supabase\.from\('articles'\)\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, hors_heure_limite, stock_mode'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(ROUTE)
     && /supabase\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', false\)/.test(ROUTE)
     && /const horizon = longueurCalendrier\(\{\s*horizon: commercant\.horizon_commande,/.test(ROUTE))
   // 🔴 ET LES JOURS DE VENTE Y ENTRENT : sans eux, un pain du seul samedi sans

@@ -852,7 +852,7 @@ export async function POST(request) {
       const seconds = [...new Set(lignes.map(l => l.deal_article2_id).filter(Boolean))]
       if (seconds.length > 0) {
         const { data: arts2, error: errArts2 } = await supabase
-          .from('articles').select('id, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des, retrait_jusqua')
+          .from('articles').select('id, delai_minutes, vente_jour, commande_active, hors_heure_limite, stock_mode, retrait_des, retrait_jusqua')
           .in('id', seconds).eq('commercant_id', commercant.id)
         // ⚠️ UNE LECTURE EN ÉCHEC N'EST PAS « AUCUN DÉLAI » : on refuse plutôt
         // que de vendre pour aujourd'hui une tarte qui en demande deux.
@@ -977,7 +977,8 @@ export async function POST(request) {
       if (!estBoutique) {
         const [{ data: catalogue, error: errCat }, { data: joursOff, error: errOff }] = await Promise.all([
           // ⚠️ `vente_jour`, `commande_active` : le calendrier suit les circuits (temps 3).
-          supabase.from('articles').select('id, delai_minutes, horizon_jours, vente_jour, commande_active, stock_mode').eq('commercant_id', commercant.id).eq('actif', true),
+          // ✅ `hors_heure_limite` (22/10) : l'article qui ne suit pas l'heure limite.
+          supabase.from('articles').select('id, delai_minutes, horizon_jours, vente_jour, commande_active, hors_heure_limite, stock_mode').eq('commercant_id', commercant.id).eq('actif', true),
           supabase.from('article_stock_jour').select('article_id, jour_semaine').eq('commercant_id', commercant.id).eq('actif', false),
         ])
         // ⚠️ UNE LECTURE EN ÉCHEC N'EST PAS « RIEN À ALLONGER » : on refuse

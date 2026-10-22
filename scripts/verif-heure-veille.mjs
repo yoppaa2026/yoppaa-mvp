@@ -11,7 +11,10 @@
 
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
-import { heureLimite, limiteDeLaVeille, delaiEnClair, phraseLimiteFiche, refusDeSaisieLimite } from '../lib/heure-veille.js'
+import { heureLimite, limiteDeLaVeille, delaiEnClair, phraseLimiteFiche, refusDeSaisieLimite, questionHeureLimite, choixHeureLimite } from '../lib/heure-veille.js'
+import { patchsDuLot, ecartsDuLot, refusDuLot, resumeDuLot } from '../lib/catalogue-lot.js'
+import { CHAMPS_COPIES, copieDArticle } from '../lib/catalogue-copie.js'
+import { SELECT_ARTICLES } from '../lib/lignes-commande.js'
 import { circuitsDeLArticle, circuitsCommuns } from '../lib/stock-article.js'
 import { refusDuJour, premierJourPossible, longueurCalendrier, mentionDisponibilite, delaiEnJours } from '../lib/delai-commande.js'
 import { articleHorsJour } from '../lib/commande-encodee.js'
@@ -217,6 +220,76 @@ verifier('la saisie du commerçant', refusDeSaisieLimite('') === null && refusDe
   verifier('🔴 la vue la porte, en DERNIÈRE colonne', /ordre_categories,\s*--[^\n]*\n\s*commande_veille_avant\s*FROM commercants/.test(M))
   verifier('la vue garde la relecture des stores', M.includes("OR (statut_publication = 'relecture'::text AND public.est_compte_relecture())"))
   verifier('les droits sont explicites', M.includes('GRANT SELECT (commande_veille_avant) ON public.commercants TO anon, authenticated;') && M.includes('GRANT UPDATE (commande_veille_avant) ON public.commercants TO authenticated;'))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ARTICLE HORS DE L'HEURE LIMITE (22/10, Alex, tableau : les sandwichs de la
+// 7 Abbayes se commandent pour demain après 17 h 45)
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const SANDWICH_B = { id: 16, nom: 'Sandwich', vente_jour: true, commande_active: true, delai_minutes: 1440, hors_heure_limite: true }
+  const PAIN_HORS = { ...PAIN_SPECIAL, hors_heure_limite: true }
+  verifier('🔴 hors limite : ses circuits gardent la forme d’avant, sans limite',
+    egal(circuitsDeLArticle(PAIN_HORS, ABBAYES, ETE_1800), { aujourdhui: false, surCommande: true })
+    && egal(circuitsDeLArticle(SANDWICH_B, ABBAYES, ETE_2359), { aujourdhui: true, surCommande: true }))
+  verifier('🔴 hors limite : à 18 h, il se commande encore pour demain', jugement(PAIN_HORS, ABBAYES, ETE_1800, DEMAIN) === null)
+  verifier('🔴 hors limite : à 23 h 59 aussi', jugement(SANDWICH_B, ABBAYES, ETE_2359, DEMAIN) === null)
+  verifier('🔴 et le pain d’à côté suit toujours la limite', jugement(PAIN_SPECIAL, ABBAYES, ETE_1800, DEMAIN) !== null)
+  verifier('« hors » faux ou absent : il suit la limite',
+    circuitsDeLArticle({ ...PAIN_SPECIAL, hors_heure_limite: false }, ABBAYES, ETE_1800)?.apresLimite === true
+    && circuitsDeLArticle(PAIN_SPECIAL, ABBAYES, ETE_1800)?.apresLimite === true)
+  verifier('sa carte dit la phrase d’avant', mentionDisponibilite(regle(PAIN_HORS, ABBAYES, ETE_1759)) === 'Commande 1 jour à l\'avance')
+  verifier('🔴 un duo avec un article qui suit la limite la suit',
+    circuitsCommuns(circuitsDeLArticle(PAIN_HORS, ABBAYES, ETE_1800), circuitsDeLArticle(PAIN_SPECIAL, ABBAYES, ETE_1800))?.apresLimite === true)
+  verifier('🔴 un catalogue tout hors limite ne rallonge pas le calendrier',
+    longueurCalendrier({ horizon: 2, articles: [regle({ ...CROISSANT, hors_heure_limite: true }, ABBAYES, ETE_1800)] }) === 2
+    && longueurCalendrier({ horizon: 2, articles: [regle(CROISSANT, ABBAYES, ETE_1800)] }) === 3)
+  verifier('les mots du choix nomment l’heure',
+    questionHeureLimite('17:45:00') === 'Suit-il ton heure limite de la veille (17 h 45) ?'
+    && choixHeureLimite('17:45:00').map(c => c.hors).join() === 'false,true'
+    && choixHeureLimite('17:45:00')[1].phrase === 'Il se commande à l’avance jusqu’à minuit, même après 17 h 45.')
+
+  // Le lot (Alex, 22/10 : « il faut aussi l'inclure dans les modifs en BULK »).
+  const lot = [PAIN_SPECIAL, { ...TARTE, hors_heure_limite: true }, { id: 20, nom: 'Gaufre', est_vitrine: true }]
+  const p = patchsDuLot({ action: 'heure_limite', articles: lot, valeur: true })
+  verifier('🔴 le lot sort de la limite ce qui la suivait, et seulement ça',
+    egal(p, [{ id: PAIN_SPECIAL.id, patch: { hors_heure_limite: true } }]), JSON.stringify(p))
+  verifier('le lot remet dans la limite',
+    egal(patchsDuLot({ action: 'heure_limite', articles: lot, valeur: false }), [{ id: TARTE.id, patch: { hors_heure_limite: false } }]))
+  verifier('le lot écarte la vitrine et la boutique',
+    ecartsDuLot({ action: 'heure_limite', articles: lot, valeur: true }).map(e => e.id).join() === '20'
+    && ecartsDuLot({ action: 'heure_limite', articles: [PAIN_SPECIAL], valeur: true, deuxCircuits: false }).length === 1)
+  verifier('🔴 le lot sans choix refuse et n’écrit rien',
+    refusDuLot({ action: 'heure_limite', articles: lot, valeur: null }) !== null
+    && patchsDuLot({ action: 'heure_limite', articles: lot, valeur: null }).length === 0)
+  verifier('le résumé accorde et dit le geste',
+    resumeDuLot({ action: 'heure_limite', patchs: p, coches: 3, valeur: true }).startsWith('1 article ne suivra plus ton heure limite de la veille')
+    && resumeDuLot({ action: 'heure_limite', patchs: [...p, { id: 99, patch: {} }], coches: 3, valeur: false }).startsWith('2 articles suivront ton heure limite de la veille'))
+  verifier('la copie emporte le réglage, et laisse le défaut à la base s’il manque',
+    CHAMPS_COPIES.includes('hors_heure_limite') && !('hors_heure_limite' in copieDArticle({ id: 1, nom: 'Pain', prix: 2 }, { commercantId: 1, nomsExistants: [] })))
+
+  // Chaque lecture serveur la demande, sinon le serveur refuserait ce que la fiche propose.
+  verifier('🔴 le serveur la lit (lignes de commande, encodage)', /\bcommande_active, hors_heure_limite\b/.test(SELECT_ARTICLES))
+  const R = code('app/api/stripe/checkout/create-commande/route.js')
+  verifier('🔴 le serveur la lit pour le second d’un duo',
+    R.includes(".from('articles').select('id, delai_minutes, vente_jour, commande_active, hors_heure_limite, stock_mode, retrait_des, retrait_jusqua')"))
+  verifier('🔴 et pour le calendrier du commerce',
+    R.includes("supabase.from('articles').select('id, delai_minutes, horizon_jours, vente_jour, commande_active, hors_heure_limite, stock_mode')")
+    && code('lib/calendrier-commande-server.js').includes("supabase.from('articles').select('id, delai_minutes, horizon_jours, vente_jour, commande_active, hors_heure_limite, stock_mode, est_vitrine')"))
+  const C = code('app/dashboard/ConfigDashboard.js')
+  verifier('🔴 la fiche article l’écrit, et le relit',
+    C.includes('hors_heure_limite: form.hors_heure_limite === true,') && C.includes('hors_heure_limite: a.hors_heure_limite === true,') && C.includes("retrait_jusqua: '', hors_heure_limite: false,"))
+  verifier('le choix ne s’affiche qu’avec une heure réglée',
+    C.includes('{heureLimite(commercant?.commande_veille_avant) && (') && C.includes('onChoisir={c => setForm(p => ({ ...p, hors_heure_limite: c.hors }))}'))
+  verifier('la carte dit l’heure, sauf pour l’article hors limite',
+    C.includes("const limiteCarte = heureLimiteVeille && a.hors_heure_limite !== true ?") && C.includes('heureLimiteVeille={heureLimite(commercant?.commande_veille_avant)}'))
+  verifier('🔴 le lot vérifie son refus avant d’écrire', /const ACTIONS_AVEC_REFUS = \[[^\]]*'heure_limite'\]/.test(C) && C.includes(": action === 'heure_limite' ? lotHorsLimite"))
+
+  const M = brut('migrations/MIGRATION_HORS_HEURE_LIMITE_22_10.sql')
+  verifier('🔴 la migration ajoute une colonne à FAUX (rien ne change)', /ADD COLUMN IF NOT EXISTS hors_heure_limite boolean NOT NULL DEFAULT false;/.test(M) && !/UPDATE public\.articles/i.test(M))
+  verifier('🔴 la fiche peut la lire (select *), le commerçant l’écrire',
+    M.includes('GRANT SELECT (hors_heure_limite) ON public.articles TO anon, authenticated;')
+    && M.includes('GRANT INSERT (hors_heure_limite),') && M.includes('UPDATE (hors_heure_limite) ON public.articles TO authenticated;'))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

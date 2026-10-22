@@ -169,6 +169,8 @@ function v(nom, condition, detail = '') {
   v('🟡 J8 : la TVA sur place du lot suit le formulaire (`estAlimentaire`)', !/commercant\?\.categorie === 'alimentaire'/.test(bord))
   v('🟡 J10 : une catégorie parente montre ses sous-catégories, et les compte',
     /articles\.filter\(a => dansLaCategorie\(a, catActive\)\)/.test(bord) && /, et \$\{dansSousCats\} dans ses sous-catégories/.test(bord))
+  v('🟠 O11 : retirer une photo de la galerie se confirme, et la suppression est relue',
+    /if \(!okSuppressionPhoto\) return\s*const \{ data, error \} = await supabase\.from\('article_photos'\)\.delete\(\)\.eq\('id', id\)\.select\('id'\)/.test(bord))
   v('🟡 J11 : plus aucun `window.prompt` dans le tableau de bord des articles', !/window\.prompt\(/.test(bord) && /<SaisieRapide key=\{saisieCarte\.quoi\}/.test(bord))
 }
 

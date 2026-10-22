@@ -1719,8 +1719,12 @@ function TabMenu({ commercantId, commercant, toast }) {
   async function deleteGaleriePhoto(id) {
     // Une photo en attente n'est pas encore en base : elle quitte l'écran.
     if (galerie.some(p => p.id === id && p.enAttente)) { setGalerie(prev => prev.filter(p => p.id !== id)); return }
-    const { error } = await supabase.from('article_photos').delete().eq('id', id)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    // 🟠 (22/10, audit O11) CONFIRMÉ, et relu : la croix de 18 px retirait la
+    // photo de la fiche d'un seul geste.
+    const okSuppressionPhoto = await confirme(confirmationSimple({ titre: 'Retirer cette photo ?', message: 'Elle disparaît de la galerie de l’article, sur ta fiche aussi.', action: 'Oui, retirer' }))
+    if (!okSuppressionPhoto) return
+    const { data, error } = await supabase.from('article_photos').delete().eq('id', id).select('id')
+    if (error || (data?.length || 0) !== 1) { toast(`La photo n’a pas été retirée : ${error?.message || 'suppression refusée'}`, 'error'); return }
     setGalerie(prev => prev.filter(p => p.id !== id))
   }
 

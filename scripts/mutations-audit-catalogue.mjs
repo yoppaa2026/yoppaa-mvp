@@ -100,6 +100,8 @@ const MUTATIONS = [
     de: "    const aideJoursDeVente = form.stock_mode !== 'magasin' && !form.gere_variantes", vers: '    const aideJoursDeVente = true' },
   { nom: '🟡 J10 : la parente ne montre plus ses sous-catégories', fichier: BORD,
     de: "  const articlesFiltres = catActive === 'Tous' ? articles : articles.filter(a => dansLaCategorie(a, catActive))", vers: "  const articlesFiltres = catActive === 'Tous' ? articles : articles.filter(a => a.categorie === catActive)" },
+  { nom: '🟠 O11 : la photo de galerie part sans confirmer', fichier: BORD,
+    de: '    if (!okSuppressionPhoto) return', vers: '' },
   { nom: '🟡 J5 : la carte redit « Actif »', fichier: BORD,
     de: "{a.actif ? 'Sur ta fiche' : 'Masqué'}</span>", vers: "{a.actif ? 'Actif' : 'Inactif'}</span>" },
 ]

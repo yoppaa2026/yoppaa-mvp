@@ -31,8 +31,10 @@ const MUTATIONS = [
     // critique de `next/og`, GHSA-vcvr-r3jv-pc5j). La garde vise la PLAGE, pas
     // le numéro. Suivie le 09/10 : 16.4.0 (six avis de sécurité, dont une
     // SSRF de l'optimisation d'images, GHSA-cjq9-62q9-8jv4).
-    de: '"next": "16.4.0"',
-    vers: '"next": "^16.4.0"' },
+    // Suivie le 22/10 : 16.4.1 (exécutions de code à distance sans connexion,
+    // GHSA-673q-mjm6-r5xr et GHSA-2464-fhr4-w9xw).
+    de: '"next": "16.4.1"',
+    vers: '"next": "^16.4.1"' },
 
   // ⚠️ ANCRES SUIVIES LE 12/10 : React monté délibérément en 19.3.0 (PR
   // Dependabot « montees-mineures », faite à la main). Même règle que Next.
@@ -56,8 +58,9 @@ const MUTATIONS = [
   // restait vert a juste titre. Une mutation doit changer le RESULTAT.
   { nom: '🔴 le verrou porte une autre version que package.json',
     fichier: 'package-lock.json',
-    de: '"resolved": "https://registry.npmjs.org/next/-/next-16.4.0.tgz",',
-    vers: '"resolved": "https://registry.npmjs.org/next/-/next-16.4.0.tgz", "version": "16.9.9",' },
+    // ⚠️ ANCRE SUIVIE LE 22/10 : Next 16.4.1.
+    de: '"resolved": "https://registry.npmjs.org/next/-/next-16.4.1.tgz",',
+    vers: '"resolved": "https://registry.npmjs.org/next/-/next-16.4.1.tgz", "version": "16.9.9",' },
 
   // ─── LA POLITIQUE DE PROPOSITION ────────────────────────────────────────
   { nom: '🔴 les montees MAJEURES redeviennent automatiques : Next 17 se clique',

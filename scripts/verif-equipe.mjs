@@ -925,7 +925,9 @@ const membre = (o = {}) => ({
   })())
   v('🔴 la fenêtre envoie ce qu’elle a MONTRÉ de la salle', /table: choixTable \? \{ format_id: choixTable\.format\?\.id \?\? null, forcer: !!choixTable\.forcer, raison: choixTable\.raison \?\? null \} : null,\s*cadence_depassee: cadenceDepassee,/.test(modal))
   v('🔴 au Poste aussi, le rappel suit le rendez-vous, email ou pas', /const rappel = prevenirClient\('\/api\/rdv\/replanifier-rappel', \{ rdv_id: rdv\.id \}, 'le rappel du client'\)/.test(modal))
-  v('🔴 l’email ne part que si l’adresse existe ET que la case est cochée', /const emailParti = prevenir && r\.client_a_email === true\s*if \(emailParti\) \{\s*postPro\('\/api\/emails\/rdv-confirme', \{\s*rdv_id: rdv\.id,\s*deplace: true,/.test(modal))
+  // REPOINTÉE LE 23/10 (I3) : l'envoi est attendu et « parti » vient de sa réponse.
+  v('🔴 l’email ne part que si l’adresse existe ET que la case est cochée', /if \(prevenir && r\.client_a_email === true\) \{\s*try \{\s*const res = await postPro\('\/api\/emails\/rdv-confirme', \{\s*rdv_id: rdv\.id,\s*deplace: true,/.test(modal)
+    && /emailParti = j\?\.email === 'envoye'/.test(modal))
   v('une salle qui a changé se relit', /if \(r\?\.code === 'salle_changee'\) setRelire\(n => n \+ 1\)/.test(modal))
 
   // L'écran du Poste.

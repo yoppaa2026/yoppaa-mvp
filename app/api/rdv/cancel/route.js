@@ -18,7 +18,8 @@ import { libelleBon } from '@/lib/bons-cadeaux'
 import { euros } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
-import { envoyerAuCommercant, emailRdvAnnule, emailRemboursementEchoue } from '@/lib/resend'
+import { envoyerAuCommercant, emailRdvAnnule, emailRemboursementEchoue, emailAnnulationClientCommercant } from '@/lib/resend'
+import { formatDateCourte } from '@/lib/abonnements'
 import { generateRdvIcs, icsToBase64Attachment, sequenceAnnulation } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
@@ -66,7 +67,8 @@ export async function POST(request) {
       prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
       couverts,
       abonnement_id, empreinte_statut, empreinte_montant, empreinte_payment_method_id,
-      commercant:commercants(id, nom, slug, adresse, telephone, email, stripe_account_id, rdv_delai_annulation_heures, categorie),
+      client_telephone,
+      commercant:commercants(id, nom, slug, adresse, telephone, email, stripe_account_id, rdv_delai_annulation_heures, categorie, notif_mode),
       prestation:rdv_prestations(nom, par_couverts)
     `
     const query = supabase.from('rdv_reservations').select(selectCols).is('deleted_at', null)
@@ -516,6 +518,8 @@ export async function POST(request) {
           // 🔴 ET CE QU'IL PEUT ENCORE PAYER, dans l'email aussi (15/09).
           tardive_facturable: montantFacturable,
           delai_heures:      delaiH,
+          // ✅ (23/10, C1) la séance d'abonnement revient sur son contrat.
+          seance_abonnement: !!rdv.abonnement_id,
         })
         // iCal CANCEL (SEQUENCE+1 par rapport au confirme initial)
         // ⚠️ CORRIGÉ LE 05/08 : cet appel passait `rdv_id` alors que la
@@ -585,6 +589,32 @@ export async function POST(request) {
       }
     }
 
+    // ✅ LE STUDIO L'APPREND, SELON SON RÉGLAGE (décision d'Alex, 23/10, C5).
+    // « À chaque » : un email maintenant. Récap : le récap du lendemain matin
+    // liste l'annulation (cron recap-jour-8h). Sauf si l'alerte de
+    // remboursement vient déjà de partir : elle dit la même chose, en plus.
+    // ⚠️ AU MIEUX : un email raté ne défait pas l'annulation.
+    if (commercant?.notif_mode === 'chaque' && commercant?.email && !refundError) {
+      try {
+        const envoi = await envoyerAuCommercant({
+          to: commercant.email,
+          subject: `Annulation : ${[rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' ') || 'un client'}, ${formatDateCourte(rdv.date_rdv)} à ${String(rdv.heure_debut || '').slice(0, 5)}`,
+          html: emailAnnulationClientCommercant({
+            commercant_nom: commercant.nom || '',
+            client: [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
+            telephone: rdv.client_telephone || null,
+            prestation_nom: rdv.prestation?.nom || '',
+            date_rdv: rdv.date_rdv,
+            heure_debut: rdv.heure_debut,
+            seance_abonnement: !!rdv.abonnement_id,
+          }),
+        })
+        if (!envoi?.ok) console.error('[rdv/cancel] alerte d’annulation au commerçant KO', envoi?.error)
+      } catch (e) {
+        console.error('[rdv/cancel] alerte d’annulation au commerçant KO', e?.message)
+      }
+    }
+
     // Message : dire exactement ce qui revient et ce qui reste à récupérer.
     // Un client qui garde ses produits doit lire noir sur blanc qu'ils
     // l'attendent, sinon il croit avoir perdu son argent.
@@ -615,7 +645,9 @@ export async function POST(request) {
     const phraseTardive = montantFacturable > 0
       ? ` Tu as annulé moins de ${delaiH} h avant : ${commercant?.nom || 'le restaurant'} peut facturer ${euros(montantFacturable)}.`
       : ''
-    const retours = `${phraseBon}${phraseRecompense}${phraseTardive}`
+    // ✅ (23/10, C1) ET LA SÉANCE D'ABONNEMENT, qui revient sur le contrat.
+    const phraseAbonnement = rdv.abonnement_id ? ' Ta séance revient sur ton abonnement.' : ''
+    const retours = `${phraseAbonnement}${phraseBon}${phraseRecompense}${phraseTardive}`
 
     let message
     if (refundError) {

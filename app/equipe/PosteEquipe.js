@@ -861,6 +861,10 @@ export default function PosteEquipe({ equipe, onChanger }) {
           rdvsExistants={etat.agenda.rdvs}
           praticiens={etat.agenda.praticiens}
           liensPraticiens={etat.agenda.liensPraticiens ?? null}
+          // ✅ (23/10, N4) les fermetures et absences, comme l'agenda et le
+          // déplacement : sans elles, la saisie proposait un cours annulé.
+          fermetures={etat.agenda.fermetures ?? null}
+          exceptions={etat.agenda.exceptions || []}
           dateInit={saisie.date}
           heureInit={saisie.heure}
           serveur={serveurSaisie}

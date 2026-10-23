@@ -141,6 +141,22 @@ const MUTATIONS = [
     vers: '    if (!dateEcartee(curseur, periodesExclues)) {' },
   { nom: 'A3 des liaisons non lues changent le compte (plus inerte)', fichier: 'lib/abonnement-cours.js',
     de: '  if (!Array.isArray(creneaux) || !Array.isArray(liaisons)) return formule', vers: '  if (!Array.isArray(creneaux)) return formule' },
+
+  // ─── LOT B (23/10) ────────────────────────────────────────────────────────
+  { nom: '🔴 B1 un cours surbooké rend encore une place', fichier: 'lib/cours-collectifs.js',
+    de: '  if (prises.size >= total) return null', vers: '' },
+  { nom: '🔴 B2 le refus du contrat est ignoré au rétablissement', fichier: 'lib/rdv-reconfirmation.js',
+    de: '  if (etat.refusAbonnement?.raison) {', vers: '  if (false) {' },
+  { nom: '🔴 B3 le rétablissement part à la séquence de l annulation', fichier: 'lib/ical.js',
+    de: '  return sequenceAnnulation(maintenant) + 1', vers: '  return sequenceAnnulation(maintenant)' },
+  { nom: '🔴 B4 le déplacement promet l envoi case décochée', fichier: 'lib/confirmation-rdv.js',
+    de: '    if (retours.emailParti) return', vers: '    if (true) return' },
+  { nom: '🔴 B6 l email d annulation tait la séance rendue', fichier: 'lib/resend.js',
+    de: "        if (seance_abonnement) lignes.push('Ta séance revient sur ton abonnement.')", vers: '' },
+  { nom: '🔴 B5 le récap tait les annulations', fichier: 'lib/resend.js',
+    de: '  const blocAnnulations = nbAnnul === 0 ? \'\' : `', vers: '  const blocAnnulations = true ? \'\' : `' },
+  { nom: '🔴 B8 un cours trop long pour sa plage passe', fichier: 'lib/rdv-slots.js',
+    de: '    if (!e?.tropCourte) continue', vers: '    continue' },
 ]
 
 const lancer = () => {

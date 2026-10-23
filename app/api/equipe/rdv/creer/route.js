@@ -52,6 +52,8 @@ const REFUS = {
   place_prise: 'Cette place vient d’être prise pendant ta saisie. Réessaie.',
   praticien_hors_commerce: 'Cette personne ne fait plus partie de l’agenda.',
   jour_ferme: 'Une absence ou une fermeture est notée à cette date.',
+  // ✅ (23/10, N4) dit en français, plus le message générique.
+  seance_fermee: 'Ce cours est annulé à cette date : choisis une autre séance.',
 }
 
 export async function POST(request) {

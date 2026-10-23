@@ -304,6 +304,92 @@ const ANNEE = {
     code('app/commander/rdv/[slug]/page.js').includes("const vendables = canDo(planEffectif(c), 'rdv') && canDo(planEffectif(c), 'paiement_ligne')"))
 }
 
+// ─── LOT B (23/10) ──────────────────────────────────────────────────────────
+{
+  const { premierePlaceLibre, avertissementChangementCours } = await import('../lib/cours-collectifs.js')
+  const { refusRemiseEnConfirme } = await import('../lib/rdv-reconfirmation.js')
+  const { sequenceAnnulation, sequenceRetablissement, sequenceIcs } = await import('../lib/ical.js')
+  const { confirmationRdv } = await import('../lib/confirmation-rdv.js')
+  const { plagesTropCourtesPourCours } = await import('../lib/rdv-slots.js')
+  const { emailRdvAnnule, emailRecapRdvJour, emailAnnulationClientCommercant } = await import('../lib/resend.js')
+
+  // B1 (K-N5) : capacité baissée de 12 à 8, places 1-7 et 9-12 prises.
+  const prises = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12]
+  verifier('🔴 B1 : un cours surbooké ne rend plus « la place 8 »', premierePlaceLibre({ capacite: 8 }, prises) === null)
+  verifier('B1 : une vraie place libre au milieu reste donnée', premierePlaceLibre({ capacite: 8 }, [1, 2, 4]) === 3)
+  verifier('🔴 B1 : la file d’un cours encore plein n’est pas prévenue (code)',
+    /if \(\(inscrits \|\| \[\]\)\.length >= Number\(prestation\.capacite\)\) return \{ ok: true, prevenus: 0, file: 0, raison: 'complet' \}/.test(code('lib/attente-rdv-server.js')))
+
+  // B2 (N-A3) : le contrat doit encore porter la séance rétablie.
+  const base = { statut: 'annule_commercant' }
+  verifier('🔴 B2 : rétablir sur un contrat qui ne la porte plus est refusé',
+    refusRemiseEnConfirme({ ...base, refusAbonnement: { raison: 'solde_epuise', message: 'Plus de séance.' } })?.code === 'abonnement_solde_epuise')
+  verifier('B2 : sans refus du contrat, rien ne change', refusRemiseEnConfirme(base) === null)
+  const reconf = code('app/api/rdv/reconfirmer/route.js')
+  verifier('🔴 B2 : la route lit le contrat et juge avec la règle du déplacement',
+    reconf.includes('.select(COLONNES_CONTRAT_DEPLACEMENT).eq(\'id\', rdv.abonnement_id)') && reconf.includes('refusAbonnement = refusDeplacementSurAbonnement(abonnement, {')
+    && /refusAbonnement,\n/.test(reconf))
+
+  // B3 (N-A2) : le REQUEST du rétablissement passe après le CANCEL, même minute.
+  const t = Date.UTC(2026, 9, 23, 10, 0)
+  verifier('🔴 B3 : séquence du rétablissement > annulation > confirmation', sequenceRetablissement(t) > sequenceAnnulation(t) && sequenceAnnulation(t) > sequenceIcs(t))
+  verifier('B3 : la route joint le fichier calendrier', reconf.includes('sequence: sequenceRetablissement(),') && reconf.includes('attachments,'))
+
+  // B4 (I3) : le déplacement dit ce qui est parti.
+  const rdv = { client_prenom: 'Marie', client_nom: 'D', client_telephone: '0470' }
+  verifier('🔴 B4 : case décochée, l’écran ne promet plus l’envoi',
+    !/envoyée/.test(confirmationRdv('deplace', { rdv, retours: { clientAEmail: true, emailParti: false, prevenir: false } })))
+  verifier('B4 : sans adresse, il dit de prévenir, téléphone compris',
+    /0470/.test(confirmationRdv('deplace', { rdv, retours: { clientAEmail: false, emailParti: false } })))
+  verifier('B4 : parti, il le dit', /envoyée/.test(confirmationRdv('deplace', { rdv, retours: { clientAEmail: true, emailParti: true } })))
+  verifier('🔴 B4 : la route renvoie ce qui est parti, et notifie le déplacement',
+    code('app/api/emails/rdv-confirme/route.js').includes("return NextResponse.json({ ok: true, email: emailClient, notifie })")
+    && code('app/api/emails/rdv-confirme/route.js').includes("data: { kind: 'rdv_deplace', rdv_id: rdv.id },"))
+
+  // B5 (C5) : le studio prévenu selon son réglage.
+  verifier('🔴 B5 : « à chaque » envoie l’annulation tout de suite',
+    code('app/api/rdv/cancel/route.js').includes("if (commercant?.notif_mode === 'chaque' && commercant?.email && !refundError) {"))
+  const recap = emailRecapRdvJour({ nom_commercant: 'Respire', date_jour: '2026-10-24', rdvs: [], annulations: [{ date_rdv: '2026-10-27', heure_debut: '17:00', yopper_prenom: 'Marie', prestation_nom: 'Yoga', abonnement: true }] })
+  verifier('🔴 B5 : le récap du matin liste l’annulation, même un jour sans rendez-vous', /Une annulation depuis hier/.test(recap.html || recap) && /Marie/.test(recap.html || recap))
+  verifier('B5 : le cron lit les annulations de la veille',
+    code('app/api/cron/recap-jour-8h/route.js').includes(".eq('statut', 'annule_client')") && code('app/api/cron/recap-jour-8h/route.js').includes('annulations,'))
+  const alerte = emailAnnulationClientCommercant({ commercant_nom: 'Respire', client: 'Marie D', prestation_nom: 'Yoga', date_rdv: '2026-10-27', heure_debut: '17:00', seance_abonnement: true })
+  verifier('B5 : l’alerte dit qui, quoi, quand, et la séance rendue', /Marie D/.test(alerte.html || alerte) && /revient sur son contrat/.test(alerte.html || alerte))
+
+  // B6 (C1) : la séance d'abonnement annulée revient, et c'est dit.
+  const mail = emailRdvAnnule({ yopper_prenom: 'Marie', commercant_nom: 'Respire', prestation_nom: 'Yoga', date_rdv: '2026-10-27', heure_debut: '17:00', raison_annulation: 'commercant', seance_abonnement: true })
+  verifier('🔴 B6 : l’email d’annulation dit « Ta séance revient sur ton abonnement »', /Ta séance revient sur ton abonnement/.test(mail.html || mail))
+  verifier('B6 : pas pour une résiliation', code('app/api/emails/rdv-annule/route.js').includes("seance_abonnement: !!rdv.abonnement_id && raison_annulation !== 'resiliation',"))
+  verifier('B6 : l’écran et la notification le disent aussi',
+    code('app/api/rdv/cancel/route.js').includes("const phraseAbonnement = rdv.abonnement_id ? ' Ta séance revient sur ton abonnement.' : ''")
+    && code('app/api/rdv/annuler-commercant/route.js').includes('Ta séance revient sur ton abonnement.`'))
+
+  // B7 (N6) : la grille s'élargit aux rendez-vous affichés.
+  verifier('🔴 B7 : la grille de l’agenda suit aussi les rendez-vous',
+    code('app/dashboard/AgendaRdv.js').includes('}, [joursAffiches, horairesDetail, exceptions, rdvs])'))
+
+  // B8 (K-N6) : un cours allongé hors de ses plages se dit.
+  verifier('🔴 B8 : un cours de 75 min dans une plage d’une heure est signalé',
+    plagesTropCourtesPourCours([{ jour_semaine: 'lundi', heure_debut: '17:00', heure_fin: '18:00' }], 75)[0] === 'le lundi de 17:00 à 18:00')
+  verifier('B8 : une plage assez longue ne dit rien', plagesTropCourtesPourCours([{ jour_semaine: 'lundi', heure_debut: '17:00', heure_fin: '19:00' }], 75).length === 0)
+  verifier('B8 : l’enregistrement d’un cours le vérifie',
+    code('app/dashboard/ConfigDashboard.js').includes('const tropCourtes = plagesTropCourtesPourCours(sesPlages, duree)'))
+  verifier('B8 : la phrase ne promet plus « les mêmes séances »',
+    !/dans les mêmes séances/.test(avertissementChangementCours({ dureeAvant: 60, dureeApres: 75, capaciteAvant: 8, capaciteApres: 8, inscriptions: 2 })?.message || ''))
+
+  // B9 (N4) : le poste équipe voit les fermetures dans la saisie.
+  verifier('🔴 B9 : le poste équipe passe fermetures et exceptions à la saisie',
+    /fermetures=\{etat\.agenda\.fermetures \?\? null\}\n\s*exceptions=\{etat\.agenda\.exceptions \|\| \[\]\}\n\s*dateInit=\{saisie\.date\}/.test(code('app/equipe/PosteEquipe.js')))
+
+  // B10 (C1 abo) : le jour de Bruxelles.
+  verifier('B10 : « Mes abonnements » compte au jour de Bruxelles', code('app/api/yopper/abonnements/route.js').includes('const aujourdhui = jourBruxelles()'))
+
+  // B11 (Alex) : les annulés à venir se rouvrent depuis l'historique.
+  verifier('🔴 B11 : l’historique liste les annulés à venir',
+    code('app/dashboard/AgendaRdv.js').includes(".filter(r => String(r.statut || '').startsWith('annule') && r.date_rdv && r.date_rdv >= aujourdhuiIso)")
+    && code('app/dashboard/AgendaRdv.js').includes('{annulesAVenir.map(r => {'))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) { echecs.forEach(e => console.log('  ✕ ' + e)); process.exit(1) }
 console.log('Lot Centre Respire : vert.')

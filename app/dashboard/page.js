@@ -4807,7 +4807,7 @@ export default function Dashboard() {
           liaisons={liaisonsRdv}
           rdvsExistants={rdvs} fermetures={fermeturesAgendaTout} exceptions={exceptionsRdv}
           onClose={() => setRdvADeplacer(null)}
-          onDeplace={() => {
+          onDeplace={(_maj, retours) => {
             // Le déplacement se confirme comme le reste : la modale se ferme,
             // et une fenêtre dit ce qui vient d'être fait. Sans elle, le
             // commerçant ne sait pas si le client a été prévenu.
@@ -4815,7 +4815,7 @@ export default function Dashboard() {
             setRdvADeplacer(null)
             chargerRdvs(commercant.id)
             setActionRdv({ rdv: deplace, action: 'deplace' })
-            setConfirmationRdvTexte(confirmationRdv('deplace', { rdv: deplace }))
+            setConfirmationRdvTexte(confirmationRdv('deplace', { rdv: deplace, retours: retours || null }))
           }}
         />
       )}

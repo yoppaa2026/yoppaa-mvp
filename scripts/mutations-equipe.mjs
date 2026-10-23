@@ -206,7 +206,8 @@ const MUTATIONS = [
   { nom: '🔴 au Poste, le rappel ne suit plus',
     fichier: 'app/dashboard/ModalDeplacerRdv.js', de: "    const rappel = prevenirClient('/api/rdv/replanifier-rappel', { rdv_id: rdv.id }, 'le rappel du client')", vers: '    const rappel = Promise.resolve({ ok: true })' },
   { nom: '🔴 l email part même case décochée',
-    fichier: 'app/dashboard/ModalDeplacerRdv.js', de: '    const emailParti = prevenir && r.client_a_email === true', vers: '    const emailParti = r.client_a_email === true' },
+    // REPOINTÉE LE 23/10 (I3) : l'envoi est attendu, la condition reste la case.
+    fichier: 'app/dashboard/ModalDeplacerRdv.js', de: '    if (prevenir && r.client_a_email === true) {', vers: '    if (r.client_a_email === true) {' },
   { nom: '🔴 la fenêtre de déplacement s ouvre sans la case Agenda',
     fichier: 'app/equipe/PosteEquipe.js', de: '      {aDeplacer && etat.agenda && etat.droits?.agenda && (', vers: '      {aDeplacer && etat.agenda && (' },
   { nom: '⚠️ le client sans adresse n est plus signalé',

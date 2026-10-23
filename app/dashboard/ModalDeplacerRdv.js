@@ -465,16 +465,26 @@ export default function ModalDeplacerRdv({
       // l'annuler. Le fichier calendrier joint porte un numéro de séquence
       // supérieur, ce qui DÉPLACE l'événement déjà présent chez le client au
       // lieu d'en créer un second.
+      // 🔴 ET L'ÉCRAN DIT CE QUI EST PARTI (23/10, I3) : « la nouvelle date lui
+      // est envoyée » s'affichait case décochée, sans adresse, ou envoi raté.
+      // On attend la réponse : elle est courte, et c'est elle qui dit vrai.
+      let emailParti = false
       if (prevenir && rdv.client_email) {
-        postPro('/api/emails/rdv-confirme', {
+        try {
+          const res = await postPro('/api/emails/rdv-confirme', {
             rdv_id: rdv.id,
             deplace: true,
             ancienne_date: ancienneDate,
             ancienne_heure: ancienneHeure,
-          }).catch(e => console.warn('[ModalDeplacerRdv] email de déplacement KO', e))
+          })
+          const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+          emailParti = j?.email === 'envoye'
+        } catch (e) {
+          console.warn('[ModalDeplacerRdv] email de déplacement KO', e)
+        }
       }
 
-      if (onDeplace) onDeplace({ ...rdv, ...maj })
+      if (onDeplace) onDeplace({ ...rdv, ...maj }, { clientAEmail: !!rdv.client_email, emailParti, prevenir })
       onClose()
     } catch (e) {
       console.error('[ModalDeplacerRdv] exception', e)
@@ -512,14 +522,21 @@ export default function ModalDeplacerRdv({
     rappel
       .then(x => { if (!x.ok) console.warn('[ModalDeplacerRdv] rappel push non replanifié', x.statut, x.erreur) })
       .catch(e => console.warn('[ModalDeplacerRdv] rappel push non replanifié', e?.message))
-    const emailParti = prevenir && r.client_a_email === true
-    if (emailParti) {
-      postPro('/api/emails/rdv-confirme', {
-        rdv_id: rdv.id,
-        deplace: true,
-        ancienne_date: r.ancienne_date,
-        ancienne_heure: r.ancienne_heure,
-      }).catch(e => console.warn('[ModalDeplacerRdv] email de déplacement KO', e))
+    // ✅ (23/10, I3) « parti » veut dire PARTI : la réponse de l'envoi, lue.
+    let emailParti = false
+    if (prevenir && r.client_a_email === true) {
+      try {
+        const res = await postPro('/api/emails/rdv-confirme', {
+          rdv_id: rdv.id,
+          deplace: true,
+          ancienne_date: r.ancienne_date,
+          ancienne_heure: r.ancienne_heure,
+        })
+        const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+        emailParti = j?.email === 'envoye'
+      } catch (e) {
+        console.warn('[ModalDeplacerRdv] email de déplacement KO', e)
+      }
     }
     if (onDeplace) onDeplace({ ...rdv, date_rdv: date, heure_debut: heure }, { clientAEmail: r.client_a_email === true, emailParti })
     onClose()

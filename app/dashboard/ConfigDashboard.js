@@ -60,7 +60,7 @@ import {
 import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { lireCommandeRealisable } from '@/lib/commande-realisable-lecture'
-import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
+import { creneauxPourPrestation, plagesTropCourtesPourCours, prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide, enGras } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
@@ -13402,6 +13402,28 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
           inscriptions: aVenir.length, plusRemplie: Math.max(0, ...parSeance.values()),
         })
         if (avis && !await confirme(confirmationSimple({ titre: avis.titre, message: avis.message, action: 'Oui, enregistrer', ton: 'principal' }))) return
+      }
+    }
+    // 🔴 UN COURS ALLONGÉ PEUT NE PLUS TENIR DANS SES PLAGES (23/10, K-N6) :
+    // il n'y est alors plus jamais proposé, inscrits ou pas. On le dit avant.
+    // ⚠️ Une lecture ratée n'empêche pas d'enregistrer : on ne dit simplement rien.
+    if (avant && !payload.par_couverts && payload.capacite > 1 && duree > Number(avant.duree_minutes)) {
+      const { data: plagesLues, error: errPl } = await supabase.from('rdv_creneaux')
+        .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pas_minutes')
+        .eq('commercant_id', commercantId).eq('actif', true).is('deleted_at', null)
+      const idsPl = (plagesLues || []).map(p => p.id)
+      const { data: liaisonsLues, error: errLi } = idsPl.length > 0
+        ? await supabase.from('rdv_creneau_prestations').select('creneau_id, prestation_id').in('creneau_id', idsPl)
+        : { data: [], error: null }
+      if (!errPl && !errLi) {
+        const sesPlages = creneauxPourPrestation(plagesLues || [], editId, liaisonsLues || [], { estCours: true })
+        const tropCourtes = plagesTropCourtesPourCours(sesPlages, duree)
+        if (tropCourtes.length > 0 && !await confirme(confirmationSimple({
+          titre: 'Ce cours ne tiendra plus dans ses plages',
+          message: `Avec ${duree} min, il dépasse ${tropCourtes.length > 1 ? 'ces plages' : 'cette plage'} : ${tropCourtes.join(', ')}. Il n’y sera plus proposé. Allonge la plage dans Créneaux, ou garde une durée plus courte.`,
+          action: 'Enregistrer quand même',
+          ton: 'principal',
+        }))) return
       }
     }
     setSaving(true)

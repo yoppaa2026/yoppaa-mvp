@@ -18,10 +18,13 @@ import { createClient } from '@supabase/supabase-js'
 import { refus } from '@/lib/api-auth'
 import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { refusRemiseEnConfirme } from '@/lib/rdv-reconfirmation'
+import { COLONNES_CONTRAT_DEPLACEMENT, refusDeplacementSurAbonnement } from '@/lib/abonnements'
 import { fermetureQuiBloque, estFermetureDeSeance } from '@/lib/fermetures-rdv'
 import { COLONNES_EXCEPTIONS, fermeturesAgenda, exceptionsPour } from '@/lib/horaires-du-jour'
 import { programmerRappelRdv } from '@/lib/rappels'
-import { creneauDejaCommence } from '@/lib/timezone'
+import { creneauDejaCommence, rappelVeillePossible } from '@/lib/timezone'
+import { generateRdvIcs, icsToBase64Attachment, sequenceRetablissement } from '@/lib/ical'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 import { envoyerAuYopper, emailRdvRetabli } from '@/lib/resend'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { normaliserEmail } from '@/lib/email-normalise'
@@ -53,8 +56,9 @@ export async function POST(request) {
         id, statut, commercant_id, prestation_id, praticien_id, date_rdv, heure_debut,
         stripe_refund_amount, commande_id, abonnement_id, fidelite_recompense_id, empreinte_debit_at,
         client_id, client_email, client_prenom,
-        commercant:commercants(nom, slug, categorie),
-        prestation:rdv_prestations(nom)
+        heure_fin, client_nom, lieu_libelle, lieu_adresse, prix_estime, couverts,
+        commercant:commercants(nom, slug, categorie, adresse, telephone, email),
+        prestation:rdv_prestations(nom, par_couverts)
       `)
       .eq('id', rdv_id)
       .is('deleted_at', null)
@@ -75,7 +79,8 @@ export async function POST(request) {
         ? supabase.from('commandes').select('statut').eq('id', rdv.commande_id).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       rdv.abonnement_id
-        ? supabase.from('abonnements').select('statut').eq('id', rdv.abonnement_id).maybeSingle()
+        // ✅ (23/10, N-A3) le contrat entier : la séance doit encore y tenir.
+        ? supabase.from('abonnements').select(COLONNES_CONTRAT_DEPLACEMENT).eq('id', rdv.abonnement_id).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       supabase.from('rdv_fermetures')
         .select('date_debut, date_fin, praticien_id, prestation_id, heure_debut')
@@ -104,6 +109,29 @@ export async function POST(request) {
       heure: String(rdv.heure_debut || '').slice(0, 5),
     })
 
+    // 🔴 LE CONTRAT LA PORTE-T-IL ENCORE ? (23/10, N-A3) Même règle que le
+    // déplacement : sa date, ses autres séances, les congés de la formule.
+    // Un contrat résilié a déjà sa réponse plus bas. ⚠️ UNE LECTURE RATÉE REFUSE.
+    let refusAbonnement = null
+    if (abonnement && !abonnement.deleted_at && abonnement.statut !== 'resilie') {
+      const [formule, posees] = await Promise.all([
+        abonnement.formule_id
+          ? supabase.from('abonnement_formules').select('periodes_exclues').eq('id', abonnement.formule_id).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        supabase.from('rdv_reservations').select('id, abonnement_id, statut, date_rdv').eq('abonnement_id', abonnement.id),
+      ])
+      if (formule.error || posees.error) {
+        console.error('[rdv/reconfirmer] lecture du contrat KO', formule.error || posees.error)
+        return NextResponse.json({ ok: false, error: 'Impossible de vérifier son abonnement. Réessaie dans un instant.' }, { status: 500 })
+      }
+      refusAbonnement = refusDeplacementSurAbonnement(abonnement, {
+        nouvelleDate: rdv.date_rdv,
+        reservations: posees.data || [],
+        rdvId: rdv.id,
+        periodesExclues: Array.isArray(formule.data?.periodes_exclues) ? formule.data.periodes_exclues : [],
+      })
+    }
+
     const refusMotif = refusRemiseEnConfirme({
       statut: rdv.statut,
       rembourse: rdv.stripe_refund_amount,
@@ -112,6 +140,7 @@ export async function POST(request) {
       produitsAnnules: ['annulee_client_refund', 'annulee_commercant'].includes(commande?.statut),
       absenceFacturee: !!rdv.empreinte_debit_at,
       abonnementResilie: abonnement?.statut === 'resilie',
+      refusAbonnement,
       fermeture: fermeture ? (estFermetureDeSeance(fermeture) ? 'seance' : 'jour') : null,
     })
     if (refusMotif) return NextResponse.json({ ok: false, code: refusMotif.code, error: refusMotif.message }, { status: 409 })
@@ -172,7 +201,40 @@ export async function POST(request) {
         passe,
       })
       const mots = motsReservation(rdv.commercant)
+      // 🔴 LE CALENDRIER DU CLIENT LE REPREND (23/10, N-A2) : l'annulation y
+      // avait envoyé un CANCEL, l'événement restait barré. Un REQUEST au même
+      // UID, d'un cran PLUS LOIN que l'annulation, le remet. Rien pour une
+      // heure passée. ⚠️ AU MIEUX : un fichier raté n'empêche pas l'email.
+      let attachments
+      if (!passe) {
+        try {
+          const ics = generateRdvIcs({
+            id: rdv.id,
+            date_rdv: rdv.date_rdv,
+            heure_debut: rdv.heure_debut,
+            heure_fin: rdv.heure_fin,
+            prestation_nom: rdv.prestation?.nom || 'Prestation',
+            commercant_nom: rdv.commercant?.nom || '',
+            commercant_adresse: adresseRendezVous(rdv),
+            commercant_telephone: rdv.commercant?.telephone,
+            commercant_email: rdv.commercant?.email,
+            client_email: rdv.client_email,
+            client_nom: [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
+            prix_estime: rdv.abonnement_id ? null : rdv.prix_estime,
+            rappel_24h: rappelVeillePossible(rdv.date_rdv, rdv.heure_debut),
+            table: rdv.prestation?.par_couverts === true,
+            couverts: rdv.couverts,
+            status: 'CONFIRMED',
+            method: 'REQUEST',
+            sequence: sequenceRetablissement(),
+          })
+          attachments = [icsToBase64Attachment(ics, `rdv-${rdv.id}.ics`)]
+        } catch (e) {
+          console.warn('[rdv/reconfirmer] fichier calendrier KO', e?.message)
+        }
+      }
       const envoi = await envoyerAuYopper({
+        attachments,
         to: rdv.client_email,
         subject: passe
           ? `${rdv.commercant?.nom || 'Ton commerce'} : oublie notre message précédent`

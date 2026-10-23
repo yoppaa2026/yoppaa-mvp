@@ -29,6 +29,9 @@ import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
 import { motsReservation, objetReservation } from '@/lib/reservation-metier'
 import { rappelVeillePossible } from '@/lib/timezone'
 import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
+import { envoyerPushParExternalId } from '@/lib/onesignal'
+import { normaliserEmail } from '@/lib/email-normalise'
+import { jourLisible } from '@/lib/attente-rdv'
 
 export async function POST(request) {
   try {
@@ -77,7 +80,7 @@ export async function POST(request) {
         id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, duree_minutes,
         prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
         empreinte_statut, empreinte_montant,
-        client_email, client_prenom, client_nom, client_telephone, notes_client,
+        client_email, client_prenom, client_nom, client_telephone, notes_client, client_id,
         annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id,
         couverts,
         abonnement_id,
@@ -110,6 +113,8 @@ export async function POST(request) {
     const produits = await chargerProduitsDuRdv(supabase, rdv.commande_id)
 
     // 1) Email Yopper avec iCal joint
+    // ✅ (23/10, I3) Ce qui est VRAIMENT parti remonte à l'écran.
+    let emailClient = rdv.client_email ? 'echec' : 'sans_email'
     if (rdv.client_email) {
       try {
         const ics = generateRdvIcs({
@@ -194,7 +199,7 @@ export async function POST(request) {
           rappel_24h:              rappel24h,
         })
 
-        await envoyerAuCommercant({   // helper reutilise, accepte n'importe quel 'to'
+        const envoiClient = await envoyerAuCommercant({   // helper reutilise, accepte n'importe quel 'to'
           to: rdv.client_email,
           // ⚠️ L'OBJET DANS LES MOTS DU MÉTIER : le titre disait « Ta réservation
           // a été déplacée » sous un objet « Ton RDV … a été déplacé ».
@@ -204,8 +209,37 @@ export async function POST(request) {
           html,
           attachments: [attachment],
         })
+        emailClient = envoiClient?.ok ? 'envoye' : 'echec'
       } catch (e) {
         console.error('[emails/rdv-confirme] envoi Yopper KO', e)
+      }
+    }
+
+    // 🔴 UN DÉPLACEMENT SE DIT AUSSI PAR NOTIFICATION (23/10, I3). Seul l'email
+    // partait : le Yopper qui ne lit pas ses mails venait à l'ancienne heure.
+    // ⚠️ AU MIEUX : une notification ratée ne défait rien.
+    let notifie = false
+    if (deplace) {
+      try {
+        let pourQui = rdv.client_id || null
+        if (!pourQui && rdv.client_email) {
+          const { data: fiche } = await supabase
+            .from('clients').select('id')
+            .eq('email', normaliserEmail(rdv.client_email))
+            .maybeSingle()
+          pourQui = fiche?.id || null
+        }
+        if (pourQui) {
+          const envoi = await envoyerPushParExternalId(pourQui, {
+            headings: `${mots.sujetChez} ${rdv.commercant?.nom || 'ton commerce'} a été ${mots.participeDeplace}`,
+            contents: `Nouveau rendez-vous : le ${jourLisible(rdv.date_rdv)} à ${String(rdv.heure_debut || '').slice(0, 5)}.`,
+            url: '/commander?onglet=commandes&tab=rdvs',
+            data: { kind: 'rdv_deplace', rdv_id: rdv.id },
+          })
+          notifie = Boolean(envoi?.ok)
+        }
+      } catch (e) {
+        console.warn('[emails/rdv-confirme] notification de déplacement KO', e?.message)
       }
     }
 
@@ -258,7 +292,7 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, email: emailClient, notifie })
 
   } catch (e) {
     console.error('[emails/rdv-confirme] exception', e)

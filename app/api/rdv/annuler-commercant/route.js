@@ -65,7 +65,7 @@ export async function POST(request) {
         id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id, stripe_refund_amount,
         commande_id, fidelite_recompense_id, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
         rappel_push_id, commercant_id,
-        client_id, client_email, date_rdv, heure_debut, prestation_id,
+        client_id, client_email, date_rdv, heure_debut, prestation_id, abonnement_id,
         prestation:rdv_prestations(capacite, par_couverts),
         commercant:commercants(stripe_account_id, nom, categorie)
       `)
@@ -263,7 +263,10 @@ export async function POST(request) {
         const mots = motsReservation(rdv.commercant)
         const envoi = await envoyerPushParExternalId(pourQui, {
           headings: `${mots.sujetAnnule} ${rdv.commercant?.nom || 'ton commerce'} est ${mots.participeAnnule}`,
-          contents: `Le ${jourLisible(rdv.date_rdv)} à ${String(rdv.heure_debut || '').slice(0, 5)}. Ce qui te revient est dans ton email.`,
+          // ✅ (23/10, C1) une séance d'abonnement le dit tout de suite.
+        contents: rdv.abonnement_id
+          ? `Le ${jourLisible(rdv.date_rdv)} à ${String(rdv.heure_debut || '').slice(0, 5)}. Ta séance revient sur ton abonnement.`
+          : `Le ${jourLisible(rdv.date_rdv)} à ${String(rdv.heure_debut || '').slice(0, 5)}. Ce qui te revient est dans ton email.`,
           url: '/commander?onglet=commandes&tab=rdvs',
           data: { kind: 'rdv_annule_commercant', rdv_id: rdv.id },
         })

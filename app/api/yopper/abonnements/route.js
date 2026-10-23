@@ -23,7 +23,7 @@ import { NextResponse } from 'next/server'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { createClient } from '@supabase/supabase-js'
 import { etatAbonnement } from '@/lib/abonnements'
-import { jourLocalISO } from '@/lib/timezone'
+import { jourBruxelles } from '@/lib/timezone'
 
 function admin() {
   return createClient(
@@ -95,7 +95,9 @@ export async function GET(request) {
 
   const parCommercant = Object.fromEntries((commercants || []).map(c => [c.id, c]))
   const parFormule = Object.fromEntries((formules || []).map(f => [f.id, f]))
-  const aujourdhui = jourLocalISO()
+  // 🔴 LE JOUR À BRUXELLES (23/10, C1 abo) : le serveur vit en temps universel,
+  // et entre minuit et 2 h une séance de la veille comptait encore « à venir ».
+  const aujourdhui = jourBruxelles()
 
   const abonnements = contrats.map(contrat => {
     const etat = etatAbonnement(contrat, reservations || [], { aujourdhui })

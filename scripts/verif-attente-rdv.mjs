@@ -408,7 +408,8 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
     && /if \(annulationPrevientLaFile\(rdv, \{ prevenirFile: prevenir_file, raison \}\)\) \{\s*const file = await prevenirLaFile\(/.test(ANNUL_PRO),
     `${appelsFile} appel(s)`)
   verifier('⚠️ et la règle a de quoi décider : la capacité et la table sont lues',
-    /prestation_id,\s*prestation:rdv_prestations\(capacite, par_couverts\),/.test(ANNUL_PRO))
+    // REPOINTÉE LE 23/10 : `abonnement_id` s'intercale (C1, la notification le dit).
+    /prestation_id,(?: abonnement_id,)?\s*prestation:rdv_prestations\(capacite, par_couverts\),/.test(ANNUL_PRO))
   {
     const place = (prestation, extra = {}) => ({ prestation_id: 'p', prestation, ...extra })
     verifier('🔴 une place de cours libérée par le commerce prévient la file',
@@ -880,7 +881,9 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
 
     // LA-03, exécuté : une chaîne en cours ne repart pas de zéro.
     {
-      const t = base()
+      // REPOINTÉE LE 23/10 (K-N5) : une place est réellement libre (un inscrit
+      // sur deux) ; un cours plein ne prévient plus personne, voir plus bas.
+      const t = base({ inscrits: [inscrite('r1')] })
       // La fausse base ne résout pas les jointures : le commerce publié voyage dans la ligne.
       t.rdv_prestations[0].commercant = { nom: 'Centre', slug: 'centre', statut_publication: 'publie' }
       t.rdv_attente.push(
@@ -890,6 +893,14 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
       const r = await S.prevenirLaFile(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })
       verifier('🔴 un second déclenchement ne reprévient pas celle qui vient de l’être',
         r.ok === true && r.file === 1, JSON.stringify(r))
+    }
+    // K-N5 (23/10), exécuté : un cours encore plein (capacité baissée) ne libère rien.
+    {
+      const t = base()
+      t.rdv_prestations[0].commercant = { nom: 'Centre', slug: 'centre', statut_publication: 'publie' }
+      t.rdv_attente.push(ligne('a'))
+      const r = await S.prevenirLaFile(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })
+      verifier('🔴 K-N5 : un cours encore plein ne fait prévenir personne', r.ok === true && r.prevenus === 0 && r.raison === 'complet', JSON.stringify(r))
     }
 
     // LA-07, exécuté : ni un cours retiré, ni un jour fermé.

@@ -366,8 +366,10 @@ export default function ModalNouveauRdv({
   const praticienRetenu = choixPrat.praticienId
   // Son absence notée bloque ; les fermetures de toute la maison, elles,
   // gardent la règle de la saisie (on peut noter un rendez-vous après coup).
-  const absencesRetenue = praticienRetenu != null && Array.isArray(fermeturesAgenda)
-    ? fermeturesAgenda.filter(f => f.praticien_id != null && String(f.praticien_id) === String(praticienRetenu))
+  // ⚠️ (23/10, N4) LA LISTE RETENUE : celle reçue (Poste équipe, tableau de
+  // bord), sinon la lecture locale. Le Poste ne lit rien lui-même.
+  const absencesRetenue = praticienRetenu != null && Array.isArray(fermeturesSerie)
+    ? fermeturesSerie.filter(f => f.praticien_id != null && String(f.praticien_id) === String(praticienRetenu))
     : null
   // Ce que la règle des créneaux reçoit, aux trois endroits qui la posent.
   const chezLaPersonne = { praticienId: praticienRetenu, fermetures: absencesRetenue }

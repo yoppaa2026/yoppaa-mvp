@@ -175,11 +175,24 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
       }
     })
     if (min === 24 * 60) { min = 9 * 60; max = 18 * 60 }
+    // 🔴 ET LES RENDEZ-VOUS DE LA FENÊTRE (23/10, N6) : la grille ne suivait
+    // que les heures d'ouverture. Un cours posé à 7 h ou à 20 h, hors de
+    // celles-ci, n'était dessiné nulle part et la commerçante le croyait perdu.
+    const joursVus = new Set(joursAffiches.map(j => j.iso))
+    ;(rdvs || []).forEach(r => {
+      if (!r.heure_debut || !joursVus.has(r.date_rdv) || !['confirme', 'honore', 'no_show'].includes(r.statut)) return
+      const d = timeToMinutes(String(r.heure_debut || '').slice(0, 5))
+      if (!Number.isFinite(d)) return
+      const fLue = timeToMinutes(String(r.heure_fin || '').slice(0, 5))
+      const f = Number.isFinite(fLue) && fLue > d ? fLue : d + (Number(r.duree_minutes) || PAS_MINUTES)
+      min = Math.min(min, d)
+      max = Math.max(max, Math.min(f, 24 * 60))
+    })
     // Aligne au pas (ex: 9h00, 9h30, etc.)
     min = Math.floor(min / PAS_MINUTES) * PAS_MINUTES
     max = Math.ceil(max / PAS_MINUTES) * PAS_MINUTES
     return { heureMin: min, heureMax: max }
-  }, [joursAffiches, horairesDetail, exceptions])
+  }, [joursAffiches, horairesDetail, exceptions, rdvs])
 
   // ⚠️ L'AGENDA ANNONCE CE QU'IL MONTRE (défaut trouvé par Alex le 16/08).
   // Les compteurs du tableau de bord lisaient la date d'un sélecteur de jours
@@ -300,6 +313,20 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
   }, [rdvs, praticienFiltre, today])
 
   const aClore = compterAClore(rdvsPasses)
+
+  // ✅ (Alex, 23/10) LES ANNULÉS À VENIR : la grille ne les montre pas, et
+  // l'historique ne gardait que le passé. Un rendez-vous annulé par erreur ne
+  // pouvait plus être « remis en confirmé ». Ils vivent ici, du plus proche au
+  // plus lointain ; un clic rouvre la fenêtre du rendez-vous.
+  const annulesAVenir = useMemo(() => {
+    const aujourdhuiIso = isoDate(today)
+    return (rdvs || [])
+      .filter(r => String(r.statut || '').startsWith('annule') && r.date_rdv && r.date_rdv >= aujourdhuiIso)
+      .filter(r => praticienFiltre === 'all' || r.praticien_id === praticienFiltre)
+      .sort((a, b) =>
+        String(a.date_rdv).localeCompare(String(b.date_rdv))
+        || String(a.heure_debut || '').localeCompare(String(b.heure_debut || '')))
+  }, [rdvs, praticienFiltre, today])
 
   // Navigation
   //
@@ -441,9 +468,42 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
           qu'il est. */}
       {historique && (
         <div style={{ padding: '0.625rem 0.875rem' }}>
-          {rdvsPasses.length === 0 && (
+          {annulesAVenir.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 6px' }}>
+                Annulés à venir
+              </p>
+              {annulesAVenir.map(r => {
+                const d = new Date(`${r.date_rdv}T12:00:00`)
+                return (
+                  <button key={r.id} onClick={() => onSelectRdv && onSelectRdv(r)}
+                    style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0.625rem', marginBottom: 6, borderRadius: 10, border: `1.5px solid ${T.pale}`, background: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                    <span style={{ width: 6, alignSelf: 'stretch', borderRadius: 100, background: '#DC2626', flexShrink: 0 }}/>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {[r.client_prenom, r.client_nom].filter(Boolean).join(' ') || 'Client'}
+                        {r.prestation?.nom ? ` · ${r.prestation.nom}` : ''}
+                      </span>
+                      <span style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: T.muted, marginTop: 1 }}>
+                        {JOURS_CRT[jourIdxLun(d)]} {d.getDate()} {MOIS_CRT[d.getMonth()]}
+                        {r.heure_debut ? ` · ${r.heure_debut.slice(0, 5)}` : ''}
+                        {r.praticien?.prenom ? ` · ${r.praticien.prenom}` : ''}
+                      </span>
+                    </span>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#DC2626', flexShrink: 0 }}>{statutRdv(r).label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {rdvsPasses.length === 0 && annulesAVenir.length === 0 && (
             <p style={{ textAlign: 'center', color: T.muted, fontSize: '0.82rem', padding: '2rem 0', margin: 0 }}>
               Aucun rendez-vous passé pour le moment.
+            </p>
+          )}
+          {rdvsPasses.length > 0 && annulesAVenir.length > 0 && (
+            <p style={{ fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 6px' }}>
+              Passés
             </p>
           )}
           {rdvsPasses.map(r => {

@@ -1433,8 +1433,11 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 le cron ouvre la salle aux commerces qui en ont une',
     /const aUneSalle = !estVitrine && reservationActive\(c\)/.test(CRON))
   verifier('🔴 et il lit la colonne « couverts »', /numero_prefixe, couverts,/.test(CRON))
+  // REPOINTÉE LE 23/10 (C5) : la seconde lecture est celle des ANNULATIONS de
+  // la veille (vitrine), pas des tables ; elle est nommée et décomptée.
   verifier('⚠️ une seule lecture des tables, partagée par les deux emails',
-    (CRON.match(/from\('rdv_reservations'\)/g) || []).length === 1)
+    (CRON.match(/from\('rdv_reservations'\)/g) || []).length
+      - (CRON.match(/from\('rdv_reservations'\)\s*\.select\('date_rdv, heure_debut, client_prenom, client_nom, abonnement_id, prestation:rdv_prestations\(nom\)'\)\s*\.eq\('commercant_id', c\.id\)\s*\.eq\('statut', 'annule_client'\)/g) || []).length === 1)
   // REPOINTÉE LE 17/10 : `let`, parce que les tables DÉJÀ PRISES chez qui a
   // perdu la formule s'y ajoutent (audit « honorer ») ; et là aussi, `null`
   // quand il n'y en a aucune (`verif:honorer` garde cette seconde moitié).

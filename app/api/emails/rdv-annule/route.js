@@ -57,7 +57,7 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, date_rdv, heure_debut, heure_fin, acompte_paye_en_ligne, acompte_montant,
-        client_email, client_prenom, client_nom, rappel_push_id,
+        client_email, client_prenom, client_nom, rappel_push_id, abonnement_id,
         lieu_id, lieu_libelle, lieu_adresse,
         couverts,
         commercant:commercants(nom, slug, adresse, telephone, email, categorie),
@@ -138,6 +138,8 @@ export async function POST(request) {
       // et « bon cadeau » à un restaurant.
       tardive_facturable: 0,
       delai_heures:      null,
+      // ✅ (23/10, C1) sauf une résiliation : le contrat lui-même s'arrête.
+      seance_abonnement: !!rdv.abonnement_id && raison_annulation !== 'resiliation',
     })
 
     await envoyerAuCommercant({

@@ -150,11 +150,36 @@ export async function GET(request) {
         if (estVitrine) {
           const rdvsFlat = await lireTablesDuJour()
           total = rdvsFlat.length
+          // ✅ (Alex, 23/10, C5) LES ANNULATIONS DES CLIENTS DEPUIS HIER, pour
+          // les séances à venir : en mode récap, c'est ici que le studio les
+          // apprend. `updated_at` est tenu par le déclencheur de la table.
+          // ⚠️ Une lecture ratée ne bloque pas le récap : la section se tait.
+          const { data: annulLues, error: errAnnul } = await supabase
+            .from('rdv_reservations')
+            .select('date_rdv, heure_debut, client_prenom, client_nom, abonnement_id, prestation:rdv_prestations(nom)')
+            .eq('commercant_id', c.id)
+            .eq('statut', 'annule_client')
+            .is('deleted_at', null)
+            .gte('updated_at', debutVeille)
+            .lt('updated_at', debutJour)
+            .gte('date_rdv', dateJour)
+            .order('date_rdv', { ascending: true })
+            .order('heure_debut', { ascending: true })
+          if (errAnnul) console.error('[cron/recap-jour-8h] fetch annulations KO', { commercant: c.nom, error: errAnnul.message })
+          const annulations = (errAnnul ? [] : (annulLues || [])).map(a => ({
+            date_rdv: a.date_rdv,
+            heure_debut: a.heure_debut,
+            yopper_prenom: a.client_prenom,
+            yopper_nom: a.client_nom,
+            prestation_nom: a.prestation?.nom,
+            abonnement: !!a.abonnement_id,
+          }))
           html = emailRecapRdvJour({
             nom_commercant: c.nom,
             commercant_categorie: c.categorie || null,
             date_jour:      dateJour,
             rdvs:           rdvsFlat,
+            annulations,
           })
           const motsRecap = motsReservation(c)
           subject = total === 0

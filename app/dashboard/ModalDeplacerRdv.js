@@ -31,6 +31,7 @@ import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
+import { refusDeplacementSurAbonnement, COLONNES_CONTRAT_DEPLACEMENT } from '@/lib/abonnements'
 import { plageQuiAccueille, seancesDuCoursPour } from '@/lib/rdv-slots'
 import { horaireDuJour } from '@/lib/horaires-du-jour'
 import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, couvertsDe, coursAPlace } from '@/lib/cours-collectifs'
@@ -361,6 +362,33 @@ export default function ModalDeplacerRdv({
           return
         }
         placeNo = libre
+      }
+
+      // 🔴 (23/10, audit C12/I14, Centre Respire) LA SÉANCE D'UNE ABONNÉE RESTE
+      // DANS SON CONTRAT : validité, congés de la formule, plafond de la
+      // semaine. La même règle que le poste équipe (`refusDeplacementSurAbonnement`).
+      // ⚠️ Une lecture ratée refuse, et le dit.
+      if (rdv.abonnement_id) {
+        const { data: contrat, error: errC } = await supabase.from('abonnements')
+          .select(COLONNES_CONTRAT_DEPLACEMENT).eq('id', rdv.abonnement_id).maybeSingle()
+        if (errC) { setError(`Impossible de lire son abonnement : ${errC.message}`); setSubmitting(false); return }
+        if (contrat && !contrat.deleted_at) {
+          const [formule, posees] = await Promise.all([
+            contrat.formule_id
+              ? supabase.from('abonnement_formules').select('periodes_exclues').eq('id', contrat.formule_id).maybeSingle()
+              : Promise.resolve({ data: null, error: null }),
+            supabase.from('rdv_reservations').select('id, abonnement_id, statut, date_rdv').eq('abonnement_id', contrat.id),
+          ])
+          const errLecture = formule.error || posees.error
+          if (errLecture) { setError(`Impossible de lire son abonnement : ${errLecture.message}`); setSubmitting(false); return }
+          const refusContrat = refusDeplacementSurAbonnement(contrat, {
+            nouvelleDate: date,
+            reservations: posees.data || [],
+            rdvId: rdv.id,
+            periodesExclues: Array.isArray(formule.data?.periodes_exclues) ? formule.data.periodes_exclues : [],
+          })
+          if (refusContrat) { setError(refusContrat.message); setSubmitting(false); return }
+        }
       }
 
       // ⚠️ LE LIEU SE REGRAVE AU NOUVEAU JOUR. Un food truck ou une prof de

@@ -3881,6 +3881,19 @@ verifier('et aucun des deux ne réclame le solde',
 // n'y a plus de séance, donc plus rien à ne pas encaisser.
 egal('une séance d’abonnement annulée retombe sur « rien »',
   etatPaiementRdv({ statut: 'annule_client', abonnement_id: 'abo-1', prix_estime: 0 }).cle, 'rien')
+// 🔴 (23/10, audit I6) Un contrat inscrit au comptoir et pas encore réglé :
+// ses séances ne disent plus « déjà payée ».
+{
+  const nonRegle = etatPaiementRdv({ statut: 'confirme', abonnement_id: 'abo-1', abonnement: { paye: false, prix: 367.11 }, prix_estime: 0 })
+  egal('un abonnement pas réglé se dit « à régler », en orange', nonRegle.cle, 'du')
+  verifier('et il nomme le montant, une seule fois, sur le contrat', /367,11/.test(nonRegle.detail) && /une fois/.test(nonRegle.detail), nonRegle.detail)
+  egal('un abonnement réglé reste « Abonnement »',
+    etatPaiementRdv({ statut: 'confirme', abonnement_id: 'abo-1', abonnement: { paye: true, prix: 367.11 }, prix_estime: 0 }).cle, 'abonnement')
+  egal('sans le contrat lu, rien ne change',
+    etatPaiementRdv({ statut: 'confirme', abonnement_id: 'abo-1', prix_estime: 0 }).cle, 'abonnement')
+  egal('une séance annulée d’un contrat pas réglé retombe sur « rien »',
+    etatPaiementRdv({ statut: 'annule_client', abonnement_id: 'abo-1', abonnement: { paye: false, prix: 100 }, prix_estime: 0 }).cle, 'rien')
+}
 
 // ⚠️ CHAQUE ÉTAT A SA COULEUR, ET ELLES SONT TOUTES DIFFÉRENTES. Deux états qui
 // partagent une teinte, c'est la seconde d'Alex qui redevient une lecture.

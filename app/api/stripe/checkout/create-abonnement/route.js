@@ -25,6 +25,8 @@ import { formuleVendableEnLigne, resumeFormulePublique, offreAuJour } from '@/li
 import { jourBruxelles } from '@/lib/timezone'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 import { fichePubliee } from '@/lib/statut-commercant'
+import { verdictForfait } from '@/lib/garde-forfait'
+import { avecPlagesDuCours, lirePlagesDuCommerce } from '@/lib/abonnement-cours'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -56,16 +58,20 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
-    const { data: formule } = await supabase
+    const { data: formuleLue } = await supabase
       .from('abonnement_formules')
       .select('*')
       .eq('id', formule_id)
       .is('deleted_at', null)
       .maybeSingle()
 
-    if (!formule) {
+    if (!formuleLue) {
       return NextResponse.json({ ok: false, error: 'formule introuvable' }, { status: 404 })
     }
+    // 🔴 (23/10, audit N4) LES SÉANCES SE COMPTENT SUR LES JOURS OÙ LE COURS A
+    // LIEU (`avecPlagesDuCours`), exactement comme la fiche les a annoncées.
+    // Une lecture ratée garde le compte d'avant (jamais une vente fermée).
+    const formule = avecPlagesDuCours(formuleLue, await lirePlagesDuCommerce(supabase, formuleLue.commercant_id))
 
     // ⚠️ ON REVALIDE LA MISE EN VENTE ICI, côté serveur. L'écran ne montre que
     // ce qui est vendable, mais une requête forgée n'a pas d'écran : sans ce
@@ -81,7 +87,8 @@ export async function POST(request) {
 
     const { data: commercant } = await supabase
       .from('commercants')
-      .select('id, nom, slug, statut_publication, stripe_account_id, stripe_account_charges_enabled')
+      // ⚠️ `plan, essai_plan, created_at` (23/10) : la formule du commerce.
+      .select('id, nom, slug, statut_publication, stripe_account_id, stripe_account_charges_enabled, plan, essai_plan, created_at')
       .eq('id', formule.commercant_id)
       .maybeSingle()
 
@@ -96,6 +103,20 @@ export async function POST(request) {
     }
     if (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled) {
       return NextResponse.json({ ok: false, error: 'ce commerçant n\'a pas encore activé les paiements en ligne' }, { status: 400 })
+    }
+    // 🔴 (23/10, audit N3) LA FORMULE DU COMMERCE, comme les routes sœurs
+    // (acompte, commande liée, réservation, bon cadeau). Un studio repassé hors
+    // de la formule qui ouvre les rendez-vous continuait de VENDRE ses
+    // abonnements. ⚠️ VENDRE SEULEMENT : les séances d'un abonnement déjà payé
+    // se posent toujours (`reserver-abonnement`, voulu).
+    for (const feature of ['rdv', 'paiement_ligne']) {
+      const verdict = verdictForfait(commercant, feature)
+      if (!verdict.ok) {
+        return NextResponse.json(
+          { ok: false, error: 'Ce commerçant ne vend pas d’abonnement en ligne pour l’instant.', code: verdict.code },
+          { status: verdict.statut }
+        )
+      }
     }
 
     const offre = offreAuJour(formule, { aujourdhui })

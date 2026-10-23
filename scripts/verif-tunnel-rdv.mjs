@@ -427,6 +427,17 @@ for (const [nom, chemin] of [
   verifie('🔴 une place reprise se dit en français',
     /errU\.code === '23505' \|\| errU\.code === '23P01'/.test(src))
   verifie('le rappel de la veille est reprogrammé', /programmerRappelRdv\(rdv\.id, supabase\)/.test(src))
+  // 🔴 (23/10, audit N-A1) Le texte seul était un faux vert : `programmerRappelRdv`
+  // saute tout rendez-vous qui porte encore un `rappel_push_id`, et
+  // l'annulation ne le vidait pas. Le rétablissement le vide, dans la MÊME
+  // écriture que le statut, avant de reprogrammer.
+  verifie('🔴 le rétablissement vide l’ancien rappel avant de reprogrammer',
+    /\.update\(\{ statut: 'confirme', motif_annulation: null, rappel_push_id: null \}\)/.test(src)
+    && src.indexOf('rappel_push_id: null') < src.indexOf('programmerRappelRdv(rdv.id, supabase)'))
+  {
+    const R = sansProse(lire('lib/rappels.js'))
+    verifie('et la règle du rappel saute bien un rendez-vous qui en porte déjà un', /if \(rdv\.rappel_push_id\) return \{ ok: true, skipped: 'deja_programme' \}/.test(R))
+  }
   verifie('🔴 la personne est prévenue par email', /emailRdvRetabli\(\{/.test(src) && /envoyerAuYopper\(\{/.test(src))
 
   const { emailRdvRetabli } = await import('../lib/resend.js')

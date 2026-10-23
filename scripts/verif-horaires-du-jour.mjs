@@ -254,7 +254,9 @@ const LUNDI_OUVERT = { id: 'a3', date_debut: '2026-10-19', date_fin: '2026-10-19
   verifier('🔴 fiche rendez-vous : l’agenda reçoit la fermeture traduite', /setFermetures\(fermeturesAgenda\(ferm \|\| \[\], exceptionsPour\(exceptionsLues, 'rdv'\)\)\)/.test(rdvFiche))
   verifier('🔴 fiche rendez-vous : la grille et le calendrier suivent l’horaire du jour',
     (rdvFiche.match(/horairesDetail: horairesPourDate\(/g) || []).length === 2
-      && /creneaux: creneauxFiltres, exceptions \}\)/.test(rdvFiche)
+      // REPOINTÉE LE 23/10 (audit C-N3) : le calendrier reçoit les plages de
+      // la prestation choisie, toujours avec les horaires du jour.
+      && /creneaux: creneauxDuCalendrier, exceptions \}\)/.test(rdvFiche)
       && /const horaireJour = horaireDuJour\(commercant\.horaires_detail, dateStr, exceptions\)/.test(rdvFiche))
   // ⚠️ REPOINTÉE LE 16/10 soir : la porte lit « tout le commerce », l'annonce
   // lit tout, l'agenda (`exceptions`) ce qui ferme les rendez-vous.

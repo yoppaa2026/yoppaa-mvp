@@ -225,7 +225,11 @@ function lireCommandes(commercantId, { sansPaiementEnAttente = false } = {}) {
 // l'agenda qu'une réservation est une TABLE, donc qu'elle se range dans le
 // service de la soirée et pas dans un bloc de cours. Sans lui, l'agenda d'un
 // restaurant retombait sur celui d'un studio de yoga, sans aucune erreur.
-const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix, par_couverts), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, article_nom, options, article:articles!commande_articles_article_id_fkey(nom)))`
+// ✅ `abonnement` (23/10, audit I6) : un contrat inscrit au comptoir et pas
+// encore réglé se dit sur ses séances (`etatPaiementRdv`).
+// ⚠️ Une seule clé relie les deux tables (MIGRATION_ABONNEMENTS:345) : pas
+// d'ambiguïté PGRST201, le nom de contrainte n'est pas nécessaire.
+const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix, par_couverts), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, article_nom, options, article:articles!commande_articles_article_id_fkey(nom))), abonnement:abonnements(paye, prix)`
 
 // ─── Notifications système ────────────────────────────────────────────────────
 let _notifPermission = 'default'

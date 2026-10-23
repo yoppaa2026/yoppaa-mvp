@@ -164,6 +164,146 @@ const ANNEE = {
     /fermetures=\{fermeturesAgendaTout\}/.test(bloc) && /exceptions=\{exceptionsRdv\}/.test(bloc))
 }
 
+// ═══ LOT A DES « IMPORTANTS » (23/10, Alex au tableau : A + B) ═════════════
+
+// A1 (C-N3) : le calendrier ne compte que les plages du cours choisi.
+{
+  const { creneauxPourPrestation } = await import('../lib/rdv-slots.js')
+  const plages = [{ id: 'c-yoga', jour_semaine: 'jeudi' }, { id: 'c-pil', jour_semaine: 'lundi' }]
+  const liaisons = [{ creneau_id: 'c-yoga', prestation_id: 'p-yoga' }, { creneau_id: 'c-pil', prestation_id: 'p-pil' }]
+  const duYoga = creneauxPourPrestation(plages, 'p-yoga', liaisons, { estCours: true })
+  verifier('🔴 A1 : le Yoga ne garde que sa plage (le lundi du Pilates n’est plus « Complet »)', duYoga.map(p => p.id).join() === 'c-yoga')
+  const page = code('app/commander/rdv/[slug]/page.js')
+  verifier('A1 : le calendrier de la fiche reçoit ces plages-là',
+    page.includes('creneauxPourPrestation(creneauxFiltres, prestationChoisie.id, liaisonsCreneaux, { estCours: estCoursCollectif(prestationChoisie) })')
+    && page.includes('creneaux: creneauxDuCalendrier, exceptions })'))
+}
+
+// A2 (K-N4) : une place prise sur un cours qui en garde une ne remet pas la file à zéro.
+{
+  const { placePrise } = await import('../lib/attente-rdv-server.js')
+  const base = ({ inscrits }) => {
+    const ecritures = []
+    const from = (table) => {
+      const q = { op: 'select', id: null, payload: null }
+      const resultat = (un) => {
+        if (q.op === 'update') { ecritures.push({ table, id: q.id, payload: q.payload }); return { data: null, error: null } }
+        if (table === 'rdv_attente') {
+          return { data: ['a', 'b', 'c'].map((c, i) => ({ id: `l-${c}`, client_id: c, statut: 'prevenu', push_id: null, portee: 'seance', prestation_id: 'p-yoga', date_rdv: '2026-11-05', heure_debut: '18:00', created_at: `2026-11-01T0${i}:00:00Z` })), error: null }
+        }
+        if (table === 'rdv_prestations') return { data: un ? { id: 'p-yoga', capacite: 10, par_couverts: false } : [], error: null }
+        if (table === 'rdv_reservations') return { data: Array.from({ length: inscrits }, (_, i) => ({ id: `r${i}` })), error: null }
+        return { data: un ? null : [], error: null }
+      }
+      const api = {
+        select: () => api, eq: (c, v) => { if (c === 'id') q.id = v; return api }, neq: () => api, in: () => api, is: () => api,
+        update: (p) => { q.op = 'update'; q.payload = p; return api },
+        maybeSingle: () => Promise.resolve(resultat(true)),
+        then: (res, rej) => Promise.resolve(resultat(false)).then(res, rej),
+      }
+      return api
+    }
+    return { from, ecritures }
+  }
+  const place = { prestationId: 'p-yoga', dateRdv: '2026-11-05', heureDebut: '18:00', clientId: 'a' }
+  const resteUne = base({ inscrits: 9 })
+  await placePrise(resteUne, place)
+  verifier('🔴 A2 : il reste une place, seule la personne servie sort de la file',
+    resteUne.ecritures.length === 1 && resteUne.ecritures[0].id === 'l-a' && resteUne.ecritures[0].payload.statut === 'servi',
+    JSON.stringify(resteUne.ecritures))
+  const plein = base({ inscrits: 10 })
+  await placePrise(plein, place)
+  verifier('A2 : cours de nouveau plein, les autres repassent en attente (comme avant)',
+    plein.ecritures.length === 3 && plein.ecritures.filter(e => e.payload.statut === 'en_attente').length === 2,
+    JSON.stringify(plein.ecritures))
+}
+
+// A4 (N-A1) : le rétablissement vide l'ancien rappel avant d'en programmer un.
+{
+  const r = code('app/api/rdv/reconfirmer/route.js')
+  verifier('🔴 A4 : rappel_push_id repart à vide avec le statut', r.includes(".update({ statut: 'confirme', motif_annulation: null, rappel_push_id: null })"))
+}
+
+// A5 (N3 agenda + C12) : déplacer vers une séance sans prof, ou hors contrat.
+{
+  const { creneauAcceptable } = await import('../lib/deplacement-rdv.js')
+  const plage = { id: 'c1', praticien_id: 'emily', jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '19:00', actif: true }
+  const absence = { date_debut: '2026-11-03', date_fin: '2026-11-03', praticien_id: 'emily', prestation_id: null, heure_debut: null }
+  const juge = (fermetures) => creneauAcceptable({
+    dateStr: '2026-11-03', heureDebut: '18:00', dureeMinutes: 60,
+    horaireJour: { ouvert: true, debut: '08:00', fin: '21:00' },
+    creneauxJour: [plage], rdvsExistants: [], capacite: 12, prestationId: 'p-yoga', praticienId: null, fermetures,
+  })
+  verifier('🔴 A5 : un inscrit sans prof ne se déplace plus chez une prof absente', juge([absence]).raison === 'absence', JSON.stringify(juge([absence])))
+  verifier('A5 : sans absence, la même séance reste permise', juge([]).ok === true, JSON.stringify(juge([])))
+
+  const { refusDeplacementSurAbonnement } = await import('../lib/abonnements.js')
+  const carnet = { id: 'abo-1', statut: 'actif', date_debut: '2026-09-01', date_fin: '2026-12-31', seances_total: 10, seances_par_semaine: 1, client_prenom: 'Marie' }
+  const seances = [
+    { id: 'r1', abonnement_id: 'abo-1', statut: 'confirme', date_rdv: '2026-11-10' },
+    { id: 'r2', abonnement_id: 'abo-1', statut: 'confirme', date_rdv: '2026-11-17' },
+  ]
+  const deplacer = (date, extra = {}) => refusDeplacementSurAbonnement(carnet, { nouvelleDate: date, reservations: seances, rdvId: 'r2', periodesExclues: CONGES, ...extra })
+  verifier('🔴 A5 : hors de la validité du carnet, refusé', deplacer('2027-01-05')?.raison === 'hors_periode')
+  verifier('🔴 A5 : en plein congé de la formule, refusé', deplacer('2026-10-28')?.raison === 'conge')
+  verifier('🔴 A5 : dans la semaine où elle a déjà sa séance, refusé', deplacer('2026-11-12')?.raison === 'plafond_semaine')
+  verifier('A5 : une autre semaine libre, permis (la séance déplacée ne compte pas deux fois)', deplacer('2026-11-24') === null)
+  verifier('A5 : le refus se dit en mots du commerçant', /Marie a déjà sa séance/.test(deplacer('2026-11-12')?.message || ''))
+  const serveur = code('lib/rdv-deplacement-server.js')
+  verifier('🔴 A5 : le poste équipe applique la règle, refuse, et une lecture ratée refuse',
+    serveur.includes('const refusContrat = refusDeplacementSurAbonnement(contrat, {') && serveur.includes("if (errC) throw new Error(") && /COLONNES_RDV_DEPLACEMENT = '[^']*abonnement_id'/.test(serveur)
+    && serveur.includes('if (refusContrat) return { ok: false, code: `abonnement_${refusContrat.raison}`, message: refusContrat.message }'))
+  const modale = code('app/dashboard/ModalDeplacerRdv.js')
+  verifier('🔴 A5 : la fenêtre de la patronne aussi, et elle s’arrête',
+    modale.includes('const refusContrat = refusDeplacementSurAbonnement(contrat, {')
+    && modale.includes('if (refusContrat) { setError(refusContrat.message); setSubmitting(false); return }'))
+}
+
+// A3 (N4) : les séances se comptent sur les jours où le cours a lieu.
+{
+  const { avecPlagesDuCours } = await import('../lib/abonnement-cours.js')
+  const { seancesDeLaFormule } = await import('../lib/abonnements.js')
+  const plages = { creneaux: [{ id: 'c-ven', jour_semaine: 'vendredi', heure_debut: '18:00', heure_fin: '19:00', actif: true }],
+    liaisons: [{ creneau_id: 'c-ven', prestation_id: 'p-yoga' }], prestations: [{ id: 'p-yoga', capacite: 12 }] }
+  const brute = { ...ANNEE, prestation_id: 'p-yoga', periodes_exclues: [] }
+  const f = avecPlagesDuCours(brute, plages)
+  // Les vendredis comptés à la main, de `depuis` au 30/06/2027.
+  const vendredis = (depuis) => {
+    let n = 0
+    for (let d = new Date(`${depuis}T12:00:00Z`); d <= new Date('2027-06-30T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) if (d.getUTCDay() === 5) n++
+    return n
+  }
+  verifier('🔴 A3 : une année du cours du vendredi vend autant de séances que de vendredis',
+    seancesDeLaFormule(f) === vendredis('2026-09-01'), `${seancesDeLaFormule(f)} pour ${vendredis('2026-09-01')} vendredis`)
+  verifier('A3 : sans ses plages, le compte d’avant (une semaine de plus)', seancesDeLaFormule(brute) === vendredis('2026-09-01') + 1)
+  const samedi = offreAuJour(f, { aujourdhui: '2026-11-07' })
+  verifier('🔴 A3 : achetée un samedi, la semaine dont le vendredi est passé ne compte plus',
+    samedi.seances === vendredis('2026-11-07'), `${samedi.seances} pour ${vendredis('2026-11-07')}`)
+  verifier('🔴 A3 : le dernier mercredi, plus rien à vendre', offreAuJour(f, { aujourdhui: '2027-06-30' }).vendable === false)
+  verifier('A3 : liaisons non lues, rien ne change (inerte)', !('plages_du_cours' in avecPlagesDuCours(brute, { ...plages, liaisons: null })))
+  verifier('A3 : un cours sans aucune plage garde le compte d’avant', !('plages_du_cours' in avecPlagesDuCours(brute, { ...plages, liaisons: [] })))
+  verifier('A3 : la route d’achat, la fiche et le tableau de bord comptent pareil',
+    code('app/api/stripe/checkout/create-abonnement/route.js').includes('const formule = avecPlagesDuCours(formuleLue, await lirePlagesDuCommerce(supabase, formuleLue.commercant_id))')
+    && code('app/commander/rdv/[slug]/page.js').includes('.map(f => avecPlagesDuCours(f, { creneaux: creneauxConfig, liaisons: liaisonsCreneaux, prestations }))')
+    && code('app/dashboard/ConfigDashboard.js').includes('setFormules((f || []).map(x => avecPlagesDuCours(x, plages)))'))
+}
+
+// A6 (I6) : un abonnement pas réglé ne dit plus « déjà payée » (exécuté dans verif:logique).
+{
+  verifier('A6 : l’agenda et le poste lisent le contrat',
+    code('app/dashboard/page.js').includes('abonnement:abonnements(paye, prix)`') && code('lib/equipe-poste.js').includes("', abonnement:abonnements(paye, prix)'"))
+}
+
+// A7 (N3 abonnements) : hors de la formule qui vend, rien ne s'achète.
+{
+  const route = code('app/api/stripe/checkout/create-abonnement/route.js')
+  verifier('🔴 A7 : la route d’achat juge la formule du commerce',
+    route.includes("for (const feature of ['rdv', 'paiement_ligne']) {") && route.includes('const verdict = verdictForfait(commercant, feature)')
+    && /select\('id, nom, slug, statut_publication, stripe_account_id, stripe_account_charges_enabled, plan, essai_plan, created_at'\)/.test(route))
+  verifier('A7 : la fiche retire le bouton d’achat',
+    code('app/commander/rdv/[slug]/page.js').includes("const vendables = canDo(planEffectif(c), 'rdv') && canDo(planEffectif(c), 'paiement_ligne')"))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) { echecs.forEach(e => console.log('  ✕ ' + e)); process.exit(1) }
 console.log('Lot Centre Respire : vert.')

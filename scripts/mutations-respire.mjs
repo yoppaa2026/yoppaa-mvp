@@ -15,7 +15,9 @@ import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
 const chemin = (f) => `${RACINE}/${f}`
-const BANCS = ['verif:respire', 'verif:abonnements']
+// (23/10) + verif:logique : l'état de paiement d'une séance s'y exécute.
+const BANCS = ['verif:respire', 'verif:abonnements', 'verif:logique']
+const FICHE = 'app/commander/rdv/[slug]/page.js'
 const ABO = 'lib/abonnements.js'
 const FERM = 'lib/fermetures-rdv.js'
 const ATT = 'lib/attente-rdv-server.js'
@@ -109,6 +111,36 @@ const MUTATIONS = [
   { nom: '🔴 le refus se tait sur la raison', fichier: ABO,
     de: "      return 'Pas de cours ce jour-là : c’est une période de congé. Choisis une autre date.'",
     vers: "      return 'Cette séance ne peut pas être posée sur ton abonnement.'" },
+
+  // ─── LOT A DES « IMPORTANTS » (23/10) ─────────────────────────────────────
+  { nom: '🔴 A1 le calendrier reprend toutes les plages (jours d autres cours « Complet »)', fichier: FICHE,
+    de: '    ? genererJoursDispos({ nbJours: horizonRdv(commercant), horairesDetail: commercant.horaires_detail, creneaux: creneauxDuCalendrier, exceptions })',
+    vers: '    ? genererJoursDispos({ nbJours: horizonRdv(commercant), horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres, exceptions })' },
+  { nom: '🔴 A2 la file remise à zéro alors qu il reste une place', fichier: ATT,
+    de: '      if (!estLui && resteUnePlace) continue', vers: '' },
+  { nom: '🔴 A4 le rétablissement garde l ancien rappel (plus jamais de rappel)', fichier: 'app/api/rdv/reconfirmer/route.js',
+    de: "      .update({ statut: 'confirme', motif_annulation: null, rappel_push_id: null })",
+    vers: "      .update({ statut: 'confirme', motif_annulation: null })" },
+  { nom: '🔴 A5 déplacé chez une prof absente (inscrit sans prof)', fichier: 'lib/deplacement-rdv.js',
+    de: '    if (praticienId == null && seanceSansProfesseur(fermetures, creneauxJour, { dateStr, heure: String(heureDebut).slice(0, 5) })) {',
+    vers: '    if (false) {' },
+  { nom: '🔴 A5 le contrat ne refuse plus rien au déplacement', fichier: ABO,
+    de: '  if (v.ok) return null', vers: '  return null' },
+  { nom: '🔴 A5 le poste équipe ignore le refus du contrat', fichier: 'lib/rdv-deplacement-server.js',
+    de: '      if (refusContrat) return { ok: false, code: `abonnement_${refusContrat.raison}`, message: refusContrat.message }', vers: '' },
+  { nom: '🔴 A5 la fenêtre de la patronne ignore le refus du contrat', fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '          if (refusContrat) { setError(refusContrat.message); setSubmitting(false); return }', vers: '' },
+  { nom: '🔴 A6 un abonnement pas réglé redit « déjà payée »', fichier: 'lib/rdv-paiement.js',
+    de: "    if (rdv.abonnement?.paye === false && temps !== 'sans_suite') {", vers: '    if (false) {' },
+  { nom: '🔴 A7 la route vend hors de la formule', fichier: 'app/api/stripe/checkout/create-abonnement/route.js',
+    de: "    for (const feature of ['rdv', 'paiement_ligne']) {", vers: '    for (const feature of []) {' },
+  { nom: '🔴 A7 la fiche montre le bouton d achat hors formule', fichier: FICHE,
+    de: "          const vendables = canDo(planEffectif(c), 'rdv') && canDo(planEffectif(c), 'paiement_ligne')", vers: '          const vendables = true' },
+  { nom: '🔴 A3 une semaine compte sans jour de cours', fichier: ABO,
+    de: '    if (!dateEcartee(curseur, periodesExclues) && (!duCours || duCours.some(p => creneauTombeLe(p, curseur)))) {',
+    vers: '    if (!dateEcartee(curseur, periodesExclues)) {' },
+  { nom: 'A3 des liaisons non lues changent le compte (plus inerte)', fichier: 'lib/abonnement-cours.js',
+    de: '  if (!Array.isArray(creneaux) || !Array.isArray(liaisons)) return formule', vers: '  if (!Array.isArray(creneaux)) return formule' },
 ]
 
 const lancer = () => {

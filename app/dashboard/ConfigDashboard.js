@@ -95,6 +95,7 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
 // la gravure du lieu n'ont pas été supprimés du projet, c'est le geste d'agenda
 // qui les reprend.
+import { avecPlagesDuCours, lirePlagesDuCommerce } from '@/lib/abonnement-cours'
 import { exclusionsQuiSeChevauchent, seancesDeLaFormule, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, verdictReprise, messageRefusReprise, termesInscriptionComptoir, verdictModificationAbonnement, messageRefusModification, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
 // 🔴 Le référentiel officiel, plus Nominatim (Alex, 05/10) : voir le composant.
 import ChampAdresseOfficielle from '@/app/components/ChampAdresseOfficielle'
@@ -14346,6 +14347,8 @@ function dureeParlante(jours) {
 function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
   const [formules, setFormules] = useState([])
   const [prestations, setPrestations] = useState([])
+  // (23/10, N4) Les plages des cours, pour l'aperçu d'une formule en cours de saisie.
+  const [plagesCommerce, setPlagesCommerce] = useState({ creneaux: null, liaisons: null, prestations: [] })
   const [abonnes, setAbonnes] = useState([])
   // ⚠️ La liste des lieux ne servait qu'à graver l'endroit sur chaque séance
   // générée d'avance. Le lieu se grave désormais quand la séance est posée,
@@ -14420,7 +14423,10 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
     // ⚠️ ON COMPTE LES RÉSERVATIONS, ON NE LIT PAS UN COMPTEUR. C'est la règle
     // du module (voir `seancesConsommees`) : un compteur stocké dérive au
     // premier accident, et personne ne sait plus quel chiffre croire.
-    const [{ data: f }, { data: p }, { data: a }, { data: r }] = await Promise.all([
+    // 🔴 (23/10, audit N4) ET LES PLAGES DES COURS : une formule compte ses
+    // séances sur les jours où son cours a lieu, comme la fiche et la route
+    // d'achat (`avecPlagesDuCours`). Lecture ratée : le compte d'avant.
+    const [{ data: f }, { data: p }, { data: a }, { data: r }, plages] = await Promise.all([
       supabase.from('abonnement_formules').select('*')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('ordre', { ascending: true }).order('created_at', { ascending: true }),
@@ -14437,8 +14443,10 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
         .eq('commercant_id', commercantId).not('abonnement_id', 'is', null)
         .is('deleted_at', null)
         .order('id', { ascending: true })),
+      lirePlagesDuCommerce(supabase, commercantId),
     ])
-    setFormules(f || [])
+    setPlagesCommerce(plages)
+    setFormules((f || []).map(x => avecPlagesDuCours(x, plages)))
     setPrestations(p || [])
     setAbonnes(a || [])
     setReservationsAbo(r || [])
@@ -14737,7 +14745,8 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
   // `lib/abonnements.js`, pures, donc le banc les EXÉCUTE et relit ce qu'elles
   // disent au lieu de chercher des mots dans du JSX.
   const nbCarnet = parseInt(form.seances_carnet, 10)
-  const formulePourApercu = {
+  // (23/10, N4) Compté sur les jours où son cours a lieu, comme la vente.
+  const formulePourApercu = avecPlagesDuCours({
     type: form.type,
     date_debut: form.date_debut,
     date_fin: form.date_fin,
@@ -14745,7 +14754,8 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
     seances_carnet: nbCarnet,
     validite_jours: parseInt(form.validite_jours, 10),
     seances_par_semaine: Math.max(1, parseInt(form.seances_par_semaine, 10) || 1),
-  }
+    prestation_id: form.prestation_id || null,
+  }, plagesCommerce)
   const apercuFormule = phraseApercuFormule(formulePourApercu)
   const explicationApercu = expliquerApercuFormule(formulePourApercu)
 
@@ -15034,10 +15044,12 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
                 est à elle, et il s'explique avec SES chiffres. Une période
                 entamée se vendait au compte plein, même après sa fin. */}
             {form.vente_en_ligne && form.type === 'periode' && (() => {
-              const brouillon = {
+              // (23/10, N4) Le brouillon compte sur les jours de son cours, comme la vente.
+              const brouillon = avecPlagesDuCours({
                 type: 'periode', date_debut: form.date_debut, date_fin: form.date_fin, prix: Number(form.prix) || 0,
                 seances_par_semaine: Math.max(1, parseInt(form.seances_par_semaine, 10) || 1), periodes_exclues: form.periodes_exclues,
-              }
+                prestation_id: form.prestation_id || null,
+              }, plagesCommerce)
               // L'exemple se fait aujourd'hui si la période est en cours, sinon à mi-parcours.
               const jour = jourExempleEnCours({ dateDebut: form.date_debut, dateFin: form.date_fin, aujourdhui: jourBruxelles() })
               const prorata = jour ? offreAuJour({ ...brouillon, prix_en_cours: PRIX_EN_COURS_PRORATA }, { aujourdhui: jour }) : null
@@ -15113,6 +15125,10 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
                           ? { texte: 'Seulement par toi', encre: T.deep, fond: '#F5F3FF', bord: '#DDD6FE' }
                           : offreAuJour(f, { aujourdhui: jourBruxelles() })?.vendable === false
                           ? { texte: 'Période terminée', encre: '#92400E', fond: '#FFFBEB', bord: '#FDE68A' }
+                          // (23/10, audit N3) Hors de la formule qui vend en
+                          // ligne, rien ne s'achète : la fiche et le serveur le refusent.
+                          : modeHonorer
+                          ? { texte: 'Hors de ta formule', encre: '#92400E', fond: '#FFFBEB', bord: '#FDE68A' }
                           : { texte: 'En vente', encre: '#065F46', fond: '#ECFDF5', bord: '#A7F3D0' }
                         return (
                           <span style={{ fontSize: 10, fontWeight: 800, color: etiquette.encre, background: etiquette.fond, border: `1px solid ${etiquette.bord}`, borderRadius: 100, padding: '2px 7px', whiteSpace: 'nowrap' }}>

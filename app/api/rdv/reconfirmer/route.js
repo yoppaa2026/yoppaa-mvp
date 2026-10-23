@@ -122,7 +122,11 @@ export async function POST(request) {
     // contrainte de chevauchement (23P01) refusent, et on le dit en français.
     const { data: ecrit, error: errU } = await supabase
       .from('rdv_reservations')
-      .update({ statut: 'confirme', motif_annulation: null })
+      // 🔴 (23/10, audit N-A1) `rappel_push_id` REPART À VIDE. L'annulation
+      // retirait la notification sans vider la colonne, et le rappel d'une
+      // heure, reprogrammé plus bas, se croyait « déjà programmé » : un cours
+      // annulé puis rétabli partait sans rappel pour ses douze élèves.
+      .update({ statut: 'confirme', motif_annulation: null, rappel_push_id: null })
       .eq('id', rdv.id).eq('statut', rdv.statut)
       .select('id')
     if (errU) {

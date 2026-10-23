@@ -91,6 +91,7 @@ import { fermetureQuiBloque, plagesOuvertes, seanceFermee } from '@/lib/fermetur
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 import { libelleApporteUnLieu } from '@/lib/adresse-localite'
 import { jourLocalISO, jourBruxelles, rappelDeLaVeillePartira, jourCivilPlus } from '@/lib/timezone'
+import { avecPlagesDuCours } from '@/lib/abonnement-cours'
 // ⚠️ LA MÊME RÈGLE QUE LE SERVEUR, et le serveur la rejoue : cet écran décide
 // seulement d'afficher, jamais de demander.
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
@@ -154,7 +155,7 @@ function tarifDecouverteAffiche(prestation, deals = []) {
   return decouverte
 }
 
-import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit, praticiensQuiAssurent } from '@/lib/rdv-slots'
+import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, creneauxPourPrestation, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit, praticiensQuiAssurent } from '@/lib/rdv-slots'
 import { creneauxDuJour } from '@/lib/deplacement-rdv'
 import BarreYopper from '../../BarreYopper'
 import { barreSurLaFiche, HAUTEUR_BARRE_YOPPER } from '@/lib/barre-yopper'
@@ -1518,7 +1519,12 @@ export default function CommanderRdvSlug() {
           // 🔴 AU JOUR DE BRUXELLES (03/10) : une période finie ne s'affiche plus, et
           // une période entamée s'annonce pour ce qu'il en reste.
           const auj = jourBruxelles()
-          setFormulesAbo((data || []).filter(f => formuleVendableEnLigne(f, { aujourdhui: auj }) || formuleAfficheeSurFiche(f, { aujourdhui: auj })))
+          // 🔴 (23/10, audit N3) HORS DE LA FORMULE QUI LES VEND, PLUS DE
+          // BOUTON D'ACHAT (le serveur refuse aussi) : une formule « affichée »
+          // reste une information, à prendre chez le commerçant.
+          const vendables = canDo(planEffectif(c), 'rdv') && canDo(planEffectif(c), 'paiement_ligne')
+          const formules = vendables ? (data || []) : (data || []).map(f => ({ ...f, vente_en_ligne: false }))
+          setFormulesAbo(formules.filter(f => formuleVendableEnLigne(f, { aujourdhui: auj }) || formuleAfficheeSurFiche(f, { aujourdhui: auj })))
         })
       setCreneauxConfig(cren || [])
 
@@ -1744,8 +1750,26 @@ export default function CommanderRdvSlug() {
   // horizontal, les 46 suivants sont accessibles via le mini-calendrier deroulant.
   // Sess 6 : filtre les fermetures exceptionnelles (marque ouvert:false pour ces jours).
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
+  // 🔴 (23/10, audit C-N3, Centre Respire) LES JOURS D'UN AUTRE COURS NE
+  // SONT PLUS « COMPLET ». Le calendrier ouvrait tout jour qui avait UNE plage,
+  // quelle qu'elle soit : le client qui choisissait le Yoga du jeudi voyait le
+  // lundi du Pilates en rouge « Complet », et la page s'ouvrait dessus. Une
+  // prestation choisie ne compte que les plages qui l'accueillent (la même
+  // règle que la grille, `creneauxPourPrestation`).
+  // 🔴 (23/10, audit N4) LES FORMULES COMPTENT LEURS SÉANCES SUR LES JOURS OÙ
+  // LE COURS A LIEU : le prix montré est celui que la route d'achat encaisse
+  // (`avecPlagesDuCours`, mêmes plages, mêmes liaisons). Une formule qui ne
+  // laisse plus aucune séance utilisable disparaît de la fiche.
+  const aujFormules = jourBruxelles()
+  const formulesDuCours = formulesAbo
+    .map(f => avecPlagesDuCours(f, { creneaux: creneauxConfig, liaisons: liaisonsCreneaux, prestations }))
+    .filter(f => formuleVendableEnLigne(f, { aujourdhui: aujFormules }) || formuleAfficheeSurFiche(f, { aujourdhui: aujFormules }))
+
+  const creneauxDuCalendrier = prestationChoisie
+    ? creneauxPourPrestation(creneauxFiltres, prestationChoisie.id, liaisonsCreneaux, { estCours: estCoursCollectif(prestationChoisie) })
+    : creneauxFiltres
   const joursDispos = commercant && creneauxFiltres.length > 0
-    ? genererJoursDispos({ nbJours: horizonRdv(commercant), horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres, exceptions })
+    ? genererJoursDispos({ nbJours: horizonRdv(commercant), horairesDetail: commercant.horaires_detail, creneaux: creneauxDuCalendrier, exceptions })
         .map(j => estFerme(j.iso) ? { ...j, ouvert: false, motifFerme: 'Fermeture' } : j)
     : []
 
@@ -3420,8 +3444,8 @@ export default function CommanderRdvSlug() {
                   ENCAISSE (rien ne se paie en ligne). Le tri se fait dans le
                   bloc : les formules en vente seulement si Stripe encaisse,
                   les formules affichées toujours. */}
-              {etape === 1 && formulesAbo.length > 0 && (
-                <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations} client={client} sansCompte={sessionProuvee === false}
+              {etape === 1 && formulesDuCours.length > 0 && (
+                <BlocAbonnements commercant={commercant} formules={formulesDuCours} prestations={prestations} client={client} sansCompte={sessionProuvee === false}
                   venteEnLigne={commercant?.stripe_account_charges_enabled === true}/>
               )}
 

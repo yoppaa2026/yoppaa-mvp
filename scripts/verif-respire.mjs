@@ -390,6 +390,12 @@ const ANNEE = {
     && code('app/api/rdv/reserver-abonnement/route.js').includes("client_telephone: contrat.client_telephone || '',")
     && code('app/api/yopper/supprimer-compte/route.js').includes("client_email: EMAIL_ANONYME, client_telephone: '', notes_client: null })"))
 
+  // B14 (Alex, 23/10, tableau) : un cours passé à 1 place se dit avant d'enregistrer.
+  const versUn = avertissementChangementCours({ dureeAvant: 60, dureeApres: 60, capaciteAvant: 3, capaciteApres: 1, inscriptions: 2, plusRemplie: 1 })
+  verifier('🔴 B14 : un cours passé à 1 place prévient qu’il devient individuel', /devient un rendez-vous individuel/.test(versUn?.message || ''))
+  verifier('B14 : de 3 à 2 places, l’ancien texte reste',
+    /Chaque séance accueillera 2 personnes/.test(avertissementChangementCours({ capaciteAvant: 3, capaciteApres: 2, inscriptions: 2, plusRemplie: 1 })?.message || ''))
+
   // B13 (Alex, 23/10) : la vue Semaine va du lundi au dimanche.
   verifier('🔴 B13 : la semaine de l’agenda commence le lundi',
     code('app/dashboard/AgendaRdv.js').includes('d.setDate(refDate.getDate() - jourIdxLun(refDate))')

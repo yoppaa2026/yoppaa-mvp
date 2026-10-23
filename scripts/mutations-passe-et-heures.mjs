@@ -80,8 +80,9 @@ const MUTATIONS = [
 
   // ─── LA SAISIE AU TÉLÉPHONE ─────────────────────────────────────────────
   { nom: '🔴 l’email part pour un rendez-vous déjà passé', banc: 'verif:slots', fichier: 'app/dashboard/ModalNouveauRdv.js',
-    de: '      if (rdvId && (email.trim() || null) && !passeAuClic) {',
-    vers: '      if (rdvId && (email.trim() || null)) {' },
+    // REPOINTÉE LE 23/10 : l'adresse retenue, contrat d'abonnement compris.
+    de: '      if (rdvId && identite.client_email && !passeAuClic) {',
+    vers: '      if (rdvId && identite.client_email) {' },
   { nom: '🔴 le passé ne se relit plus au clic', banc: 'verif:slots', fichier: 'app/dashboard/ModalNouveauRdv.js',
     de: '      const passeAuClic = dejaPasse({ dateStr, heure, maintenant: new Date() })',
     vers: '      const passeAuClic = passe' },

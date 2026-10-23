@@ -550,6 +550,17 @@ export default function ModalNouveauRdv({
   // rempli. Un abonné sans téléphone existe, la garde ne doit donc pas l'exiger.
   // ⚠️ `presta` ET PAS SEULEMENT `prestationId` : « une table » n'est choisie
   // qu'une fois la salle lue et le nombre saisi. Avant, il n'y a rien à écrire.
+  // ✅ (Alex, 23/10) ET L'ÉCRAN LE DIT : ce que le contrat connaît ne se
+  // redemande pas. Seul ce qui lui manque reste à saisir, et sert à l'écriture
+  // (`identite`, plus bas, prend le contrat d'abord, la saisie ensuite).
+  const contratAbo = aboChoisi?.contrat || null
+  const aSaisir = {
+    prenom: !contratAbo?.client_prenom,
+    nom: !contratAbo?.client_nom,
+    tel: !contratAbo?.client_telephone,
+    email: !contratAbo?.client_email,
+  }
+  const emailRetenu = (contratAbo?.client_email || email.trim() || '').trim()
   const formValide = !!(prestationId && presta && dateValide && heureValide && !choixPrat.manque && (
     aboChoisi ? true : (prenom.trim() && nom.trim() && tel.trim())
   ))
@@ -926,7 +937,10 @@ export default function ModalNouveauRdv({
       // rappel pour un moment déjà écoulé. ⚠️ L'heure se relit AU CLIC : la
       // fenêtre a pu rester ouverte pendant que celle choisie passait.
       const passeAuClic = dejaPasse({ dateStr, heure, maintenant: new Date() })
-      if (rdvId && (email.trim() || null) && !passeAuClic) {
+      // ⚠️ L'ADRESSE RETENUE, PAS LA SAISIE : sur un abonnement, l'adresse vient
+      // du contrat et le champ reste vide. Lire la saisie privait l'abonné de sa
+      // confirmation (23/10).
+      if (rdvId && identite.client_email && !passeAuClic) {
         postPro('/api/emails/rdv-confirme', { rdv_id: rdvId }).catch(e => console.warn('[ModalNouveauRdv] emails fire-and-forget KO', e))
       }
 
@@ -1356,26 +1370,48 @@ export default function ModalNouveauRdv({
             </div>
           )}
 
+          {/* ✅ (Alex, 23/10) SUR UN ABONNEMENT, LES COORDONNÉES DU CONTRAT :
+              on les montre, on ne les redemande pas. Ne restent que les champs
+              qu'il ne connaît pas. */}
+          {contratAbo && (
+            <div style={{ marginBottom: 10, padding: '9px 11px', borderRadius: 10, background: `${T.main}0D`, border: `1px solid ${T.main}33` }}>
+              <span style={{ ...labelSt, marginBottom: 4 }}>Coordonnées de l&rsquo;abonnement</span>
+              <span style={{ display: 'block', fontSize: '0.8rem', color: T.deep, fontWeight: 700, lineHeight: 1.5 }}>
+                {[`${contratAbo.client_prenom || ''} ${contratAbo.client_nom || ''}`.trim(), contratAbo.client_telephone, contratAbo.client_email].filter(Boolean).join(' · ') || 'Aucune coordonnée sur le contrat.'}
+              </span>
+            </div>
+          )}
+
           {/* Identite client : 2 colonnes */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          {(aSaisir.prenom || aSaisir.nom) && (
+          <div style={{ display: 'grid', gridTemplateColumns: aSaisir.prenom && aSaisir.nom ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 10 }}>
+            {aSaisir.prenom && (
             <div>
-              <label style={labelSt}>Prénom *</label>
+              <label style={labelSt}>Prénom{contratAbo ? '' : ' *'}</label>
               <input type="text" value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Marie" style={inputSt} autoComplete="off"/>
             </div>
+            )}
+            {aSaisir.nom && (
             <div>
-              <label style={labelSt}>Nom *</label>
+              <label style={labelSt}>Nom{contratAbo ? '' : ' *'}</label>
               <input type="text" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Dupont" style={inputSt} autoComplete="off"/>
             </div>
+            )}
           </div>
+          )}
 
           {/* Tel + email */}
+          {aSaisir.tel && (
           <div style={{ marginBottom: 10 }}>
-            <label style={labelSt}>Téléphone *</label>
+            <label style={labelSt}>Téléphone{contratAbo ? ' (optionnel)' : ' *'}</label>
             <input type="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="0472 ..." style={inputSt} autoComplete="off"/>
           </div>
+          )}
           <div style={{ marginBottom: 10 }}>
+            {aSaisir.email && (<>
             <label style={labelSt}>Email (optionnel)</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="marie.dupont@..." style={inputSt} autoComplete="off"/>
+            </>)}
             {/* ⚠️ « OPTIONNEL » A LONGTEMPS MENTI. La colonne était en NOT NULL
                 en base : le commerçant lisait « optionnel », laissait le champ
                 vide, et recevait une erreur qu'il ne pouvait pas comprendre.
@@ -1386,9 +1422,9 @@ export default function ModalNouveauRdv({
             <p style={{ fontSize: '0.68rem', color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
               {/* ⚠️ CETTE PHRASE PROMETTAIT UN EMAIL QUI NE PART PLUS sur une heure
                   déjà passée : elle dit ce qui est vrai. */}
-              {passe && email.trim()
+              {passe && emailRetenu
                 ? 'Rien ne part au client pour une heure déjà passée : son adresse reste simplement notée.'
-                : email.trim()
+                : emailRetenu
                 ? 'Ton client recevra sa confirmation, son rappel de la veille et son fichier calendrier.'
                 : `Sans email, pas de confirmation ni de rappel : ${mots.laReservationDe} ne vit que dans ton agenda. C’est parfait pour quelqu’un qui te réserve par téléphone.`}
             </p>

@@ -858,8 +858,15 @@ verifier('⚠️ si la base refuse le passé, l’écran dit pourquoi',
   const argVerdict = iVerdict === -1 ? '' : argumentDeLAppel(SAISIE_S, SAISIE_S.indexOf('(', iVerdict))
   verifier('✅ la saisie peut noter après coup : sa règle ne reçoit pas l’heure qu’il est',
     argVerdict.length > 80 && /prestations,/.test(argVerdict) && !/maintenant/.test(argVerdict), argVerdict.slice(0, 120))
+  // REPOINTÉE LE 23/10 : l'adresse retenue (`identite.client_email`, celle du
+  // contrat d'abonnement d'abord), plus la seule saisie ; un commentaire s'intercale.
   verifier('🔴 mais aucun email ne part pour une heure déjà passée, relue au clic',
-    /const passeAuClic = dejaPasse\(\{ dateStr, heure, maintenant: new Date\(\) \}\)\s*if \(rdvId && \(email\.trim\(\) \|\| null\) && !passeAuClic\) \{/.test(SAISIE_S))
+    /const passeAuClic = dejaPasse\(\{ dateStr, heure, maintenant: new Date\(\) \}\)(?:\s*\/\/[^\n]*)*\s*if \(rdvId && identite\.client_email && !passeAuClic\) \{/.test(SAISIE_S))
+  // ✅ (Alex, 23/10) Sur un abonnement, on ne redemande que ce que le contrat ignore.
+  verifier('✅ abonnement : les coordonnées du contrat ne se redemandent pas',
+    /prenom: !contratAbo\?\.client_prenom,/.test(SAISIE_S) && /tel: !contratAbo\?\.client_telephone,/.test(SAISIE_S)
+    && /\{aSaisir\.tel && \(/.test(SAISIE_S) && /\{aSaisir\.email && \(<>/.test(SAISIE_S)
+    && /client_email: aboChoisi\.contrat\.client_email \|\| email\.trim\(\) \|\| null,/.test(SAISIE_S))
   verifier('⚠️ et l’écran le dit, bouton compris',
     /passe \? 'Noter après coup ✓'/.test(SAISIE_S) && /aucun email ni rappel ne part au client/.test(SAISIE_S)
     && /Rien ne part au client pour une heure déjà passée/.test(SAISIE_S))

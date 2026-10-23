@@ -40,19 +40,24 @@ export async function POST(request) {
       { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { persistSession: false } }
     )
 
-    const { data: { user } } = await supabase.auth.getUser()
+    // ⚡ (23/10, Alex : « 5 à 10 s pour ouvrir un tableau de bord ») L'identité
+    // et la ligne du journal se lisent EN MÊME TEMPS, avec le jeton de
+    // l'appelant (la RLS décide). Rien n'est rendu avant les contrôles
+    // d'identité, dans le même ordre qu'avant.
+    const [{ data: { user } }, { data: ligne, error }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from('admin_impersonations')
+        .select('id, admin_email, commercant_id, started_at, ended_at')
+        .eq('id', impersonation_id)
+        .maybeSingle(),
+    ])
     if (!user) {
       return NextResponse.json({ ok: false, error: 'session expirée, reconnecte-toi' }, { status: 401 })
     }
     if (!(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
-
-    const { data: ligne, error } = await supabase
-      .from('admin_impersonations')
-      .select('id, admin_email, commercant_id, started_at, ended_at')
-      .eq('id', impersonation_id)
-      .maybeSingle()
     // 🔴 « JE N'AI PAS PU LIRE » N'EST PAS « ELLE EST VALABLE ».
     if (error) {
       console.error('[admin/impersonate-verifier] journal illisible', error.message)

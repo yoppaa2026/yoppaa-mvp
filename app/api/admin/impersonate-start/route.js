@@ -41,59 +41,67 @@ export async function POST(request) {
       { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
     )
 
-    const { data: { user } } = await supabase.auth.getUser()
+    // ⚡ (23/10, Alex : « 5 à 10 s pour ouvrir un tableau de bord ») LES
+    // LECTURES PARTENT ENSEMBLE, plus l'une après l'autre : chacune est un
+    // aller-retour vers la base. Elles se font avec le JETON DE L'APPELANT
+    // (la RLS décide de ce qu'il lit), et rien n'est rendu ni écrit avant les
+    // contrôles d'identité ci-dessous, dans le même ordre qu'avant.
+    // ⚠️ Les lignes ouvertes se lisent par admin_email APRÈS l'identité : on
+    // ne connaît pas encore l'adresse ici. Elles partent avec l'écriture.
+    const [{ data: { user } }, { data: c }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase.from('commercants').select('id, nom').eq('id', commercant_id).maybeSingle(),
+    ])
     if (!user) {
       return NextResponse.json({ ok: false, error: 'session expirée, reconnecte-toi' }, { status: 401 })
     }
     if (!(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
-
     // Vérif que le commerçant existe
-    const { data: c } = await supabase
-      .from('commercants')
-      .select('id, nom')
-      .eq('id', commercant_id)
-      .maybeSingle()
     if (!c) {
       return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
-    }
-
-    // Les lignes restées ouvertes au-delà de leur durée se ferment, à la fin de
-    // cette durée et pas à « maintenant ».
-    const maintenant = new Date()
-    const { data: ouvertes, error: errOuvertes } = await supabase
-      .from('admin_impersonations')
-      .select('id, started_at')
-      .eq('admin_email', user.email)
-      .is('ended_at', null)
-    // ⚠️ NON BLOQUANT, MAIS DIT : ouvrir la nouvelle ligne compte plus que ranger
-    // les anciennes, et l'échec se lit dans les journaux du serveur.
-    if (errOuvertes) console.error('[admin/impersonate-start] lignes ouvertes illisibles', errOuvertes.message)
-    for (const l of (ouvertes || []).filter(l => ligneExpiree(l, maintenant))) {
-      const { error: errFin } = await supabase
-        .from('admin_impersonations')
-        .update({ ended_at: finAInscrire(l, maintenant).toISOString() })
-        .eq('id', l.id)
-        .is('ended_at', null)
-      if (errFin) console.error('[admin/impersonate-start] ligne expirée non fermée', { id: l.id, erreur: errFin.message })
     }
 
     // Log : insert dans admin_impersonations
     const userAgent = request.headers.get('user-agent') || null
     const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null
 
-    const { data: imp, error: errImp } = await supabase
+    // Les lignes restées ouvertes au-delà de leur durée se ferment, à la fin de
+    // cette durée et pas à « maintenant ». ⚡ (23/10) Lues EN MÊME TEMPS que la
+    // nouvelle ligne s'écrit : la nouvelle a moins de deux heures, elle n'est
+    // donc jamais prise pour une ligne expirée.
+    const maintenant = new Date()
+    const [{ data: imp, error: errImp }, { data: ouvertes, error: errOuvertes }] = await Promise.all([
+      supabase
+        .from('admin_impersonations')
+        .insert({
+          admin_email: user.email,
+          commercant_id,
+          raison: raison?.slice(0, 480) || null,
+          ip_address: ipAddress,
+          user_agent: userAgent?.slice(0, 480) || null,
+        })
+        .select('id, started_at')
+        .single(),
+      supabase
+        .from('admin_impersonations')
+        .select('id, started_at')
+        .eq('admin_email', user.email)
+        .is('ended_at', null),
+    ])
+    // ⚠️ NON BLOQUANT, MAIS DIT : ouvrir la nouvelle ligne compte plus que ranger
+    // les anciennes, et l'échec se lit dans les journaux du serveur.
+    if (errOuvertes) console.error('[admin/impersonate-start] lignes ouvertes illisibles', errOuvertes.message)
+    const fins = await Promise.all((ouvertes || []).filter(l => ligneExpiree(l, maintenant)).map(l => supabase
       .from('admin_impersonations')
-      .insert({
-        admin_email: user.email,
-        commercant_id,
-        raison: raison?.slice(0, 480) || null,
-        ip_address: ipAddress,
-        user_agent: userAgent?.slice(0, 480) || null,
-      })
-      .select('id, started_at')
-      .single()
+      .update({ ended_at: finAInscrire(l, maintenant).toISOString() })
+      .eq('id', l.id)
+      .is('ended_at', null)
+      .then(({ error: errFin }) => ({ id: l.id, errFin }))))
+    for (const { id, errFin } of fins) {
+      if (errFin) console.error('[admin/impersonate-start] ligne expirée non fermée', { id, erreur: errFin.message })
+    }
 
     if (errImp) {
       console.error('[admin/impersonate-start]', errImp)

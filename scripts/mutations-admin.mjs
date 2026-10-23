@@ -257,8 +257,9 @@ const MUTATIONS = [
   // ─── LE MESSAGE ET LE BOUTON (16/09) ────────────────────────────────────
   { nom: '🔴 le bouton reprend un nom que les messages ne citent pas',
     fichier: 'app/admin/SectionTousCommercants.js',
-    de: '                    Voir Dashboard →',
-    vers: '                    Dashboard →' },
+    // REPOINTÉE LE 23/10 : le libellé alterne avec « Ouverture… » pendant l'ouverture.
+    de: "{ouverture === c.id ? 'Ouverture…' : 'Voir Dashboard →'}",
+    vers: "{ouverture === c.id ? 'Ouverture…' : 'Dashboard →'}" },
 
   { nom: '🔴 un message envoie cliquer sur un bouton qui n existe pas',
     fichier: 'lib/impersonation.js',
@@ -302,8 +303,9 @@ const MUTATIONS = [
 
   { nom: '⚠️ une nouvelle connexion ne range plus les lignes oubliees',
     fichier: 'app/api/admin/impersonate-start/route.js',
-    de: '    for (const l of (ouvertes || []).filter(l => ligneExpiree(l, maintenant))) {',
-    vers: '    for (const l of []) {' },
+    // REPOINTÉE LE 23/10 : les lignes expirées se ferment en parallèle.
+    de: '    const fins = await Promise.all((ouvertes || []).filter(l => ligneExpiree(l, maintenant)).map(l => supabase',
+    vers: '    const fins = await Promise.all([].map(l => supabase' },
 ]
 
 const lancer = () => {

@@ -108,16 +108,25 @@ export default function SectionTousCommercants({ toast }) {
     setCommercants(list => list.filter(c => c.id !== id))
   }
 
+  // ⚡ (23/10, Alex : « 5 à 10 s pour ouvrir un tableau de bord ») Le tableau
+  // de bord (un gros fichier) se charge DÈS L'OUVERTURE de l'admin, pas au
+  // clic ; et le bouton dit tout de suite qu'il travaille.
+  const [ouverture, setOuverture] = useState(null) // id du commerce qui s'ouvre
+  useEffect(() => { router.prefetch('/dashboard') }, [router])
+
   async function voirDashboard(c) {
     // ⚠️ LE GESTE VIT DANS `ouvrirTableauDeBord.js` depuis le 29/09 : le bloc
     // « Fiches à mettre en ligne » l'appelle aussi, et une copie finirait par
     // ne plus journaliser la même chose.
+    if (ouverture) return
+    setOuverture(c.id)
     try {
       await demarrerModeAdmin(c.id, 'Acces depuis liste admin')
       router.push('/dashboard')
     } catch (e) {
       console.error('[voirDashboard]', e)
       toast?.(`Erreur impersonation : ${e.message}`, 'error')
+      setOuverture(null)
     }
   }
 
@@ -227,9 +236,9 @@ export default function SectionTousCommercants({ toast }) {
                       `messageImpersonation`, qui disent quoi cliquer quand la
                       connexion en tant que commerçant est refusée. Les deux se
                       relisent ensemble (`npm run verif:acces`). */}
-                  <button onClick={() => voirDashboard(c)}
-                    style={{ padding: '5px 10px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 2px 8px ${T.main}44` }}>
-                    Voir Dashboard →
+                  <button onClick={() => voirDashboard(c)} disabled={!!ouverture}
+                    style={{ padding: '5px 10px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 700, fontSize: 11, cursor: ouverture ? 'wait' : 'pointer', opacity: ouverture && ouverture !== c.id ? 0.5 : 1, fontFamily: '"DM Sans", sans-serif', boxShadow: `0 2px 8px ${T.main}44` }}>
+                    {ouverture === c.id ? 'Ouverture…' : 'Voir Dashboard →'}
                   </button>
                 </div>
               </div>

@@ -102,12 +102,18 @@ export default function SectionFichesAPublier({ toast }) {
     setEnCours(null)
   }
 
+  // ⚡ (23/10) Comme la liste « Tous les commerçants » : le bouton dit tout de
+  // suite qu'il travaille (le préchargement du tableau de bord est fait là).
+  const [ouverture, setOuverture] = useState(null)
   async function voir(f) {
+    if (ouverture) return
+    setOuverture(f.id)
     try {
       await demarrerModeAdmin(f.id, 'Relecture avant mise en ligne')
       router.push('/dashboard')
     } catch (e) {
       toast?.(`Erreur impersonation : ${e.message}`, 'error')
+      setOuverture(null)
     }
   }
 
@@ -207,8 +213,8 @@ export default function SectionFichesAPublier({ toast }) {
                   n'existe pas avant la publication, on atterrissait sur la
                   liste des commerces. Le tableau de bord, lui, montre comment
                   la fiche a été remplie, photos comprises. */}
-              <button onClick={() => voir(f)} disabled={occupe} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1.5px solid ${T.hairline}`, color: T.deep, fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                <Eye size={13} strokeWidth={2.2}/> Voir Dashboard →
+              <button onClick={() => voir(f)} disabled={occupe || !!ouverture} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1.5px solid ${T.hairline}`, color: T.deep, fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                <Eye size={13} strokeWidth={2.2}/> {ouverture === f.id ? 'Ouverture…' : 'Voir Dashboard →'}
               </button>
 
               <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>

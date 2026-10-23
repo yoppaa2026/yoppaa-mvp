@@ -129,7 +129,8 @@ const MUTATIONS = [
   { nom: '⚠️ le score d inscription reprend son propre seuil',
     fichier: 'lib/score-onboarding.js', de: "      atteint: (commercant.description || '').trim().length >= MIN_PRESENTATION,", vers: "      atteint: (commercant.description || '').trim().length >= 20," },
   { nom: '🔴 le bloc renvoie de nouveau vers une fiche publique inexistante',
-    fichier: SECTION, de: '              <button onClick={() => voir(f)} disabled={occupe}', vers: '              <a href={`/commander/${f.slug}`} onClick={() => voir(f)} disabled={occupe}' },
+    // REPOINTÉE LE 23/10 : le bouton est aussi grisé pendant une ouverture.
+    fichier: SECTION, de: '              <button onClick={() => voir(f)} disabled={occupe || !!ouverture}', vers: '              <a href={`/commander/${f.slug}`} onClick={() => voir(f)} disabled={occupe || !!ouverture}' },
 
   { nom: '🔴 le titre de la landing promet de nouveau la page en ligne',
     // ⚠️ ANCRE REPOINTEE LE 06/10 : trois etapes, plus cinq.

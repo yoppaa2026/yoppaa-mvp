@@ -14,6 +14,7 @@
 // vient de se passer.
 
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 const T = {
   ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -53,11 +54,16 @@ export default function ModaleConfirmation({
   }, [ouverte, enCours, onFermer])
 
   if (!ouverte) return null
+  if (typeof document === 'undefined') return null
 
-  return (
+  // 🔴 AU-DESSUS DES AUTRES FENÊTRES (Alex, 23/10) : une confirmation demandée
+  // DEPUIS une fenêtre (saisie d'un rendez-vous, rendue dans `document.body` à
+  // z 9999) s'ouvrait derrière elle. Alex ne voyait qu'un voile mauve. Rendue
+  // à son tour dans `body`, un cran plus haut, elle passe toujours devant.
+  return createPortal(
     <div
       onClick={() => { if (!enCours) onFermer?.() }}
-      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(26,8,64,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans", sans-serif' }}>
+      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(26,8,64,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans", sans-serif' }}>
       <div
         role="dialog"
         aria-modal="true"
@@ -151,6 +157,7 @@ export default function ModaleConfirmation({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

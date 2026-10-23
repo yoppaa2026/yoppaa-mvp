@@ -409,6 +409,10 @@ const ANNEE = {
   verifier('B15 : l’agenda et la fiche du rendez-vous le disent',
     code('app/dashboard/AgendaRdv.js').includes('{estHorsAbonnement(i) && (') && code('app/dashboard/page.js').includes('{estHorsAbonnement(rdv) && ('))
 
+  // B16 (Alex, 23/10) : la confirmation passe devant la fenêtre qui la demande.
+  verifier('🔴 B16 : la fenêtre de confirmation s’ouvre au-dessus des autres',
+    code('app/dashboard/ModaleConfirmation.js').includes('return createPortal(') && code('app/dashboard/ModaleConfirmation.js').includes('zIndex: 10000'))
+
   // B13 (Alex, 23/10) : la vue Semaine va du lundi au dimanche.
   verifier('🔴 B13 : la semaine de l’agenda commence le lundi',
     code('app/dashboard/AgendaRdv.js').includes('d.setDate(refDate.getDate() - jourIdxLun(refDate))')

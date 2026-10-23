@@ -25,6 +25,7 @@ import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree,
 // demande rien — et surtout plus par un `alert()` du navigateur.
 import { confirmationSimple, confirmationInfo } from '@/lib/confirmations'
 import { etatPaiementRdv, etatPaiementCommande, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
+import { estHorsAbonnement } from '@/lib/abonnements'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import ModaleExpedition from './ModaleExpedition'
 // ⚠️ LE LOGO NE SE REDESSINE PAS À LA MAIN. Trois copies vivaient dans ce
@@ -1173,6 +1174,12 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
               <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 3, fontWeight: 600 }}>{p.detail}</p>
             )
           })()}
+          {/* ✅ (Alex, 23/10) une séance posée hors de son abonnement le dit. */}
+          {estHorsAbonnement(rdv) && (
+            <p style={{ fontSize: '0.72rem', color: '#92400E', marginTop: 4, fontWeight: 700 }}>
+              {rdv.notes_commercant} : son solde d’abonnement ne bouge pas.
+            </p>
+          )}
         </div>
 
         {/* Produits achetés dans le même paiement que le rendez-vous. À

@@ -396,6 +396,19 @@ const ANNEE = {
   verifier('B14 : de 3 à 2 places, l’ancien texte reste',
     /Chaque séance accueillera 2 personnes/.test(avertissementChangementCours({ capaciteAvant: 3, capaciteApres: 2, inscriptions: 2, plusRemplie: 1 })?.message || ''))
 
+  // B15 (Alex, 23/10, tableau) : un abonné refusé se confirme, et la séance se marque.
+  const { noteHorsAbonnement, estHorsAbonnement } = await import('../lib/abonnements.js')
+  verifier('🔴 B15 : la séance posée hors abonnement se reconnaît',
+    estHorsAbonnement({ abonnement_id: null, notes_commercant: noteHorsAbonnement('conge') }) && noteHorsAbonnement('conge') === 'Hors abonnement (congé de la formule)')
+  verifier('B15 : une séance du contrat, ou une note ordinaire, ne l’est pas',
+    !estHorsAbonnement({ abonnement_id: 'a1', notes_commercant: 'Hors abonnement' }) && !estHorsAbonnement({ abonnement_id: null, notes_commercant: 'allergie' }))
+  const modale = code('app/dashboard/ModalNouveauRdv.js')
+  verifier('🔴 B15 : la saisie demande confirmation avant de poser hors abonnement, et marque la séance',
+    modale.includes('if (aboChoisi && !verdictAbo?.ok) {') && modale.includes("action: 'Poser hors abonnement',") && modale.includes('if (!ok) return')
+    && modale.includes('...(aboChoisi && !surAbonnement ? { notes_commercant: noteHorsAbonnement(verdictAbo?.raison) } : {}),'))
+  verifier('B15 : l’agenda et la fiche du rendez-vous le disent',
+    code('app/dashboard/AgendaRdv.js').includes('{estHorsAbonnement(i) && (') && code('app/dashboard/page.js').includes('{estHorsAbonnement(rdv) && ('))
+
   // B13 (Alex, 23/10) : la vue Semaine va du lundi au dimanche.
   verifier('🔴 B13 : la semaine de l’agenda commence le lundi',
     code('app/dashboard/AgendaRdv.js').includes('d.setDate(refDate.getDate() - jourIdxLun(refDate))')

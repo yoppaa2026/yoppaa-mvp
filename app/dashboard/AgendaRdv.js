@@ -25,6 +25,7 @@ import { finApresMinuit } from '@/lib/rdv-slots'
 import { creneauxDuJour } from '@/lib/deplacement-rdv'
 import { contenuBlocRdv } from '@/lib/agenda-bloc'
 import { statutRdv, resumeSeance, texteResumeSeance, estAClore, compterAClore } from '@/lib/rdv-statut'
+import { estHorsAbonnement } from '@/lib/abonnements'
 import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
 import { motsReservation } from '@/lib/reservation-metier'
 import { fermetureQuiBloque, fermeturesDuJour } from '@/lib/fermetures-rdv'
@@ -1168,6 +1169,12 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
                     {pai && (
                       <span style={{ display: 'inline-block', marginTop: 3, fontSize: 10.5, fontWeight: 900, color: couleurPaiement(pai).texte, background: couleurPaiement(pai).fond, border: `1px solid ${couleurPaiement(pai).bord}`, borderRadius: 100, padding: '1px 8px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
                         {pai.libelle}
+                      </span>
+                    )}
+                    {/* ✅ (Alex, 23/10) posée hors de son abonnement : dit ici. */}
+                    {estHorsAbonnement(i) && (
+                      <span style={{ display: 'inline-block', marginTop: 3, marginLeft: 6, fontSize: 10.5, fontWeight: 900, color: '#92400E', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 100, padding: '1px 8px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                        Hors abonnement
                       </span>
                     )}
                     {i.client_telephone && (

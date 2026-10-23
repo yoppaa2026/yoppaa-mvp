@@ -155,6 +155,8 @@ const MUTATIONS = [
     de: "        if (seance_abonnement) lignes.push('Ta séance revient sur ton abonnement.')", vers: '' },
   { nom: '🔴 B5 le récap tait les annulations', fichier: 'lib/resend.js',
     de: '  const blocAnnulations = nbAnnul === 0 ? \'\' : `', vers: '  const blocAnnulations = true ? \'\' : `' },
+  { nom: '🔴 B15 la marque hors abonnement ne se reconnaît plus', fichier: ABO,
+    de: "  return !rdv?.abonnement_id && String(rdv?.notes_commercant || '').startsWith(NOTE_HORS_ABONNEMENT)", vers: '  return false' },
   { nom: '🔴 B14 un cours passé à 1 place ne prévient plus', fichier: 'lib/cours-collectifs.js',
     de: '  } else if (cAp <= 1 && cAv > 1) {', vers: '  } else if (false) {' },
   { nom: '🔴 B13 la semaine glisse de nouveau depuis le jour même', fichier: 'app/dashboard/AgendaRdv.js',

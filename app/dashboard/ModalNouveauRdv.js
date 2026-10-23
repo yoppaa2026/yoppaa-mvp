@@ -30,7 +30,10 @@ import {
 import {
   peutReserverSurAbonnement, seancesConsommees, datesConsommees, soldeAbonnement,
   serieDeSeances, raisonSemaineEcartee, expliquerRefusCommercant, formatDateCourte,
+  noteHorsAbonnement,
 } from '@/lib/abonnements'
+import { confirme } from './PosteConfirmation'
+import { confirmationSimple } from '@/lib/confirmations'
 import { fermetureQuiBloque } from '@/lib/fermetures-rdv'
 import { horsHoraireAdapte } from '@/lib/horaires-du-jour'
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
@@ -569,6 +572,19 @@ export default function ModalNouveauRdv({
 
   async function valider() {
     if (!formValide || submitting) return
+    // ✅ (Alex, 23/10, tableau) UN ABONNÉ REFUSÉ SE CONFIRME : la séance part
+    // hors abonnement, au tarif normal, et rien ne le disait qu'en petit gris.
+    // Alex a posé quatre séances « sur l'abonnement » de Sophie, toutes
+    // payantes, et son solde n'a pas bougé.
+    if (aboChoisi && !verdictAbo?.ok) {
+      const ok = await confirme(confirmationSimple({
+        titre: 'Séance hors abonnement',
+        message: `${expliquerRefusCommercant(verdictAbo?.raison, aboChoisi.contrat, { plafond: verdictAbo?.plafond ?? null, prenom: aboChoisi.contrat.client_prenom || '' })} Si tu confirmes, elle est posée hors abonnement${prixEstime != null ? `, au tarif de ${euros(prixEstime)}` : ''}, et son solde ne bouge pas.`,
+        action: 'Poser hors abonnement',
+        ton: 'principal',
+      }))
+      if (!ok) return
+    }
     setSubmitting(true)
     setError(null)
     try {
@@ -864,6 +880,8 @@ export default function ModalNouveauRdv({
         // prestation réécrirait l'historique au moindre changement de taux.
         tva_taux: presta.tva_taux ?? null,
         notes_client: notes.trim() || null,
+        // ✅ (23/10) la marque « Hors abonnement », dans la note privée du commerce.
+        ...(aboChoisi && !surAbonnement ? { notes_commercant: noteHorsAbonnement(verdictAbo?.raison) } : {}),
         rgpd_marketing: false,
         source: 'commercant',               // distingue des RDVs pris en ligne par un Yopper
         // ⚠️ LA PLACE ET LA CAPACITÉ, GRAVÉES ICI AUSSI. Sans `place_no`, deux

@@ -384,6 +384,12 @@ const ANNEE = {
   // B10 (C1 abo) : le jour de Bruxelles.
   verifier('B10 : « Mes abonnements » compte au jour de Bruxelles', code('app/api/yopper/abonnements/route.js').includes('const aujourdhui = jourBruxelles()'))
 
+  // B12 (Alex, 23/10) : `rdv_reservations.client_telephone` est NOT NULL.
+  verifier('🔴 B12 : un contrat sans téléphone n’écrit jamais null sur un rendez-vous',
+    code('app/dashboard/ModalNouveauRdv.js').includes("client_telephone: aboChoisi.contrat.client_telephone || tel.trim() || '',")
+    && code('app/api/rdv/reserver-abonnement/route.js').includes("client_telephone: contrat.client_telephone || '',")
+    && code('app/api/yopper/supprimer-compte/route.js').includes("client_email: EMAIL_ANONYME, client_telephone: '', notes_client: null })"))
+
   // B11 (Alex) : les annulés à venir se rouvrent depuis l'historique.
   verifier('🔴 B11 : l’historique liste les annulés à venir',
     code('app/dashboard/AgendaRdv.js').includes(".filter(r => String(r.statut || '').startsWith('annule') && r.date_rdv && r.date_rdv >= aujourdhuiIso)")

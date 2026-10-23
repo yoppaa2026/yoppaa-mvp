@@ -209,7 +209,9 @@ export async function POST(request) {
       // le résultat est un espoir, pas un effacement.
       const anonymisations = [
         ['rdv_reservations', admin.from('rdv_reservations')
-          .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes_client: null })
+          // 🔴 `''` ET PAS `null` (23/10) : la colonne est NOT NULL sur les
+          // rendez-vous, et l'effacement échouait chez qui en avait un.
+          .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: '', notes_client: null })
           .eq('client_email', email)],
         // L'achat est soldé : on efface l'acheteur. Le bénéficiaire d'un bon
         // encore valable, lui, n'est pas forcément la personne qui part.

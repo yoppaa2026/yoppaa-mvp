@@ -175,7 +175,9 @@ export async function POST(request) {
       client_email: yopper.email,
       client_prenom: contrat.client_prenom || yopper.prenom || '',
       client_nom: contrat.client_nom || yopper.nom || null,
-      client_telephone: contrat.client_telephone || null,
+      // 🔴 JAMAIS `null` (23/10) : `rdv_reservations.client_telephone` est NOT
+      // NULL, un contrat sans téléphone refusait chaque séance réservée.
+      client_telephone: contrat.client_telephone || '',
       heure_fin: heureFin,
       duree_minutes: duree,
       // ⚠️ ZÉRO PARCE QUE C'EST DÉJÀ PAYÉ, et le prix vit sur le CONTRAT.

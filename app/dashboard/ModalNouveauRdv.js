@@ -819,7 +819,9 @@ export default function ModalNouveauRdv({
         ? {
             client_prenom: aboChoisi.contrat.client_prenom || prenom.trim() || 'Abonné',
             client_nom: aboChoisi.contrat.client_nom || nom.trim() || null,
-            client_telephone: aboChoisi.contrat.client_telephone || tel.trim() || null,
+            // 🔴 JAMAIS `null` (Alex, 23/10) : la colonne est NOT NULL en base, et
+            // un contrat sans téléphone faisait échouer toute la saisie.
+            client_telephone: aboChoisi.contrat.client_telephone || tel.trim() || '',
             client_email: aboChoisi.contrat.client_email || email.trim() || null,
           }
         : {

@@ -58,6 +58,7 @@ import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { jourLisible } from '@/lib/attente-rdv'
 import { confirmerApresReponse } from '@/lib/rdv-apres-reservation-server'
+import { preleverStockVariantes, restaurerStockVariantes } from '@/lib/stock-variantes-server'
 
 const arrondiEuros = (n) => Math.round(Number(n || 0) * 100) / 100
 
@@ -590,6 +591,12 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Impossible d\'enregistrer le détail de la commande.' }, { status: 500 })
     }
 
+    // 🔴 LE STOCK DES VERSIONS SE PRÉLÈVE ICI AUSSI (23/10, décision d'Alex).
+    // Ce tunnel ne le faisait pas, alors que l'annulation du rendez-vous, elle,
+    // le RENDAIT (rdv/cancel, rdv/annuler-commercant) : le 500 ml d'un salon
+    // gagnait une pièce à chaque annulation. Même geste que create-commande.
+    await preleverStockVariantes(supabase, lignes, variantesData, articlesData)
+
     // ─── RIEN À ENCAISSER : ON CONFIRME ICI, SANS STRIPE ───────────────────
     //
     // Miroir exact de `couvertSansPaiement` dans le tunnel boutique, et miroir
@@ -609,6 +616,8 @@ export async function POST(request) {
       // créneau pris entre-temps laisserait une commande fantôme qui garde de
       // la marchandise réservée jusqu'à l'expiration.
       const toutDefaire = async () => {
+        // ✅ (23/10) les versions prélevées reviennent, AVANT que les lignes partent.
+        await restaurerStockVariantes(supabase, [commande.id])
         await supabase.from('commande_stock_reservation').delete().eq('commande_id', commande.id)
         await supabase.from('commande_articles').delete().eq('commande_id', commande.id)
         await supabase.from('commandes').delete().eq('id', commande.id)

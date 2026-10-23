@@ -669,6 +669,15 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     && (code('lib/stock-variantes-server.js').match(/if \(libres\.ids\.has\(v\.id\)\) continue/g) || []).length === 2
     && /preleverStockVariantes\(supabase, lignes, variantesData, articlesData\)/.test(code('app/api/stripe/checkout/create-commande/route.js'))
     && /preleverStockVariantes\(admin, lignes, variantesData, articlesData\)/.test(code('app/api/equipe/commande/creer/route.js')))
+  // 🔴 (23/10, décision d'Alex) le tunnel rendez-vous + produits prélève aussi,
+  // APRÈS ses lignes, et rend avant de tout défaire.
+  {
+    const rdvCmd = code('app/api/stripe/checkout/create-rdv-commande/route.js')
+    const iLignes = rdvCmd.indexOf(".from('commande_articles')\n      .insert(")
+    const iPrelev = rdvCmd.indexOf('await preleverStockVariantes(supabase, lignes, variantesData, articlesData)')
+    v('🔴 le tunnel rendez-vous prélève les versions vendues, comme la boutique',
+      iLignes > -1 && iPrelev > iLignes && /const toutDefaire = async \(\) => \{\s*await restaurerStockVariantes\(supabase, \[commande\.id\]\)/.test(rdvCmd))
+  }
   const bord = code('app/dashboard/ConfigDashboard.js')
   v('🔴 R2 éditeur : « au moins N » au-delà des options est refusé, la pastille « À corriger » se montre',
     /if \(\(r\.choix_min \|\| 0\) > nbOptions\)/.test(bord) && /\{problemeDuGroupe\(g\) && \(/.test(bord))

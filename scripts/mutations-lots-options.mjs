@@ -281,6 +281,11 @@ const MUTATIONS = [
     de: '              {problemeDuGroupe(g) && (', vers: '              {false && (' },
   { nom: '🟡 J2 : Entrée + clic crée l option deux fois', fichier: 'app/dashboard/ConfigDashboard.js',
     de: '    if (ajoutOption.current) return', vers: '' },
+  // ✅ (23/10) le tunnel rendez-vous + produits prélève, et rend en cas d'échec.
+  { nom: '🔴 le tunnel rendez-vous ne prélève plus ses versions', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    await preleverStockVariantes(supabase, lignes, variantesData, articlesData)', vers: '' },
+  { nom: '🔴 un rendez-vous refusé garde les versions prélevées', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '        await restaurerStockVariantes(supabase, [commande.id])', vers: '' },
 ]
 
 const lancer = () => {

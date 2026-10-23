@@ -55,6 +55,11 @@ export async function POST(request) {
     if (!res.ok && res.reason === 'exception') {
       return NextResponse.json({ ok: false, error: 'Crédit de fidélité impossible' }, { status: 500 })
     }
+    // 🔴 ET IL NE DOIT PAS EN AVOIR L'AIR (Alex, 23/10) : renvoyé tel quel,
+    // `ok: false` allumait chez le patron « le crédit de fidélité n'a pas
+    // abouti (fidelite_inactive) » à chaque clôture d'un commerce sans carte.
+    // Rien à créditer n'est pas un échec : `ok: true`, et le motif reste dit.
+    if (!res.ok) return NextResponse.json({ ok: true, credite: false, reason: res.reason })
     return NextResponse.json(res)
   } catch (e) {
     console.error('[fidelite/rdv-honore] KO', e?.message)

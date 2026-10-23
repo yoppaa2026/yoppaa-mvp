@@ -390,6 +390,12 @@ const ANNEE = {
     && code('app/api/rdv/reserver-abonnement/route.js').includes("client_telephone: contrat.client_telephone || '',")
     && code('app/api/yopper/supprimer-compte/route.js').includes("client_email: EMAIL_ANONYME, client_telephone: '', notes_client: null })"))
 
+  // B13 (Alex, 23/10) : la vue Semaine va du lundi au dimanche.
+  verifier('🔴 B13 : la semaine de l’agenda commence le lundi',
+    code('app/dashboard/AgendaRdv.js').includes('d.setDate(refDate.getDate() - jourIdxLun(refDate))')
+    && code('app/dashboard/AgendaRdv.js').includes('if (!vueSemaine) return refDate')
+    && code('app/dashboard/AgendaRdv.js').includes('const d = new Date(debutAffiche)'))
+
   // B11 (Alex) : les annulés à venir se rouvrent depuis l'historique.
   verifier('🔴 B11 : l’historique liste les annulés à venir',
     code('app/dashboard/AgendaRdv.js').includes(".filter(r => String(r.statut || '').startsWith('annule') && r.date_rdv && r.date_rdv >= aujourdhuiIso)")

@@ -135,12 +135,22 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
   const nbJours = vueSemaine ? 7 : 1
   const scrollH = vueSemaine && !isDesktop           // besoin d'un défilement horizontal ?
 
-  // Construction des jours affichés (refDate + n)
+  // ✅ (Alex, 23/10) LA SEMAINE VA DU LUNDI AU DIMANCHE, toujours. Elle
+  // glissait depuis le jour même (« du vendredi au jeudi »), et la commerçante
+  // ne retrouvait pas sa semaine. La vue Jour, elle, reste sur le jour choisi.
+  const debutAffiche = useMemo(() => {
+    if (!vueSemaine) return refDate
+    const d = new Date(refDate)
+    d.setDate(refDate.getDate() - jourIdxLun(refDate))
+    return d
+  }, [refDate, vueSemaine])
+
+  // Construction des jours affichés (début + n)
   const joursAffiches = useMemo(() => {
     const out = []
     for (let i = 0; i < nbJours; i++) {
-      const d = new Date(refDate)
-      d.setDate(refDate.getDate() + i)
+      const d = new Date(debutAffiche)
+      d.setDate(debutAffiche.getDate() + i)
       out.push({
         date: d,
         iso: isoDate(d),
@@ -153,7 +163,7 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
       })
     }
     return out
-  }, [refDate, nbJours, today])
+  }, [debutAffiche, nbJours, today])
 
   // Enveloppe horaire : du plus tôt ouvert dans la fenêtre au plus tard. Fallback 9-18.
   const { heureMin, heureMax } = useMemo(() => {
@@ -346,10 +356,10 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
   const headerLabel = vueSemaine
     ? (() => {
         const last = joursAffiches[joursAffiches.length - 1]
-        const sameM = refDate.getMonth() === last.date.getMonth()
+        const sameM = debutAffiche.getMonth() === last.date.getMonth()
         return sameM
-          ? `${refDate.getDate()} – ${last.numero} ${MOIS_CRT[last.mois]}`
-          : `${refDate.getDate()} ${MOIS_CRT[refDate.getMonth()]} – ${last.numero} ${MOIS_CRT[last.mois]}`
+          ? `${debutAffiche.getDate()} – ${last.numero} ${MOIS_CRT[last.mois]}`
+          : `${debutAffiche.getDate()} ${MOIS_CRT[debutAffiche.getMonth()]} – ${last.numero} ${MOIS_CRT[last.mois]}`
       })()
     : `${joursAffiches[0].labelLong} ${joursAffiches[0].numero} ${MOIS_CRT[joursAffiches[0].mois]}`
 

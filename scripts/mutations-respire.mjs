@@ -155,6 +155,8 @@ const MUTATIONS = [
     de: "        if (seance_abonnement) lignes.push('Ta séance revient sur ton abonnement.')", vers: '' },
   { nom: '🔴 B5 le récap tait les annulations', fichier: 'lib/resend.js',
     de: '  const blocAnnulations = nbAnnul === 0 ? \'\' : `', vers: '  const blocAnnulations = true ? \'\' : `' },
+  { nom: '🔴 B13 la semaine glisse de nouveau depuis le jour même', fichier: 'app/dashboard/AgendaRdv.js',
+    de: '    d.setDate(refDate.getDate() - jourIdxLun(refDate))', vers: '' },
   { nom: '🔴 B8 un cours trop long pour sa plage passe', fichier: 'lib/rdv-slots.js',
     de: '    if (!e?.tropCourte) continue', vers: '    continue' },
 ]

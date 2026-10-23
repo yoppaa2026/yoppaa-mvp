@@ -769,6 +769,23 @@ const code = (f) => sansProse(lire(f))
   ])
   v('🔴 une seule grille « Taille : 36 · 38 » (nom d’axe 2 sans valeur, nom d’axe 1 vide = Taille)',
     doublon.length === 1 && doublon[0].articles.join() === '1,2,3' && G.libelleDeGrille(doublon[0]) === 'Taille : 36 · 38', JSON.stringify(doublon))
+  // ✅ (Alex, 23/10) LE NOM D'UNE GRILLE : JUSTE UNE ÉTIQUETTE.
+  const nommees = G.bibliothequeDeGrilles([
+    { id: 1, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['36', '38'], grille_nom: '' },
+    { id: 2, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['36', '38'], grille_nom: '  Gamme Primadonna ' },
+    { id: 3, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['85A'] },
+  ])
+  v('🔴 le nom ne change pas le regroupement, et la grille le porte', nommees.length === 2 && nommees[0].articles.join() === '1,2' && nommees[0].nom === 'Gamme Primadonna' && nommees[1].nom === '', JSON.stringify(nommees))
+  v('🔴 poser une grille nommée écrit son nom ; sans nom propre à la saisie, rien n’est touché',
+    G.axesDeGrille(nommees[0]).grille_nom === 'Gamme Primadonna' && G.axesDeGrille(nommees[1]).grille_nom === null
+    && !('grille_nom' in G.axesDeGrille({ axe1_nom: 'Taille', axe1_valeurs: ['S'], axe2_valeurs: [] })))
+  v('le nom tapé est nettoyé, 60 caractères au plus, vide = null',
+    G.nomDeGrille('  Marie Jo  ') === 'Marie Jo' && G.nomDeGrille('   ') === null && G.nomDeGrille('x'.repeat(80)).length === 60
+    && G.grilleDeSaisie({ axe1Texte: 'S, M', nom: 'Gamme A' }).grille.nom === 'Gamme A')
+  v('🔴 retirer la grille retire son nom', G.RETRAIT_DE_GRILLE.grille_nom === null)
+  v('🔴 l’écran nomme la grille sur tous ses articles, relu',
+    bord.includes(".from('articles').update({ grille_nom: nom }).in('id', g.articles).select('id')") && bord.includes('{g.nom ? (')
+    && bord.includes("placeholder=\"Taille gamme Primadonna\""))
   // (22/10) « Stock d'une variante » sur plusieurs articles : chaque valeur une fois.
   const cv = G.ciblesVariantesDuLot([
     { id: 1, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['S', 'M'], axe2_nom: 'Couleur', axe2_valeurs: ['Bleu'] },

@@ -46,7 +46,7 @@ import {
   deplacerValeur, renommerValeur, ordreDesVariantes, variantesDeLaValeur, phraseRetraitValeur,
   ciblesDeMasse, variantesVisees, quantiteSaisie, prixSaisiMasse, lignesDeStock,
   bibliothequeDeGrilles, libelleDeGrille, axesDeGrille, combinaisonsDeGrille, repartirGrille,
-  grilleDeSaisie, planGrille, RETRAIT_DE_GRILLE, phraseRetraitDeGrille,
+  grilleDeSaisie, planGrille, RETRAIT_DE_GRILLE, phraseRetraitDeGrille, nomDeGrille,
   ciblesVariantesDuLot,
   combinaisonsManquantes, combinaisonsDeLaValeur, retraitDeValeur, cleDesAxes,
 } from '@/lib/variantes-grille'
@@ -2353,7 +2353,8 @@ function TabMenu({ commercantId, commercant, toast }) {
           {articles.length > 1 && (
             <div style={{ marginBottom: 12 }}>
               {!enLot ? (
-                <button style={{ ...s.btn, ...s.btnGhost, padding: '7px 12px', fontSize: 12 }}
+                // ✅ (Alex, 23/10 : « on cherche trop les boutons ») un contour franc.
+                <button style={{ ...s.btn, padding: '7px 12px', fontSize: 12, background: '#fff', color: T.bgPanel, border: `1.5px solid ${T.bgPanel}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   onClick={() => { setEnLot(true); setLotIds([]); setLotAction(null) }}>
                   <Check size={13} strokeWidth={2}/> Sélectionner plusieurs articles
                 </button>
@@ -3198,7 +3199,15 @@ function BibliothequeGrilles({ articles = [], variantesParArticle = {}, toast, o
   const [aRetirer, setARetirer] = useState([])
   const [ajouts, setAjouts] = useState({ 1: '', 2: '', nomAxe2: '' })
   const [renommageGrille, setRenommageGrille] = useState(null) // { axe, valeur, saisie }
+  // ✅ (Alex, 23/10) l'étiquette de la grille ouverte en « Modifier partout ».
+  const [nomSaisi, setNomSaisi] = useState('')
   const grilles = bibliothequeDeGrilles(articles)
+  // ✅ (Alex, 23/10 : « on cherche trop les boutons ») des boutons qui se
+  // voient : contour franc, couleur par geste, taille lisible.
+  const btnGrille = { ...s.btn, padding: '7px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }
+  const btnContour = { ...btnGrille, background: '#fff', color: T.bgPanel, border: `1.5px solid ${T.bgPanel}` }
+  const btnPlein = { ...btnGrille, ...s.btnPrimary }
+  const btnRouge = { ...btnGrille, background: '#fff', color: '#DC2626', border: '1.5px solid #FCA5A5' }
   // 🟠 (22/10, audit O9) LA VITRINE AUSSI : la fiche montre ses variantes et
   // ses options (à lire, sans « Ajouter »). La boutique en vitrine qui pose
   // 36-44 sur vingt robes n'en voyait aucune.
@@ -3277,6 +3286,19 @@ function BibliothequeGrilles({ articles = [], variantesParArticle = {}, toast, o
       if (res.some(r => r.error || (r.data?.length || 0) !== 1)) return false
     }
     return true
+  }
+
+  // ✅ (Alex, 23/10) L'ÉTIQUETTE, ET RIEN D'AUTRE : sur tous les articles de
+  // la grille, sans toucher à ses tailles ni à ses stocks.
+  async function nommer(g) {
+    if (envoi) return
+    const nom = nomDeGrille(nomSaisi)
+    setEnvoi(true)
+    const { data, error } = await supabase.from('articles').update({ grille_nom: nom }).in('id', g.articles).select('id')
+    setEnvoi(false)
+    onApplique?.()
+    if (error || (data?.length || 0) !== g.articles.length) { toast(`Le nom n’a pas été enregistré partout : ${error?.message || 'modification refusée'}. Recharge la page.`, 'error'); return }
+    toast(nom ? `Grille nommée « ${nom} ».` : 'Nom de la grille retiré.')
   }
 
   // « Retirer de… » : la grille quitte les articles cochés (confirmé).
@@ -3383,9 +3405,9 @@ function BibliothequeGrilles({ articles = [], variantesParArticle = {}, toast, o
           taille : couleur, modèle, longueur, parfum… */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
         <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1.2px', margin: 0 }}>Tes grilles de variantes</p>
-        <button type="button" style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
-          onClick={() => { const ouvrir = !nouvelle; fermerTout(); if (ouvrir) setNouvelle({ axe1Nom: 'Taille', axe1Texte: '', axe2Nom: '', axe2Texte: '' }) }}>
-          <Icon name="plus" size={12} color={T.bgPanel}/> {nouvelle ? 'Fermer' : 'Nouvelle grille'}
+        <button type="button" style={nouvelle ? btnContour : btnPlein}
+          onClick={() => { const ouvrir = !nouvelle; fermerTout(); if (ouvrir) setNouvelle({ nom: '', axe1Nom: 'Taille', axe1Texte: '', axe2Nom: '', axe2Texte: '' }) }}>
+          <Icon name="plus" size={13} color={nouvelle ? T.bgPanel : '#fff'}/> {nouvelle ? 'Fermer' : 'Nouvelle grille'}
         </button>
       </div>
       <p style={{ fontSize: 12, color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
@@ -3394,6 +3416,9 @@ function BibliothequeGrilles({ articles = [], variantesParArticle = {}, toast, o
 
       {nouvelle && (
         <div style={{ border: `1.5px solid ${T.bgPanel}`, borderRadius: 10, padding: 12, background: '#FAFAFA', marginBottom: 10 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.ink, marginBottom: 8 }}>Nom de la grille (facultatif, vu de toi seule)
+            <input value={nouvelle.nom || ''} maxLength={60} onChange={e => setNouvelle(p => ({ ...p, nom: e.target.value }))} placeholder="Taille gamme Primadonna" style={{ ...s.input, fontSize: 13, marginTop: 4 }}/>
+          </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
             <label style={{ fontSize: 12, fontWeight: 700, color: T.ink }}>1er axe
               <input value={nouvelle.axe1Nom} onChange={e => setNouvelle(p => ({ ...p, axe1Nom: e.target.value }))} placeholder="Taille" style={{ ...s.input, fontSize: 13, marginTop: 4 }}/>
@@ -3442,19 +3467,27 @@ function BibliothequeGrilles({ articles = [], variantesParArticle = {}, toast, o
             <div key={g.cle} style={{ border: `1px solid ${ouverte || enModif || enRetrait ? T.bgPanel : T.hairline}`, borderRadius: 10, padding: 10, background: '#fff' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <p style={{ fontWeight: 800, fontSize: 13, color: T.ink, margin: 0 }}>{libelleDeGrille(g)}</p>
+                  {/* ✅ (Alex, 23/10) l'étiquette d'abord, quand il y en a une. */}
+                  {g.nom ? (
+                    <>
+                      <p style={{ fontWeight: 800, fontSize: 14, color: T.ink, margin: 0 }}>{g.nom}</p>
+                      <p style={{ fontWeight: 600, fontSize: 12, color: T.deep, margin: '2px 0 0' }}>{libelleDeGrille(g)}</p>
+                    </>
+                  ) : (
+                    <p style={{ fontWeight: 800, fontSize: 13, color: T.ink, margin: 0 }}>{libelleDeGrille(g)}</p>
+                  )}
                   <p style={{ fontSize: 11.5, color: T.muted, margin: '3px 0 0' }}>{g.articles.length === 1 ? 'sur 1 article' : `sur ${g.articles.length} articles`}</p>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                  <button style={enModif ? btnContour : btnPlein}
+                    onClick={() => { const o = !enModif; fermerTout(); if (o) { setModifDe(g.articles[0]); setNomSaisi(g.nom || '') } }}>
+                    <Icon name="edit" size={13} color={enModif ? T.bgPanel : '#fff'}/> {enModif ? 'Fermer' : 'Modifier partout'}
+                  </button>
+                  <button style={btnContour}
                     onClick={() => { const o = !ouverte; fermerTout(); if (o) setChoisie(g.cle) }}>
                     <Copy size={13} strokeWidth={1.8}/> {ouverte ? 'Fermer' : 'Appliquer à…'}
                   </button>
-                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
-                    onClick={() => { const o = !enModif; fermerTout(); if (o) setModifDe(g.articles[0]) }}>
-                    <Icon name="edit" size={13} color={T.bgPanel}/> {enModif ? 'Fermer' : 'Modifier partout'}
-                  </button>
-                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                  <button style={btnRouge}
                     onClick={() => { const o = !enRetrait; fermerTout(); if (o) { setRetraitDe(g.articles[0]); setARetirer([...g.articles]) } }}>
                     <Icon name="trash" size={13} color="#DC2626"/> {enRetrait ? 'Fermer' : 'Retirer de…'}
                   </button>
@@ -3462,6 +3495,17 @@ function BibliothequeGrilles({ articles = [], variantesParArticle = {}, toast, o
               </div>
               {enModif && (
                 <div style={{ marginTop: 10 }}>
+                  {/* ✅ (Alex, 23/10) le nom de la grille, vu de toi seule. */}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
+                    <label style={{ flex: 1, minWidth: 200, fontSize: 12, fontWeight: 700, color: T.ink }}>Nom de la grille (vu de toi seule)
+                      <input value={nomSaisi} maxLength={60} onChange={e => setNomSaisi(e.target.value)} placeholder="Taille gamme Primadonna"
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); nommer(g) } }}
+                        style={{ ...s.input, fontSize: 13, marginTop: 4 }}/>
+                    </label>
+                    <button type="button" style={btnPlein} disabled={envoi || (nomDeGrille(nomSaisi) || '') === (g.nom || '')} onClick={() => nommer(g)}>
+                      Enregistrer le nom
+                    </button>
+                  </div>
                   <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 8px', lineHeight: 1.5 }}>
                     Chaque changement vaut pour {g.articles.length === 1 ? 'son article' : `ses ${g.articles.length} articles`} : une valeur ajoutée crée ses combinaisons à stock zéro, un nom changé garde le stock, une valeur retirée emporte ses combinaisons (confirmé).
                   </p>

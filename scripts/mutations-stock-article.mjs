@@ -328,6 +328,11 @@ const MUTATIONS = [
     fichier: BORD, de: '    if (ajoutEnCours.current) return', vers: '' },
   { nom: '🟡 J11 : Entree puis la sortie du champ renomment deux fois',
     fichier: BORD, de: '    if (!renommageOuvert.current) return', vers: '' },
+  // ✅ (23/10) le nom d'une grille, juste une étiquette.
+  { nom: '🔴 la grille perd son nom', fichier: 'lib/variantes-grille.js',
+    de: '    if (!g.nom && cle(a.grille_nom)) g.nom = cle(a.grille_nom)', vers: '' },
+  { nom: '🔴 poser une grille nommée n écrit pas son nom', fichier: 'lib/variantes-grille.js',
+    de: "    ...('nom' in g ? { grille_nom: nomDeGrille(g.nom) } : {}),", vers: '' },
 ]
 
 const lancer = (banc) => {

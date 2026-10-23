@@ -240,7 +240,8 @@ function v(nom, condition, detail = '') {
   v('une grille sans article : refus', !G.planGrille({ grille: { axe1_valeurs: ['S'], articles: [] }, op: { type: 'ajouter', axe: 1, valeur: 'M' } }).ok)
   // Retirer la grille d'articles.
   v('🔴 retirer une grille : plus de variantes, axes vidés, article masqué',
-    JSON.stringify(G.RETRAIT_DE_GRILLE) === '{"gere_variantes":false,"axe1_valeurs":[],"axe2_nom":null,"axe2_valeurs":[],"actif":false}' && Object.isFrozen(G.RETRAIT_DE_GRILLE))
+    // REPOINTÉE LE 23/10 : et son étiquette (`grille_nom`) part avec elle.
+    JSON.stringify(G.RETRAIT_DE_GRILLE) === '{"gere_variantes":false,"axe1_valeurs":[],"axe2_nom":null,"axe2_valeurs":[],"actif":false,"grille_nom":null}' && Object.isFrozen(G.RETRAIT_DE_GRILLE))
   v('la phrase de retrait dit les combinaisons, le stock et le masquage',
     G.phraseRetraitDeGrille({ articles: 2, combinaisons: 10, stock: 7 }).startsWith('2 articles perdent leurs 10 combinaisons (stock : 7). Ils sont masqués'))
 

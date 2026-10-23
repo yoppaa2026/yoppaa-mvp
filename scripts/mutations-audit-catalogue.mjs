@@ -130,7 +130,8 @@ const MUTATIONS = [
   { nom: '🔴 la dernière taille se retire et laisse une grille vide', fichier: 'lib/variantes-grille.js',
     de: "    if (axe === 1 && a1.length === 1) return { ok: false, error: 'C’est la dernière valeur : pour enlever la grille, utilise « Retirer de… ».' }", vers: '' },
   { nom: '🔴 retirer une grille laisse l article sur la fiche', fichier: 'lib/variantes-grille.js',
-    de: 'export const RETRAIT_DE_GRILLE = Object.freeze({ gere_variantes: false, axe1_valeurs: [], axe2_nom: null, axe2_valeurs: [], actif: false })', vers: 'export const RETRAIT_DE_GRILLE = Object.freeze({ gere_variantes: false, axe1_valeurs: [], axe2_nom: null, axe2_valeurs: [] })' },
+    // REPOINTÉE LE 23/10 : l'étiquette (`grille_nom`) part aussi avec la grille.
+    de: 'export const RETRAIT_DE_GRILLE = Object.freeze({ gere_variantes: false, axe1_valeurs: [], axe2_nom: null, axe2_valeurs: [], actif: false, grille_nom: null })', vers: 'export const RETRAIT_DE_GRILLE = Object.freeze({ gere_variantes: false, axe1_valeurs: [], axe2_nom: null, axe2_valeurs: [], grille_nom: null })' },
   { nom: '🔴 « Nouvelle grille » pose sans article coché', fichier: BORD,
     de: "    if (cibles.length === 0) { toast('Coche au moins un article : une grille vit sur les articles qui la portent.', 'error'); return }", vers: '' },
   { nom: '🔴 retirer une valeur partout ne se confirme plus', fichier: BORD,

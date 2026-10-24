@@ -1897,12 +1897,12 @@ function TabMenu({ commercantId, commercant, toast }) {
                     onChange={v => setForm(p => ({ ...p, fournisseur_actif: v }))}
                     label="Je peux aussi le commander chez mon fournisseur"/>
                   <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, margin: '6px 0 0' }}>
-                    Une taille sans stock ne s&rsquo;affiche plus « Épuisé » : ton client la commande, et elle est prête au bout du délai de ton fournisseur.
+                    Seulement pour une taille qui manque en magasin : elle ne s&rsquo;affiche plus « Épuisé », ton client la commande, et elle est prête au bout du délai de ton fournisseur. Les tailles en stock se retirent comme d&rsquo;habitude.
                   </p>
                   {form.fournisseur_actif === true && (
                     <div style={{ marginTop: 10 }}>
                       <ChampFormulaire label="Délai de ton fournisseur, en jours *"
-                        aide={`Le jour de retrait proposé à ton client tient compte de ce délai. ${fournisseurJoursMax(horizonBoutique(commercant))} jours au plus : ta boutique propose ses retraits sur ${horizonBoutique(commercant)} jours.`}>
+                        aide={`Une taille à commander se retire au plus tôt après ce délai. ${fournisseurJoursMax(horizonBoutique(commercant))} jours au plus : ton jour de retrait le plus lointain est à ${horizonBoutique(commercant)} jours (Profil général).`}>
                         <Input type="number" min={1} max={fournisseurJoursMax(horizonBoutique(commercant))} value={form.fournisseur_jours}
                           onChange={e => setForm(p => ({ ...p, fournisseur_jours: e.target.value }))} placeholder="5"/>
                       </ChampFormulaire>
@@ -2061,13 +2061,17 @@ function TabMenu({ commercantId, commercant, toast }) {
           {!estVitrine && !deuxCircuits && form.vendable && (
             // 🟡 (22/10, audit J4) Des exemples du métier : une boutique ne
             // prépare ni tarte ni pain du week-end.
-            <SectionFormulaire titre="Quand peut-on le commander ?" phrase={estAlimentaire
+            // ✅ (24/10, Alex, tableau) HORS ALIMENTAIRE, LE TITRE DIT QUAND CE
+            // DÉLAI JOUE : toujours, même en stock. « Une pièce à faire venir »
+            // a quitté les exemples : c'est le délai fournisseur, qui ne joue
+            // que pour une taille qui manque. Le fonctionnement ne change pas.
+            <SectionFormulaire titre={estAlimentaire ? 'Quand peut-on le commander ?' : 'Un délai pour cet article, même en stock ?'} phrase={estAlimentaire
               ? 'Pour les articles que tu prépares à l’avance : une tarte, un gâteau, un plateau, le pain du week-end.'
-              : 'Pour les articles que tu commandes ou prépares à l’avance : une retouche, une gravure, une pièce à faire venir.'}>
+              : 'Pour ce que tu dois travailler avant de le remettre, même quand tu l’as : une retouche, une gravure, un ourlet. Il vaut pour toutes ses tailles, à chaque commande.'}>
               {/* ⚠️ UNE LISTE, PAS UN CHAMP LIBRE : un boulanger pense « 2 jours »,
                   pas « 2880 », et la faute de frappe rendrait l'article
                   commandable par personne, en silence. */}
-              <ChampFormulaire label="Délai de commande"
+              <ChampFormulaire label={estAlimentaire ? 'Délai de commande' : 'Prêt au plus tôt'}
                 aide={`En jours : « 2 jours » veut dire commandé ${estAlimentaire ? 'jeudi, retiré samedi' : 'jeudi, prêt samedi'}. Tes clients le voient sur la carte, avec la date limite.${aideJoursDeVente}`}>
                 <select
                   value={String(form.delai_minutes ?? 0)}
@@ -2090,7 +2094,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                   serveur l'ignorait (14 jours en dur). */}
               {estDetail ? (
                 <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
-                  Tes clients choisissent leur jour de retrait jusqu&rsquo;à {horizonBoutique(commercant)} jours à l&rsquo;avance, pour tout ton catalogue. Ça se règle dans Profil général, sous « Horizon de retrait ».
+                  Tes clients choisissent leur jour de retrait jusqu&rsquo;à {horizonBoutique(commercant)} jours à l&rsquo;avance, pour tout ton catalogue. Ça se règle dans Profil général, sous « Jour de retrait le plus lointain ».
                 </p>
               ) : (
               <ChampFormulaire label="Réservable jusqu’à"
@@ -11592,9 +11596,10 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
                 même valeur (`horizonBoutique`, lib/ouverture.js). */}
             {(form.boutique_mode_vente === 'retrait' || form.boutique_mode_vente === 'les_deux') && (
               <div style={{ marginBottom: 12 }}>
-                <p style={{ ...s.label, marginBottom: 4 }}>Horizon de retrait</p>
+                {/* ✅ (24/10, Alex, tableau) Le nom dit ce que c'est : un plafond. */}
+                <p style={{ ...s.label, marginBottom: 4 }}>Jour de retrait le plus lointain</p>
                 <p style={{ fontSize: 11, color: T.muted, marginBottom: 8, lineHeight: 1.5 }}>
-                  Jusqu&rsquo;à combien de jours à l&rsquo;avance tes clients peuvent choisir leur jour de retrait.
+                  Jusqu&rsquo;à combien de jours à l&rsquo;avance tes clients choisissent leur jour de retrait. C&rsquo;est un plafond, pour tout ton catalogue.
                 </p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {HORIZONS_BOUTIQUE.map(j => {
@@ -11618,10 +11623,11 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
                 dès aujourd'hui » et pouvait se présenter dans la demi-heure. */}
             {(form.boutique_mode_vente === 'retrait' || form.boutique_mode_vente === 'les_deux') && (
               <div style={{ marginBottom: 12 }}>
-                <p style={{ ...s.label, marginBottom: 4 }}>Délai de préparation</p>
+                {/* ✅ (24/10, Alex, tableau) Le nom dit QUAND il joue : le jour même seulement. */}
+                <p style={{ ...s.label, marginBottom: 4 }}>Retrait le jour même</p>
                 <p style={{ fontSize: 11, color: T.muted, marginBottom: 8, lineHeight: 1.5 }}>
-                  Le temps qu&rsquo;il te faut pour préparer une commande. Le retrait du jour même
-                  n&rsquo;est proposé que s&rsquo;il te reste ce délai avant ta fermeture.
+                  Le temps qu&rsquo;il te faut pour préparer une commande passée aujourd&rsquo;hui. Le retrait du jour même
+                  n&rsquo;est proposé que s&rsquo;il te reste ce temps avant ta fermeture. Les autres jours ne sont pas concernés.
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button type="button" style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px' }}

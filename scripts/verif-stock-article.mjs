@@ -627,7 +627,9 @@ const code = (f) => sansProse(lire(f))
   v('🔴 les deux sections existent, en cartes',
     /<ChoixCartes label="Se vend-il le jour même \?" choix=\{CHOIX_JOUR_MEME\}/.test(bord) && /<ChoixCartes label="Se prend-il sur commande \?" choix=\{CHOIX_SUR_COMMANDE\}/.test(bord))
   v('🔴 sur commande : seulement les délais d’au moins un jour', /choixDeDelai\(form\.delai_minutes\)\.filter\(m => m >= 1440\)/.test(bord))
-  v('🔴 l’ancienne section du délai ne s’affiche plus en alimentaire', /\{!estVitrine && !deuxCircuits && form\.vendable && \(\s*<SectionFormulaire titre="Quand peut-on le commander \?"/.test(bord))
+  // REPOINTÉE LE 24/10 (Alex, tableau) : le titre dépend du métier, la
+  // condition d'affichage (hors deux circuits) ne bouge pas.
+  v('🔴 l’ancienne section du délai ne s’affiche plus en alimentaire', /\{!estVitrine && !deuxCircuits && form\.vendable && \(\s*<SectionFormulaire titre=\{estAlimentaire \? 'Quand peut-on le commander \?' : 'Un délai pour cet article, même en stock \?'\}/.test(bord))
   v('🔴 choisir « Stock qui baisse » éteint « sur commande »', /\.\.\.\(deuxCircuits && c\.mode === 'magasin' \? \{ commande_active: false \} : \{\}\)/.test(bord))
   v('🔴 un nouvel article garde « demain commandable » (A + B J+1), comme la migration',
     /const demainCommandable = deuxCircuits && \(Number\(commercant\?\.horizon_commande\) \|\| 2\) >= 2/.test(bord)

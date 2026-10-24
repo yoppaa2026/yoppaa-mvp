@@ -193,7 +193,10 @@ function v(nom, condition, detail = '') {
   v('🟠 O14 : l’aide des photos dit le 4:5 et les photos coupées', /recadrée automatiquement en portrait \(4:5\)/.test(bord) && !/Format idéal carré/.test(bord) && /const photosSurLaFiche = commercant\?\.photos_catalogue_actif !== false/.test(bord))
   v('🟠 O10 : « coche les jours » seulement là où la carte a ses jours',
     /const aideJoursDeVente = form\.stock_mode !== 'magasin' && !form\.gere_variantes/.test(bord) && (bord.match(/\$\{aideJoursDeVente\}/g) || []).length === 2)
-  v('🟡 J4 : des exemples de boutique dans « Quand peut-on le commander ? »', /une retouche, une gravure, une pièce à faire venir/.test(bord))
+  // REPOINTÉE LE 24/10 (Alex, tableau) : le titre boutique dit « même en
+  // stock », et « une pièce à faire venir » est devenu le délai fournisseur.
+  v('🟡 J4 : des exemples de boutique dans « Un délai pour cet article, même en stock ? »',
+    /une retouche, une gravure, un ourlet/.test(bord) && !/une pièce à faire venir/.test(bord))
   v('🟡 J5 : « Sur ta fiche » / « Masqué » sur la carte', /\{a\.actif \? 'Sur ta fiche' : 'Masqué'\}/.test(bord))
   v('🟡 J6 : une boutique n’a pas de « comptoir »', /const motsBoutique = estDetail \|\| estVitrine/.test(bord) && /'Il en reste aujourd’hui'/.test(bord))
   v('🟡 J8 : la TVA sur place du lot suit le formulaire (`estAlimentaire`)', !/commercant\?\.categorie === 'alimentaire'/.test(bord))

@@ -506,7 +506,7 @@ export async function POST(request) {
       // option choisie : elle disparaissait de la commande, son supplément avec.
       supabase.from('article_options_valeurs').select(SELECT_OPTIONS_VALEURS).in('article_options_groupes.article_id', articleIds),
       // Variantes (Module 2 boutique) : revalidation server-side prix + stock
-      supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
+      supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif, fournisseur_dispo').in('article_id', articleIds),
       // Deals : revalidation server-side du prix selon le type. Les lots et les
       // duos sont des offres séparées vendues telles quelles ; les remises, en
       // pourcentage ou en prix promo, s'appliquent au prix de l'article et sont

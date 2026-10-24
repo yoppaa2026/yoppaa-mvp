@@ -29,13 +29,15 @@ const MUTATIONS = [
   { nom: '🔴 des variantes absentes ne sont plus signalées', fichier: CORRIGER,
     de: '      if (actives.length === 0) {', vers: '      if (false) {' },
   // ⚠️ ANCRES REPOINTÉES LE 24/10 (Caprice) : la condition exempte aussi
-  // l'article recommandable chez le fournisseur.
+  // l'article dont une taille se recommande chez le fournisseur.
   { nom: '🔴 toutes les variantes à 0 ne sont plus signalées', fichier: CORRIGER,
-    de: '      } else if (!variantesSansLimite(a) && joursFournisseur(a) === null && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (false) {' },
+    de: '      } else if (!variantesSansLimite(a) && !actives.some(v => joursFournisseurVariante(a, v) !== null) && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (false) {' },
   { nom: '⚠️ « à la demande » à 0 est signalé à tort', fichier: CORRIGER,
-    de: '      } else if (!variantesSansLimite(a) && joursFournisseur(a) === null && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (joursFournisseur(a) === null && actives.every(v => !(Number(v.stock) > 0))) {' },
+    de: '      } else if (!variantesSansLimite(a) && !actives.some(v => joursFournisseurVariante(a, v) !== null) && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (!actives.some(v => joursFournisseurVariante(a, v) !== null) && actives.every(v => !(Number(v.stock) > 0))) {' },
   { nom: '🔴 un article sur commande fournisseur, tailles à 0, est signalé à tort', fichier: CORRIGER,
-    de: '      } else if (!variantesSansLimite(a) && joursFournisseur(a) === null && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (!variantesSansLimite(a) && actives.every(v => !(Number(v.stock) > 0))) {' },
+    de: '      } else if (!variantesSansLimite(a) && !actives.some(v => joursFournisseurVariante(a, v) !== null) && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (!variantesSansLimite(a) && actives.every(v => !(Number(v.stock) > 0))) {' },
+  { nom: '🔴 toutes les tailles coupées chez le fournisseur ne sont plus signalées', fichier: 'lib/stock-article.js',
+    de: "  return j !== null && variante?.fournisseur_dispo !== false ? j : null", vers: '  return j' },
   { nom: '🔴 l ancien « par jour » sur des variantes n est plus signalé', fichier: CORRIGER,
     de: "      if (modeStockDe(a) === 'jour') {", vers: '      if (false) {' },
   { nom: '🔴 un groupe obligatoire vide n est plus signalé', fichier: CORRIGER,

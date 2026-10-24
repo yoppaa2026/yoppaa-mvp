@@ -25,7 +25,7 @@ import { useTracesAHonorer } from './useTracesAHonorer'
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09, décisions d'Alex).
-import { choixDeStock, MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour, aDeuxCircuits, CHOIX_JOUR_MEME, CHOIX_SUR_COMMANDE, refusCircuits, champsCircuits, maximumSurCommande, variantesSansLimite, CHOIX_STOCK_VARIANTES, modeStockDesVariantes, fournisseurJoursMax, refusJoursFournisseur, joursFournisseur, libelleSurCommande } from '@/lib/stock-article'
+import { choixDeStock, MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour, aDeuxCircuits, CHOIX_JOUR_MEME, CHOIX_SUR_COMMANDE, refusCircuits, champsCircuits, maximumSurCommande, variantesSansLimite, CHOIX_STOCK_VARIANTES, modeStockDesVariantes, fournisseurJoursMax, refusJoursFournisseur, joursFournisseur, joursFournisseurVariante, libelleSurCommande } from '@/lib/stock-article'
 import { jourBelgeDeCreation } from '@/lib/heure-belge'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
@@ -807,7 +807,9 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (ids.length === 0) { setVariantesParArticle({}); return }
     const { data, error } = await toutesLesLignes(() => supabase.from('article_variantes')
       // (22/10) `prix` : les prix en lot suivent les prix propres des variantes (O4).
-      .select('id, article_id, axe1_valeur, axe2_valeur, stock, actif, ordre, prix')
+      // ✅ (24/10) `fournisseur_dispo` : « À corriger » sait si une taille à 0
+      // se recommande encore chez le fournisseur.
+      .select('id, article_id, axe1_valeur, axe2_valeur, stock, actif, ordre, prix, fournisseur_dispo')
       .in('article_id', ids).order('article_id').order('ordre').order('id'))
     if (error) return
     const map = {}
@@ -4871,6 +4873,9 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
   const [uploadId, setUploadId] = useState(null)
   // (22/10, audit R3) « Fabriqué à la demande » : aucune variante ne se compte.
   const sansLimite = variantesSansLimite({ ...article, gere_variantes: true })
+  // ✅ (24/10, Alex au test) L'article se recommande chez le fournisseur :
+  // chaque taille dit si le fournisseur l'a encore (activé par défaut).
+  const avecFournisseur = joursFournisseur({ ...article, gere_variantes: true }) !== null
 
   // 🟠 (22/10, audit O1) LE PANNEAU SE RELIT QUAND SES AXES CHANGENT AILLEURS :
   // une grille posée depuis la bibliothèque ou une copie laissait ici une case
@@ -5428,6 +5433,20 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
                       onBlur={() => viderVar(v.id)} style={{ ...s.input, width: 54, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
                   </div>
                   )}
+                  {/* ✅ (24/10, Alex au test) « XS oui fournisseur, S plus dispo » :
+                      coupée, la taille à 0 redevient « Épuisé » sur la fiche. */}
+                  {avecFournisseur && (
+                    <button type="button" onClick={() => { const nv = v.fournisseur_dispo === false; setVarLocal(v.id, { fournisseur_dispo: nv }); persistVar(v.id, { fournisseur_dispo: nv }) }}
+                      aria-pressed={v.fournisseur_dispo !== false}
+                      title={v.fournisseur_dispo !== false ? 'Ton fournisseur l’a : à 0, elle se vend sur commande. Clique s’il ne l’a plus.' : 'Ton fournisseur ne l’a plus : à 0, elle est épuisée. Clique s’il l’a de nouveau.'}
+                      aria-label={`Fournisseur ${[v.axe1_valeur, v.axe2_valeur].filter(Boolean).join(' · ')}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      <span style={{ fontSize: 10, color: T.muted, fontWeight: 700 }}>Fournisseur</span>
+                      <span style={{ width: 34, height: 20, borderRadius: 100, background: v.fournisseur_dispo !== false ? '#F59E0B' : '#D1D5DB', position: 'relative', flexShrink: 0, display: 'inline-block' }}>
+                        <span style={{ position: 'absolute', top: 2, left: v.fournisseur_dispo !== false ? 16 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.15s' }}/>
+                      </span>
+                    </button>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ fontSize: 10, color: T.muted, fontWeight: 700 }}>Prix</span>
                     <input type="number" min="0" step="0.10" value={v.prix ?? ''} placeholder={Number(article.prix || 0).toFixed(2)} onChange={e => { setVarLocal(v.id, { prix: e.target.value }); planifierVar(v.id, { prix: prixSaisi(e.target.value) }) }} onBlur={() => viderVar(v.id)} style={{ ...s.input, width: 62, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
@@ -5650,7 +5669,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
               <span style={{ display: 'flex', flexDirection: 'column', gap: 4, flexBasis: '100%' }} aria-label="Stock par variante">
                 {/* ✅ (24/10, Caprice) Les tailles à 0 se vendent sur commande :
                     la carte le dit, sinon le rouge ferait croire à un article bloqué. */}
-                {joursFournisseur(a) !== null && (
+                {variantes.some(v => v.actif !== false && joursFournisseurVariante(a, v) !== null) && (
                   <span style={{ alignSelf: 'flex-start', fontSize: 12, fontWeight: 800, color: '#B45309', background: '#FFFBEB', padding: '3px 8px', borderRadius: 100 }}>
                     {libelleSurCommande(joursFournisseur(a))} chez ton fournisseur
                   </span>

@@ -14,7 +14,7 @@ import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09) : une seule règle
 // pour la carte, la limite du panier et le tableau de bord.
-import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour, modeStockDe, dejaCommandePourStock, stockDeVariante, joursFournisseur, partFournisseur, delaiAvecFournisseur, libelleSurCommande } from '@/lib/stock-article'
+import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour, modeStockDe, dejaCommandePourStock, stockDeVariante, joursFournisseur, joursFournisseurVariante, partFournisseur, delaiAvecFournisseur, libelleSurCommande } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe } from '@/lib/creneaux'
 import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier, mentionDisponibilite, propositionPourArticle, delaiSurCommande } from '@/lib/delai-commande'
@@ -371,15 +371,17 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
   const stockDe = (v) => stockDeVariante(article, v)
   // ✅ (24/10, Caprice) SUR COMMANDE CHEZ LE FOURNISSEUR : une taille sans
   // stock reste proposable, elle dit « Sur commande en X jours ».
+  // ✅ (24/10) TAILLE PAR TAILLE : celle que le fournisseur n'a plus reste
+  // barrée à 0 (`joursFournisseurVariante`).
   const jours = joursFournisseur(article)
-  const commandable = (v) => stockDe(v) > 0 || jours !== null
+  const commandable = (v) => stockDe(v) > 0 || joursFournisseurVariante(article, v) !== null
   const dispo1 = (v1) => variantes.some(v => v.axe1_valeur === v1 && commandable(v))
   const dispo2 = (v2) => variantes.some(v => v.axe1_valeur === choix1 && v.axe2_valeur === v2 && commandable(v))
   const prixAffiche = varianteChoisie
     ? (varianteChoisie.prix != null ? Number(varianteChoisie.prix) : Number(article.prix))
     : null
   const stockChoisi = varianteChoisie ? stockDe(varianteChoisie) : 0
-  const surCommande = !!varianteChoisie && stockChoisi <= 0 && jours !== null
+  const surCommande = !!varianteChoisie && stockChoisi <= 0 && joursFournisseurVariante(article, varianteChoisie) !== null
   const epuise = !!varianteChoisie && stockChoisi <= 0 && !surCommande
   const pret = !!varianteChoisie && !epuise
   // 🟠 (22/10, audit O3) LA PHOTO DE LA VERSION : la boutique photographie sa
@@ -801,7 +803,9 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
             // ✅ (24/10, Caprice) Plus rien en rayon, mais l'article se
             // recommande : il dit son délai au lieu d'« Épuisé ».
             const joursVar = joursFournisseur(article)
-            if (!dispoVar && joursVar !== null) {
+            // ✅ (24/10) Au moins UNE taille que le fournisseur a encore.
+            const recommandable = (variantes || []).some(v => v.actif !== false && joursFournisseurVariante(article, v) !== null)
+            if (!dispoVar && recommandable) {
               return (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FFFBEB', color: '#B45309', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                   <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#F59E0B', flexShrink: 0 }}/>
@@ -2854,8 +2858,9 @@ export default function CommanderSlug() {
       // nue = deux pièces de la même variante).
       const key = options ? `${article.id}_v${variante.id}_${JSON.stringify(options)}` : `${article.id}_v${variante.id}`
       // (22/10, audit R3) « Fabriqué à la demande » : `stockDeVariante` = Infinity.
-      // ✅ (24/10) Sur commande chez le fournisseur : le stock ne borne plus.
-      const jours = joursFournisseur(article)
+      // ✅ (24/10) Sur commande chez le fournisseur : le stock ne borne plus,
+      // pour une taille que le fournisseur a encore.
+      const jours = joursFournisseurVariante(article, variante)
       if (jours === null && stockDeVariante(article, variante) <= qteDeLaVariante(variante.id)) return
       const prixVar = variante.prix != null
         ? prixEffectifVariante(variante.prix, article, dealsActifs)

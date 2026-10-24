@@ -164,7 +164,7 @@ export async function POST(request) {
       admin.from('articles').select(SELECT_ARTICLES).in('id', articleIds),
       // Les options des articles du panier seulement, et leurs groupes (11/10).
       admin.from('article_options_valeurs').select(SELECT_OPTIONS_VALEURS).in('article_options_groupes.article_id', articleIds),
-      admin.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
+      admin.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif, fournisseur_dispo').in('article_id', articleIds),
       admin.from('yoppaa_deals').select(SELECT_DEALS).eq('commercant_id', commercant.id).eq('actif', true),
       admin.from('article_options_groupes').select(SELECT_GROUPES_OPTIONS).in('article_id', articleIds),
     ])

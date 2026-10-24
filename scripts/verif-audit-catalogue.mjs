@@ -68,6 +68,13 @@ function v(nom, condition, detail = '') {
   })
   v('🔴 sur commande fournisseur, tailles à 0 : rien à corriger', !surCommande.some(x => x.id === 30), JSON.stringify(surCommande))
   v('🔴 sans la case, tailles à 0 : toujours signalé', surCommande.some(x => x.id === 31 && /toutes ses variantes sont à 0/.test(x.raisons[0] || '')))
+  // ✅ (24/10, Alex au test) Toutes les tailles coupées chez le fournisseur :
+  // rien ne se vend, c'est bien à corriger.
+  const toutesCoupees = articlesACorriger({
+    articles: [{ id: 32, nom: 'Robe coupée', gere_variantes: true, stock_mode: 'magasin', fournisseur_jours: 5, actif: true }],
+    variantesParArticle: { 32: [{ actif: true, stock: 0, fournisseur_dispo: false }, { actif: true, stock: 0, fournisseur_dispo: false }] },
+  })
+  v('🔴 toutes les tailles coupées chez le fournisseur, à 0 : signalé', toutesCoupees.some(x => x.id === 32), JSON.stringify(toutesCoupees))
   // (22/10, test C d'Alex) Un ancien stock général sur un article à variantes.
   const anciens = articlesACorriger({
     articles: [
@@ -185,7 +192,8 @@ function v(nom, condition, detail = '') {
   v('🔴 prix en lot : les trois façons, et les variantes dans l’aperçu comme à l’écriture',
     /MODES_PRIX_LOT\.map\(m => \(/.test(bord) && /action === 'prix' \? \{ mode: lotPrixMode, saisie: lotValeur \}/.test(bord)
     && (bord.match(/prixDesVariantesDuLot\(\{ articles: vises, variantesParArticle, valeur \}\)/g) || []).length === 2
-    && /\.select\('id, article_id, axe1_valeur, axe2_valeur, stock, actif, ordre, prix'\)/.test(bord))
+    // REPOINTÉE LE 24/10 (Caprice) : la lecture gagne `fournisseur_dispo`, `prix` y reste.
+    && /\.select\('id, article_id, axe1_valeur, axe2_valeur, stock, actif, ordre, prix, fournisseur_dispo'\)/.test(bord))
   // Mobile, aides, mots (O10, O13, O14, J3 à J8, J10, J11).
   v('🟠 O13 : sous-onglets et boutons des groupes passent à la ligne, « Dupliquer » se réduit à l’icône',
     /display: 'flex', flexWrap: 'wrap', gap: 4, background: '#fff', padding: 4, borderRadius: 12/.test(bord)

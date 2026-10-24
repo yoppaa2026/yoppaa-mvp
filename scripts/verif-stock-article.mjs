@@ -956,9 +956,30 @@ const code = (f) => sansProse(lire(f))
 
   // Les écrans.
   const fiche = code('app/commander/[slug]/page.js')
+  // REPOINTÉE LE 24/10 (Alex au test) : la règle se lit TAILLE PAR TAILLE.
   v('🔴 fiche : une taille à 0 qui se recommande reste proposable et le dit',
-    /const commandable = \(v\) => stockDe\(v\) > 0 \|\| jours !== null/.test(fiche)
-    && /const surCommande = !!varianteChoisie && stockChoisi <= 0 && jours !== null/.test(fiche) && /\{libelleSurCommande\(jours\)\}/.test(fiche))
+    /const commandable = \(v\) => stockDe\(v\) > 0 \|\| joursFournisseurVariante\(article, v\) !== null/.test(fiche)
+    && /const surCommande = !!varianteChoisie && stockChoisi <= 0 && joursFournisseurVariante\(article, varianteChoisie\) !== null/.test(fiche) && /\{libelleSurCommande\(jours\)\}/.test(fiche))
+  v('🔴 fiche : l’ajout ne lève le plafond que pour une taille que le fournisseur a',
+    /const jours = joursFournisseurVariante\(article, variante\)\s*if \(jours === null && stockDeVariante\(article, variante\) <= qteDeLaVariante\(variante\.id\)\) return/.test(fiche))
+
+  // ✅ (24/10, Alex au test) TAILLE PAR TAILLE : « XS oui, S plus dispo ».
+  const vCoupee = { ...v38, id: 'v36', axe1_valeur: '36', stock: 0, fournisseur_dispo: false }
+  const calcT = (panier) => construireLignesCommande({
+    panier, articlesData: [a5], optionsValeurs: [], variantesData: [v38, vCoupee], dealsData: [],
+    commercant: { tva_taux_defaut: 21 }, regime: 'emporter', dateCommande: '2026-10-30',
+  })
+  v('🔴 une taille coupée chez le fournisseur, à 0 : refusée comme avant', calcT([{ id: 'a1', quantite: 1, variante_id: 'v36' }]).ok === false)
+  v('🔴 une taille sans la colonne (lecture ancienne) : se recommande, comme la base par défaut',
+    SA.joursFournisseurVariante(a5, { stock: 0 }) === 5 && SA.joursFournisseurVariante(a5, { fournisseur_dispo: false }) === null)
+  v('une taille coupée n’a aucune part fournisseur', SA.partFournisseur({ article: a5, variante: vCoupee, quantite: 2 }) === 0)
+  v('🔴 les trois routes lisent l’interrupteur de la taille (sinon une taille coupée passerait)',
+    ['app/api/stripe/checkout/create-commande/route.js', 'app/api/equipe/commande/creer/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js']
+      .every(f => code(f).includes("select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif, fournisseur_dispo')")))
+  v('🔴 Personnaliser : l’interrupteur de la taille, seulement si l’article se recommande',
+    /const avecFournisseur = joursFournisseur\(\{ \.\.\.article, gere_variantes: true \}\) !== null/.test(code('app/dashboard/ConfigDashboard.js'))
+    && /\{avecFournisseur && \(/.test(code('app/dashboard/ConfigDashboard.js')) && /persistVar\(v\.id, \{ fournisseur_dispo: nv \}\)/.test(code('app/dashboard/ConfigDashboard.js')))
+  v('la copie des tailles garde l’interrupteur', /fournisseur_dispo: v\?\.fournisseur_dispo !== false,/.test(code('lib/catalogue-copie.js')))
   v('🔴 fiche : le jour de retrait compte les X jours dès que la taille dépasse son stock',
     /function ligneAvecFournisseur\(ligne\)/.test(fiche) && /return \{ \.\.\.ligne, delai_minutes: Math\.max\(Number\(ligne\.delai_minutes\) \|\| 0, jours \* 1440\) \}/.test(fiche))
   v('🔴 fiche : le colis le dit, sans bloquer', /\{joursColisFournisseur\(\) > 0 && \(/.test(fiche) && /ton colis part sous \{joursColisFournisseur\(\)\} jour/.test(fiche))

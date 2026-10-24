@@ -357,6 +357,10 @@ export async function POST(request) {
       commercant,
       regime: REGIME_EMPORTER,
       dateCommande: date_rdv,
+      // ✅ (24/10) PAS DE COMMANDE FOURNISSEUR AVEC UN RENDEZ-VOUS : le produit
+      // doit être là le jour du rendez-vous. Une taille sans stock s'y refuse
+      // comme avant.
+      surCommandeFournisseur: false,
     })
     if (!calcul.ok) {
       return NextResponse.json({ ok: false, error: calcul.error }, { status: calcul.status })
@@ -595,7 +599,10 @@ export async function POST(request) {
     // Ce tunnel ne le faisait pas, alors que l'annulation du rendez-vous, elle,
     // le RENDAIT (rdv/cancel, rdv/annuler-commercant) : le 500 ml d'un salon
     // gagnait une pièce à chaque annulation. Même geste que create-commande.
-    await preleverStockVariantes(supabase, lignes, variantesData, articlesData)
+    // ✅ (24/10) Avec la commande : si un autre client a pris la dernière pièce
+    // une seconde avant, ce qui manque devient part fournisseur et ne sera pas
+    // rendu au stock à l'annulation.
+    await preleverStockVariantes(supabase, lignes, variantesData, articlesData, { commandeId: commande.id })
 
     // ─── RIEN À ENCAISSER : ON CONFIRME ICI, SANS STRIPE ───────────────────
     //

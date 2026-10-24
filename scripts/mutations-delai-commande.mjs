@@ -239,7 +239,8 @@ const MUTATIONS = [
     vers: '              const mention = null' },
   { nom: '🔴 le pain se met au panier un jour ou il ne se vend pas',
     fichier: FICHE,
-    de: '    if (refuseParDelai(article, { article, options, variante })) return',
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 (Caprice) : le candidat porte sa part fournisseur.
+    de: '    if (refuseParDelai(candidatAvecFournisseur(article, variante), { article, options, variante })) return',
     vers: '' },
   { nom: '🔴 un lot a 48 h part pour aujourd hui',
     fichier: FICHE,
@@ -396,7 +397,8 @@ const MUTATIONS = [
   // laisse tout passer, en silence. Aucune erreur, aucun symptôme.
   { nom: '🔴 la ligne de commande perd le delai de son article',
     fichier: LIGNES,
-    de: '      delai_minutes: article.delai_minutes ?? 0,',
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 (Caprice) : le délai passe par la part fournisseur.
+    de: '      delai_minutes: delaiAvecFournisseur(article, article.delai_minutes ?? 0, quantiteFournisseur),',
     vers: '      delai_minutes: 0,' },
 
   // 🔴 DÉPLACÉE DEPUIS mutations-anti-gaspi.mjs LE 04/09. Elle y visait

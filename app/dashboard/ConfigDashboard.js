@@ -25,7 +25,7 @@ import { useTracesAHonorer } from './useTracesAHonorer'
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09, décisions d'Alex).
-import { choixDeStock, MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour, aDeuxCircuits, CHOIX_JOUR_MEME, CHOIX_SUR_COMMANDE, refusCircuits, champsCircuits, maximumSurCommande, variantesSansLimite, CHOIX_STOCK_VARIANTES, modeStockDesVariantes } from '@/lib/stock-article'
+import { choixDeStock, MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour, aDeuxCircuits, CHOIX_JOUR_MEME, CHOIX_SUR_COMMANDE, refusCircuits, champsCircuits, maximumSurCommande, variantesSansLimite, CHOIX_STOCK_VARIANTES, modeStockDesVariantes, fournisseurJoursMax, refusJoursFournisseur, joursFournisseur, libelleSurCommande } from '@/lib/stock-article'
 import { jourBelgeDeCreation } from '@/lib/heure-belge'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
@@ -1030,7 +1030,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // jours (le défaut). C'est ce que faisait tout article avant les deux
     // circuits, et ce que la migration a donné à l'existant (Alex, 08/10).
     const demainCommandable = deuxCircuits && (Number(commercant?.horizon_commande) || 2) >= 2
-    poserFormulaire({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '', hors_heure_limite: false, gere_variantes: false })
+    poserFormulaire({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '', hors_heure_limite: false, gere_variantes: false, fournisseur_actif: false, fournisseur_jours: '' })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
@@ -1039,7 +1039,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (!await peutQuitterFormulaire()) return
     // ⚠️ « Sans limite » n'a pas de quantité : le champ repart vide si l'on
     // change d'avis, au lieu d'afficher le 0 technique qui la représente.
-    poserFormulaire({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '', hors_heure_limite: a.hors_heure_limite === true, gere_variantes: a.gere_variantes === true })
+    poserFormulaire({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '', hors_heure_limite: a.hors_heure_limite === true, gere_variantes: a.gere_variantes === true, fournisseur_actif: a.fournisseur_jours != null, fournisseur_jours: a.fournisseur_jours != null ? String(a.fournisseur_jours) : '' })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
@@ -1077,6 +1077,13 @@ function TabMenu({ commercantId, commercant, toast }) {
     const avecPlage = estAlimentaire && form.vendable
     const refusPlage = avecPlage ? refusDeSaisiePlage(form.retrait_des, form.retrait_jusqua) : null
     if (refusPlage) return toast(refusPlage, 'error')
+    // ✅ (24/10, Caprice) SUR COMMANDE CHEZ LE FOURNISSEUR : seulement un
+    // article à variantes, vendu en ligne, compté « un stock par variante ».
+    // Partout ailleurs on écrit `null` : une case cachée n'agit jamais.
+    const avecFournisseur = aVariantes && form.vendable && venteJour
+      && formStock.stock_mode === 'magasin' && form.fournisseur_actif === true
+    const refusFournisseur = avecFournisseur ? refusJoursFournisseur(form.fournisseur_jours, horizonBoutique(commercant)) : null
+    if (refusFournisseur) return toast(refusFournisseur, 'error')
     setSaving(true)
     const avant = editId ? articles.find(x => String(x.id) === String(editId)) : null
     const modeValide = MODES_STOCK.includes(form.stock_mode) ? form.stock_mode : modeStockParDefaut(commercant)
@@ -1133,6 +1140,8 @@ function TabMenu({ commercantId, commercant, toast }) {
       // ✅ 22/10 : hors de l'heure limite de la veille. Gardé tel quel même
       // caché (pas d'heure réglée, pas sur commande) : il vaudra plus tard.
       hors_heure_limite: form.hors_heure_limite === true,
+      // ✅ 24/10 : le délai du fournisseur, vide = pas de commande fournisseur.
+      fournisseur_jours: avecFournisseur ? Number(String(form.fournisseur_jours).trim()) : null,
     }
     const { data: cree, error } = editId
       ? await supabase.from('articles').update(payload).eq('id', editId).select('id').maybeSingle()
@@ -1878,6 +1887,28 @@ function TabMenu({ commercantId, commercant, toast }) {
                 <ChoixCartes label="Comment se compte le stock de ses variantes ?" choix={CHOIX_STOCK_VARIANTES} colonnes={220}
                   estChoisi={c => modeStockDesVariantes(form.stock_mode) === c.mode}
                   onChoisir={c => setForm(p => ({ ...p, stock_mode: c.mode, ...(deuxCircuits && c.mode === 'magasin' ? { commande_active: false } : {}) }))}/>
+              )}
+              {/* ✅ (24/10, Caprice) SUR COMMANDE CHEZ LE FOURNISSEUR : une case
+                  par article à variantes, et le délai. Elle sait ce que son
+                  fournisseur a ; une taille à 0 se vend alors « sur commande ». */}
+              {(!deuxCircuits || form.vente_jour !== false) && form.gere_variantes && modeStockDesVariantes(form.stock_mode) === 'magasin' && (
+                <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, background: T.pale }}>
+                  <Toggle value={form.fournisseur_actif === true}
+                    onChange={v => setForm(p => ({ ...p, fournisseur_actif: v }))}
+                    label="Je peux aussi le commander chez mon fournisseur"/>
+                  <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, margin: '6px 0 0' }}>
+                    Une taille sans stock ne s&rsquo;affiche plus « Épuisé » : ton client la commande, et elle est prête au bout du délai de ton fournisseur.
+                  </p>
+                  {form.fournisseur_actif === true && (
+                    <div style={{ marginTop: 10 }}>
+                      <ChampFormulaire label="Délai de ton fournisseur, en jours *"
+                        aide={`Le jour de retrait proposé à ton client tient compte de ce délai. ${fournisseurJoursMax(horizonBoutique(commercant))} jours au plus : ta boutique propose ses retraits sur ${horizonBoutique(commercant)} jours.`}>
+                        <Input type="number" min={1} max={fournisseurJoursMax(horizonBoutique(commercant))} value={form.fournisseur_jours}
+                          onChange={e => setForm(p => ({ ...p, fournisseur_jours: e.target.value }))} placeholder="5"/>
+                      </ChampFormulaire>
+                    </div>
+                  )}
+                </div>
               )}
               {(!deuxCircuits || form.vente_jour !== false) && !form.gere_variantes && (<>
               {/* ✅ 07/10 : TROIS CARTES QUI DISENT À QUOI ELLES SERVENT, avec
@@ -5613,6 +5644,13 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
                 38 : 5 »), au lieu de quinze pastilles à la suite (`lignesDeStock`). */}
             {vendable && a.gere_variantes && variantes.length > 0 && (
               <span style={{ display: 'flex', flexDirection: 'column', gap: 4, flexBasis: '100%' }} aria-label="Stock par variante">
+                {/* ✅ (24/10, Caprice) Les tailles à 0 se vendent sur commande :
+                    la carte le dit, sinon le rouge ferait croire à un article bloqué. */}
+                {joursFournisseur(a) !== null && (
+                  <span style={{ alignSelf: 'flex-start', fontSize: 12, fontWeight: 800, color: '#B45309', background: '#FFFBEB', padding: '3px 8px', borderRadius: 100 }}>
+                    {libelleSurCommande(joursFournisseur(a))} chez ton fournisseur
+                  </span>
+                )}
                 {lignesDeStock(variantes).map(groupe => (
                   <span key={groupe.titre || '·'} style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                     {groupe.titre && <span style={{ fontSize: 12, fontWeight: 800, color: T.ink, minWidth: 70 }}>{groupe.titre}</span>}

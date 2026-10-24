@@ -585,7 +585,9 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     && /const choix = groupes\.length > 0 \? options\.valider\(\) : null\s*if \(choix === false\) return\s*onAjouter\(article, varianteChoisie, choix\)/.test(fiche)
     && /<VariantesSelector article=\{article\} variantes=\{variantes\} groupes=\{groupes\}/.test(fiche)
     // REPOINTÉE LE 22/10 (audit R3 : « fabriqué à la demande » ne se compte pas).
-    && /if \(stockDeVariante\(article, variante\) <= qteDeLaVariante\(variante\.id\)\) return/.test(fiche)
+    // REPOINTÉE LE 24/10 (Caprice) : une taille qui se recommande chez le
+    // fournisseur n'est plus bornée par son stock ; les autres le restent.
+    && /if \(jours === null && stockDeVariante\(article, variante\) <= qteDeLaVariante\(variante\.id\)\) return/.test(fiche)
     && /if \(!item\.variante\.sansLimite && \(item\.variante\.stock \?\? 0\) <= qteDeLaVariante\(item\.variante\.id\)\) return/.test(fiche))
   v('🔴 fiche : un groupe dépendant s’affiche en retrait, la carte à lire dit « avec … »',
     /const sousGroupe = estDependant\(g\)/.test(fiche) && /optionParente\(g, groupes\) && <span/.test(fiche))
@@ -663,18 +665,23 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     /\.filter\(g => groupeAvecOptions\(g\) && groupeActif\(g, selections\)\)/.test(fiche) && /\{bornesPourLeClient\(g\)\.min > 0 && <span/.test(fiche))
   v('🔴 R3 fiche : la version « à la demande » ne se compte nulle part',
     /const stockDe = \(v\) => stockDeVariante\(article, v\)/.test(fiche) && /sansLimite: stockDeVariante\(article, variante\) === Infinity/.test(fiche)
-    && /item\.variante\.sansLimite \? Infinity :/.test(fiche) && /\.some\(v => v\.actif !== false && stockDeVariante\(article, v\) > 0\)/.test(fiche))
+    // REPOINTÉE LE 24/10 (Caprice) : le panier ne plafonne pas non plus une
+    // taille qui se recommande chez le fournisseur.
+    && /\(item\.variante\.sansLimite \|\| item\.variante\.fournisseurJours\) \? Infinity :/.test(fiche) && /\.some\(v => v\.actif !== false && stockDeVariante\(article, v\) > 0\)/.test(fiche))
   v('🔴 R3 serveur : rien n’est prélevé ni rendu pour une version « à la demande »',
     /if \(variantesSansLimite\(articleParId\[l\.article_id\]\)\) continue/.test(code('lib/stock-variantes-server.js'))
     && (code('lib/stock-variantes-server.js').match(/if \(libres\.ids\.has\(v\.id\)\) continue/g) || []).length === 2
-    && /preleverStockVariantes\(supabase, lignes, variantesData, articlesData\)/.test(code('app/api/stripe/checkout/create-commande/route.js'))
-    && /preleverStockVariantes\(admin, lignes, variantesData, articlesData\)/.test(code('app/api/equipe/commande/creer/route.js')))
+    // REPOINTÉE LE 24/10 (Caprice) : les deux routes passent aussi leur
+    // commande, pour qu'un manque imprévu devienne part fournisseur.
+    && /preleverStockVariantes\(supabase, lignes, variantesData, articlesData, \{ commandeId: commande\.id \}\)/.test(code('app/api/stripe/checkout/create-commande/route.js'))
+    && /preleverStockVariantes\(admin, lignes, variantesData, articlesData, \{ commandeId: commande\.id \}\)/.test(code('app/api/equipe/commande/creer/route.js')))
   // 🔴 (23/10, décision d'Alex) le tunnel rendez-vous + produits prélève aussi,
   // APRÈS ses lignes, et rend avant de tout défaire.
   {
     const rdvCmd = code('app/api/stripe/checkout/create-rdv-commande/route.js')
     const iLignes = rdvCmd.indexOf(".from('commande_articles')\n      .insert(")
-    const iPrelev = rdvCmd.indexOf('await preleverStockVariantes(supabase, lignes, variantesData, articlesData)')
+    // REPOINTÉE LE 24/10 (Caprice) : l'appel passe aussi la commande.
+    const iPrelev = rdvCmd.indexOf('await preleverStockVariantes(supabase, lignes, variantesData, articlesData, { commandeId: commande.id })')
     v('🔴 le tunnel rendez-vous prélève les versions vendues, comme la boutique',
       iLignes > -1 && iPrelev > iLignes && /const toutDefaire = async \(\) => \{\s*await restaurerStockVariantes\(supabase, \[commande\.id\]\)/.test(rdvCmd))
   }
@@ -692,17 +699,28 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     const ecrits = []
     return {
       ecrits,
+      // ✅ (24/10) LE PRÉLÈVEMENT SOUS VERROU, simulé comme la fonction SQL
+      // `prelever_stock_variante` : jamais sous zéro, rend ce qui MANQUAIT.
+      rpc(nom, args) {
+        if (nom !== 'prelever_stock_variante') return Promise.resolve({ data: null, error: { message: 'inconnue' } })
+        const v = (tables.article_variantes || []).find(x => x.id === args.p_variante_id)
+        if (!v) return Promise.resolve({ data: null, error: null })
+        const avant = Math.max(0, Number(v.stock) || 0)
+        ecrits.push({ t: 'article_variantes', id: v.id, stock: Math.max(0, avant - args.p_quantite) })
+        return Promise.resolve({ data: Math.max(0, args.p_quantite - avant), error: null })
+      },
       from(t) {
-        const q = { filtres: {}, maj: null, cle: null }
+        const q = { filtres: {}, egaux: {}, maj: null, cle: null }
         Object.assign(q, {
           select: () => q, not: () => q,
           in: (c, val) => { q.filtres[c] = val; return q },
-          eq: (c, val) => { q.cle = val; return q },
+          eq: (c, val) => { q.cle = val; q.egaux[c] = val; return q },
           update: (p) => { q.maj = p; return q },
           then: (res, rej) => {
             if (q.maj) { ecrits.push({ t, id: q.cle, ...q.maj }); return Promise.resolve({ error: null }).then(res, rej) }
             let rows = tables[t] || []
             for (const [c, val] of Object.entries(q.filtres)) rows = rows.filter(r => val.includes(r[c]))
+            for (const [c, val] of Object.entries(q.egaux)) rows = rows.filter(r => r[c] === val)
             return Promise.resolve({ data: rows, error: null }).then(res, rej)
           },
         })
@@ -726,6 +744,39 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   const b3 = fausseBase(tables)
   await SV.preleverStockVariantes(b3, [{ variante_id: 'v52', article_id: 'g1', quantite: 1 }, { variante_id: 'vM', article_id: 'b1', quantite: 1 }], tables.article_variantes, [bague, bralette])
   v('🔴 R3 : la vente ne prélève rien sur une version « à la demande »', JSON.stringify(b3.ecrits) === '[{"t":"article_variantes","id":"vM","stock":1}]', JSON.stringify(b3.ecrits))
+
+  // ✅ (24/10, Caprice) SUR COMMANDE CHEZ LE FOURNISSEUR, exécuté.
+  const robe = { id: 'r1', nom: 'Robe', gere_variantes: true, stock_mode: 'magasin', fournisseur_jours: 5 }
+  const tablesF = {
+    commande_articles: [{ id: 'l1', commande_id: 'c2', variante_id: 'v38', quantite: 3, quantite_fournisseur: 2 }],
+    article_variantes: [{ id: 'v38', stock: 4, article_id: 'r1' }],
+    articles: [robe],
+  }
+  const b4 = fausseBase(tablesF)
+  await SV.restaurerStockVariantes(b4, ['c2'])
+  v('🔴 une annulation ne rend PAS la part fournisseur (3 vendues dont 2 du fournisseur : +1)',
+    JSON.stringify(b4.ecrits) === '[{"t":"article_variantes","id":"v38","stock":5}]', JSON.stringify(b4.ecrits))
+  const b5 = fausseBase(tablesF)
+  await SV.restaurerStockVariantes(b5, ['c2'], { avecFournisseur: true })
+  v('🔴 « pas venu la chercher » rend tout, part fournisseur comprise (+3)',
+    JSON.stringify(b5.ecrits) === '[{"t":"article_variantes","id":"v38","stock":7}]', JSON.stringify(b5.ecrits))
+  // Le prélèvement : la ligne prévoyait 0 pièce du fournisseur, mais un autre
+  // client a pris la dernière une seconde avant (stock en base : 0).
+  const tablesG = {
+    commande_articles: [{ id: 'l2', commande_id: 'c3', variante_id: 'v40', quantite: 1, quantite_fournisseur: 0 }],
+    article_variantes: [{ id: 'v40', stock: 0, article_id: 'r1' }],
+    articles: [robe],
+  }
+  const b6 = fausseBase(tablesG)
+  const p6 = await SV.preleverStockVariantes(b6, [{ variante_id: 'v40', article_id: 'r1', quantite: 1, quantite_fournisseur: 0 }], [{ id: 'v40', stock: 1, article_id: 'r1' }], [robe], { commandeId: 'c3' })
+  v('🔴 la dernière pièce prise entre-temps devient part fournisseur sur la ligne',
+    p6.reportees === 1 && JSON.stringify(b6.ecrits) === '[{"t":"article_variantes","id":"v40","stock":0},{"t":"commande_articles","id":"l2","quantite_fournisseur":1}]', JSON.stringify(b6.ecrits))
+  const b7 = fausseBase(tablesG)
+  const p7 = await SV.preleverStockVariantes(b7, [{ variante_id: 'v40', article_id: 'r1', quantite: 1, quantite_fournisseur: 1 }], [{ id: 'v40', stock: 0, article_id: 'r1' }], [robe], { commandeId: 'c3' })
+  v('une part déjà prévue n’est pas comptée deux fois', p7.reportees === 0 && b7.ecrits.length === 1, JSON.stringify(b7.ecrits))
+  const b8 = fausseBase({ ...tablesG, articles: [{ ...robe, fournisseur_jours: null }] })
+  const p8 = await SV.preleverStockVariantes(b8, [{ variante_id: 'v40', article_id: 'r1', quantite: 1, quantite_fournisseur: 0 }], [{ id: 'v40', stock: 1, article_id: 'r1' }], [{ ...robe, fournisseur_jours: null }], { commandeId: 'c3' })
+  v('sans la case, rien n’est reporté (comme avant)', p8.reportees === 0 && b8.ecrits.length === 1, JSON.stringify(b8.ecrits))
 }
 
 console.log(`\nLots et options : ${ok} vérifications`)

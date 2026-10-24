@@ -14,7 +14,7 @@ import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09) : une seule règle
 // pour la carte, la limite du panier et le tableau de bord.
-import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour, modeStockDe, dejaCommandePourStock, stockDeVariante } from '@/lib/stock-article'
+import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour, modeStockDe, dejaCommandePourStock, stockDeVariante, joursFournisseur, partFournisseur, delaiAvecFournisseur, libelleSurCommande } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe } from '@/lib/creneaux'
 import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier, mentionDisponibilite, propositionPourArticle, delaiSurCommande } from '@/lib/delai-commande'
@@ -369,13 +369,18 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
   // ✅ (22/10, audit R3) « Fabriqué à la demande » : toutes le sont
   // (`stockDeVariante` rend Infinity).
   const stockDe = (v) => stockDeVariante(article, v)
-  const dispo1 = (v1) => variantes.some(v => v.axe1_valeur === v1 && stockDe(v) > 0)
-  const dispo2 = (v2) => variantes.some(v => v.axe1_valeur === choix1 && v.axe2_valeur === v2 && stockDe(v) > 0)
+  // ✅ (24/10, Caprice) SUR COMMANDE CHEZ LE FOURNISSEUR : une taille sans
+  // stock reste proposable, elle dit « Sur commande en X jours ».
+  const jours = joursFournisseur(article)
+  const commandable = (v) => stockDe(v) > 0 || jours !== null
+  const dispo1 = (v1) => variantes.some(v => v.axe1_valeur === v1 && commandable(v))
+  const dispo2 = (v2) => variantes.some(v => v.axe1_valeur === choix1 && v.axe2_valeur === v2 && commandable(v))
   const prixAffiche = varianteChoisie
     ? (varianteChoisie.prix != null ? Number(varianteChoisie.prix) : Number(article.prix))
     : null
   const stockChoisi = varianteChoisie ? stockDe(varianteChoisie) : 0
-  const epuise = !!varianteChoisie && stockChoisi <= 0
+  const surCommande = !!varianteChoisie && stockChoisi <= 0 && jours !== null
+  const epuise = !!varianteChoisie && stockChoisi <= 0 && !surCommande
   const pret = !!varianteChoisie && !epuise
   // 🟠 (22/10, audit O3) LA PHOTO DE LA VERSION : la boutique photographie sa
   // robe en rose et en bleu, le client ne voyait jamais ces photos. Celle de
@@ -431,7 +436,9 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
           {prixAffiche != null && Number(prixAffiche) > 0 && (
             <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{euros(Number(prixAffiche))}</span>
           )}
-          {epuise ? (
+          {surCommande ? (
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#B45309', background: '#FFFBEB', padding: '3px 10px', borderRadius: 100 }}>{libelleSurCommande(jours)}</span>
+          ) : epuise ? (
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#DC2626', background: '#FEE2E2', padding: '3px 10px', borderRadius: 100 }}>Épuisé</span>
           ) : stockChoisi <= 3 ? (
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#B45309', background: '#FFFBEB', padding: '3px 10px', borderRadius: 100 }}>Plus que {stockChoisi}</span>
@@ -490,7 +497,16 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
           const prixUnitaire = item.prix + (item.options ? supplementDeSelection(item.options) : 0)
           // FIX STOCK : vérifier la limite par article dans le panier
           // (item à variante : le stock de LA variante fait foi)
-          const stockMax = item.variante ? (item.variante.sansLimite ? Infinity : (item.variante.stock ?? Infinity)) : (getStockMax ? getStockMax(item.id, { invendu: porteUneFenetre(item.offre) }) : Infinity)
+          // ✅ (24/10, Caprice) Une taille qui se recommande n'a pas de plafond :
+          // au-delà du stock, la pièce vient du fournisseur.
+          const stockMax = item.variante ? ((item.variante.sansLimite || item.variante.fournisseurJours) ? Infinity : (item.variante.stock ?? Infinity)) : (getStockMax ? getStockMax(item.id, { invendu: porteUneFenetre(item.offre) }) : Infinity)
+          // La part de CETTE ligne qui vient du fournisseur : les lignes
+          // précédentes de la même variante prennent le stock d'abord, comme
+          // au serveur (`partFournisseur`).
+          const partFourn = item.variante?.fournisseurJours && !item.variante.sansLimite
+            ? Math.max(0, item.quantite - Math.max(0, Math.max(0, Number(item.variante.stock) || 0)
+              - items.slice(0, index).reduce((n, [, l]) => n + (l?.variante?.id === item.variante.id ? (l.quantite || 0) : 0), 0)))
+            : 0
           // Une ligne deal consomme unites_par_deal unités de stock par +
           const unitesLigne = item.deal_id ? (item.unites_par_deal || 1) : 1
           // (22/10) Une variante peut avoir plusieurs lignes (options) : son
@@ -519,6 +535,11 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontWeight: 700, color: T.ink, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nom}</p>
                 {opts && <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 1 }}>{opts}</p>}
+                {partFourn > 0 && (
+                  <p style={{ fontSize: '0.68rem', color: '#B45309', fontWeight: 700, marginTop: 2 }}>
+                    {partFourn === item.quantite ? libelleSurCommande(item.variante.fournisseurJours) : `Dont ${partFourn} ${libelleSurCommande(item.variante.fournisseurJours).toLowerCase()}`}
+                  </p>
+                )}
                 {stockAtteintPanier && (
                   <p style={{ fontSize: '0.68rem', color: T.main, fontWeight: 700, marginTop: 2 }}>Stock disponible atteint</p>
                 )}
@@ -777,6 +798,17 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
 
           {hasVariantes && !article.est_vitrine && !etatJour ? (() => {
             const dispoVar = (variantes || []).some(v => v.actif !== false && stockDeVariante(article, v) > 0)
+            // ✅ (24/10, Caprice) Plus rien en rayon, mais l'article se
+            // recommande : il dit son délai au lieu d'« Épuisé ».
+            const joursVar = joursFournisseur(article)
+            if (!dispoVar && joursVar !== null) {
+              return (
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FFFBEB', color: '#B45309', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#F59E0B', flexShrink: 0 }}/>
+                  {libelleSurCommande(joursVar)}
+                </span>
+              )
+            }
             return dispoVar ? (
               <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#10B981', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#10B981', flexShrink: 0 }}/>
@@ -2799,11 +2831,21 @@ export default function CommanderSlug() {
     return Object.values(panier).reduce((n, l) => n + (l?.variante?.id === varianteId ? (l.quantite || 0) : 0), 0)
   }
 
+  // ✅ (24/10, Caprice) L'article tel que le jour de retrait doit le juger
+  // quand une pièce de plus de cette variante entre au panier : avec les X
+  // jours du fournisseur si cette pièce dépasse le stock.
+  function candidatAvecFournisseur(article, variante) {
+    if (!variante) return article
+    const part = partFournisseur({ article, variante, quantite: 1, dejaAvant: qteDeLaVariante(variante.id) })
+    return part > 0 ? { ...article, delai_minutes: delaiAvecFournisseur(article, article.delai_minutes, part) } : article
+  }
+
   function ajouterAuPanier(article, options = null, variante = null) {
     // 🔴 L'ARTICLE DOIT ALLER AVEC LE JOUR CHOISI (Alex, 07/10) : son délai en
     // jours et ses jours de vente. Sinon, la fenêtre propose son premier jour.
     // Placé AVANT la variante et les options, qui passent toutes par ici.
-    if (refuseParDelai(article, { article, options, variante })) return
+    // ✅ (24/10) Une pièce venue du fournisseur y entre avec ses X jours.
+    if (refuseParDelai(candidatAvecFournisseur(article, variante), { article, options, variante })) return
     if (refuseParPlage(article)) return
     if (variante) {
       // Item à variante : le stock de LA variante fait foi (modèle détail)
@@ -2812,12 +2854,14 @@ export default function CommanderSlug() {
       // nue = deux pièces de la même variante).
       const key = options ? `${article.id}_v${variante.id}_${JSON.stringify(options)}` : `${article.id}_v${variante.id}`
       // (22/10, audit R3) « Fabriqué à la demande » : `stockDeVariante` = Infinity.
-      if (stockDeVariante(article, variante) <= qteDeLaVariante(variante.id)) return
+      // ✅ (24/10) Sur commande chez le fournisseur : le stock ne borne plus.
+      const jours = joursFournisseur(article)
+      if (jours === null && stockDeVariante(article, variante) <= qteDeLaVariante(variante.id)) return
       const prixVar = variante.prix != null
         ? prixEffectifVariante(variante.prix, article, dealsActifs)
         : prixEffectif(article, dealsActifs)
       const label = [variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · ')
-      setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: options || null, variante: { id: variante.id, label, stock: variante.stock, sansLimite: stockDeVariante(article, variante) === Infinity }, quantite: (prev[key]?.quantite || 0) + 1 } }))
+      setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: options || null, variante: { id: variante.id, label, stock: variante.stock, sansLimite: stockDeVariante(article, variante) === Infinity, fournisseurJours: jours }, quantite: (prev[key]?.quantite || 0) + 1 } }))
       return
     }
     // FIX STOCK : vérifier la limite avant d'ajouter
@@ -2923,6 +2967,15 @@ export default function CommanderSlug() {
   // FIX STOCK : incrementerPanier vérifie aussi le stock
   function incrementerPanier(key, item) {
     if (item.variante) {
+      // ✅ (24/10, Caprice) SUR COMMANDE CHEZ LE FOURNISSEUR : la pièce de plus
+      // passe par l'ajout, qui juge le jour avec les X jours si elle dépasse
+      // le stock. L'article et la variante sont relus au catalogue : la ligne
+      // du panier peut venir d'un onglet ancien.
+      if (item.variante.fournisseurJours) {
+        const article = articles.find(a => a.id === item.id)
+        const variante = (variantesParArticle?.[item.id] || []).find(v => v.id === item.variante.id)
+        if (article && variante) { ajouterAuPanier(article, item.options || null, variante); return }
+      }
       // (22/10) Toutes les lignes de la variante (avec ou sans options).
       // (22/10, audit R3) Une version « fabriquée à la demande » ne se compte pas.
       if (!item.variante.sansLimite && (item.variante.stock ?? 0) <= qteDeLaVariante(item.variante.id)) return
@@ -3792,7 +3845,23 @@ export default function CommanderSlug() {
       circuits = circuitsCommuns(circuits, circuitsDeLArticle(second, commercant))
       indispo = [...new Set([...indispo, ...joursIndisponibles(stocksJour?.[second.id])])]
     }
-    return { delaiJours: delaiEnJours(ligne), indispo, circuits, invendu: porteUneFenetre(ligne?.offre) }
+    return { delaiJours: delaiEnJours(ligneAvecFournisseur(ligne)), indispo, circuits, invendu: porteUneFenetre(ligne?.offre) }
+  }
+  // ✅ (24/10, Caprice) En expédition : le plus long délai fournisseur des
+  // lignes qui l'attendent (0 si aucune). Le colis part après.
+  function joursColisFournisseur() {
+    return Object.values(panier).reduce((max, l) => (
+      ligneAvecFournisseur(l) !== l ? Math.max(max, Number(l.variante.fournisseurJours) || 0) : max
+    ), 0)
+  }
+  // ✅ (24/10, Caprice) Une ligne du panier dont la variante dépasse son stock
+  // attend le fournisseur : elle prend ses X jours. Toutes les lignes de la
+  // variante comptent, et toute la commande se retire le même jour.
+  function ligneAvecFournisseur(ligne) {
+    const jours = ligne?.variante?.fournisseurJours
+    if (!jours || ligne.variante.sansLimite) return ligne
+    if (qteDeLaVariante(ligne.variante.id) <= Math.max(0, Number(ligne.variante.stock) || 0)) return ligne
+    return { ...ligne, delai_minutes: Math.max(Number(ligne.delai_minutes) || 0, jours * 1440) }
   }
   // ✅ L'HEURE LIMITE DE LA VEILLE (20/10, 7 Abbayes) : la phrase du
   // calendrier, lue sur TOUT le catalogue (comme sa longueur), jamais sur le
@@ -5840,6 +5909,13 @@ export default function CommanderSlug() {
                         <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600, margin: '8px 0 0' }}>
                           Envoi préparé par le commerçant, numéro de suivi communiqué dès l&rsquo;expédition.
                         </p>
+                        {/* ✅ (24/10, Caprice) UN COLIS QUI ATTEND LE FOURNISSEUR
+                            SE DIT, IL NE SE BLOQUE PAS (décision d'Alex). */}
+                        {joursColisFournisseur() > 0 && (
+                          <p style={{ fontSize: '0.78rem', color: '#B45309', fontWeight: 700, background: '#FFFBEB', borderRadius: 10, padding: '8px 10px', margin: '8px 0 0' }}>
+                            Une partie de ta commande est sur commande chez le fournisseur : ton colis part sous {joursColisFournisseur()} jour{joursColisFournisseur() > 1 ? 's' : ''}.
+                          </p>
+                        )}
                       </div>
                     )}
                   </>

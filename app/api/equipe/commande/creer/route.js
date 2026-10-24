@@ -192,6 +192,11 @@ export async function POST(request) {
     for (const v of calcul.stocksVariantesCourts || []) {
       avertissements.push(avertissement(`stock:${v.article_id}`, `${v.nom} : il en reste ${v.disponible}.`))
     }
+    // ✅ (24/10, Caprice) Une taille qui se recommande : on dit ce qu'il faut
+    // commander chez le fournisseur, et en combien de jours elle arrive.
+    for (const p of calcul.partsFournisseur || []) {
+      avertissements.push(avertissement(`fournisseur:${p.article_id}`, `${p.nom} : ${p.quantite} à commander chez le fournisseur (${p.jours} jour${p.jours > 1 ? 's' : ''}).`))
+    }
     // ✅ (19/10) LA PLAGE DE RETRAIT DES ARTICLES : en ligne le serveur refuse,
     // ici on prévient (« Encoder quand même »), comme tout le reste du moment.
     avertissements.push(...avertissementsPlage(lignes, creneau))
@@ -360,6 +365,8 @@ export async function POST(request) {
       prix_unitaire: l.prix_unitaire,
       options: l.options,
       tva_taux: l.tva_taux,
+      // ✅ (24/10, Caprice) Les pièces à commander chez le fournisseur.
+      quantite_fournisseur: l.quantite_fournisseur || 0,
     })))
     if (errLignes) {
       await admin.from('commandes').delete().eq('id', commande.id)
@@ -367,7 +374,7 @@ export async function POST(request) {
       return non('La commande n’a pas pu être enregistrée. Réessaie.', 500)
     }
 
-    await preleverStockVariantes(admin, lignes, variantesData, articlesData)
+    await preleverStockVariantes(admin, lignes, variantesData, articlesData, { commandeId: commande.id })
 
     // L'e-mail au client : une CONFIRMATION, seulement si le commerçant l'a
     // demandée et qu'une adresse existe. Jamais l'e-mail « Nouvelle commande »

@@ -1334,6 +1334,8 @@ export async function POST(request) {
         prix_unitaire: l.prix_unitaire,
         options: l.options,
         tva_taux: l.tva_taux,
+        // ✅ (24/10, Caprice) Les pièces à commander chez le fournisseur.
+        quantite_fournisseur: l.quantite_fournisseur || 0,
       })))
     if (errLignes) {
       // Rollback commande pour ne pas laisser de fantôme
@@ -1349,7 +1351,8 @@ export async function POST(request) {
     // ⚠️ 10/10 : à partir des LIGNES du serveur (plus du corps de la requête),
     // et partagé avec la commande encodée (`preleverStockVariantes`).
     // (22/10, audit R3) Avec les articles : « fabriqué à la demande » ne se prélève pas.
-    await preleverStockVariantes(supabase, lignes, variantesData, articlesData)
+    // ✅ (24/10) Avec la commande : un manque plus grand que prévu devient part fournisseur.
+    await preleverStockVariantes(supabase, lignes, variantesData, articlesData, { commandeId: commande.id })
 
     // ─── 8) Réservations stock : déjà posées atomiquement à l'étape 6.5 ─────
 

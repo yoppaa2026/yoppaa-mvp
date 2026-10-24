@@ -192,7 +192,8 @@ verifier('la copie de catalogue emporte la plage', CHAMPS_COPIES.includes('retra
   verifier('🔴 la fiche filtre les créneaux de retrait par la plage du panier',
     F.includes('return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok && creneauDansPlage(cr, plage))'))
   verifier('🔴 et les tournées de livraison', F.includes('if (!creneauDansPlage(slot, plagePanierCourante())) return false'))
-  verifier('le refus à l’ajout, article', /if \(refuseParDelai\(article, \{ article, options, variante \}\)\) return\s*if \(refuseParPlage\(article\)\) return/.test(F))
+  // REPOINTÉE LE 24/10 (Caprice) : le délai juge l'article avec sa part fournisseur.
+  verifier('le refus à l’ajout, article', /if \(refuseParDelai\(candidatAvecFournisseur\(article, variante\), \{ article, options, variante \}\)\) return\s*if \(refuseParPlage\(article\)\) return/.test(F))
   verifier('le refus à l’ajout, lot et duo', F.includes('if (refuseParPlage({ id: article.id, nom: deal.titre, deal_id: deal.id, offre: { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin } })) return'))
   verifier('⚠️ un créneau choisi avant le sandwich ne compte plus', F.includes("(!!creneauChoisi && creneauChoisiDansPlage())"))
   verifier('⚠️ le créneau choisi est retrouvé par son identifiant', F.includes('.find(c => c.id === creneauChoisi)'))

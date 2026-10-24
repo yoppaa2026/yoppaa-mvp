@@ -552,7 +552,9 @@ const code = (f) => sansProse(lire(f))
   const fiche = code('app/commander/[slug]/page.js')
   v('🔴 fiche : la règle du jour lit les circuits sur le CATALOGUE, duo compris',
     /const article = articles\.find\(a => a\.id === ligne\?\.id\) \|\| ligne/.test(fiche)
-    && /return \{ delaiJours: delaiEnJours\(ligne\), indispo, circuits, invendu: porteUneFenetre\(ligne\?\.offre\) \}/.test(fiche))
+    // REPOINTÉE LE 24/10 (Caprice) : le délai d'une ligne du panier compte
+    // les X jours du fournisseur quand sa taille dépasse le stock.
+    && /return \{ delaiJours: delaiEnJours\(ligneAvecFournisseur\(ligne\)\), indispo, circuits, invendu: porteUneFenetre\(ligne\?\.offre\) \}/.test(fiche))
   v('🔴 fiche : les cartes reçoivent le circuit du jour, calculé par la règle partagée',
     // ⚠️ REPOINTÉE LE 16/10 soir : trois listes de cartes (« Tes coups de cœur »).
     (fiche.match(/circuit=\{circuitAffiche\}/g) || []).length === 3
@@ -884,6 +886,95 @@ const code = (f) => sansProse(lire(f))
   v('🟠 O11 : supprimer une combinaison se confirme', /const okSuppressionVariante = await confirme\(confirmationSimple\(\{/.test(bord) && /if \(!okSuppressionVariante\) return/.test(bord))
   v('🟡 J11 : renommer passe par un vrai champ, plus `window.prompt`',
     !/window\.prompt\(`Nouveau nom pour/.test(bord) && /onClick=\{\(\) => ouvrirRenommage\(n, val\)\}/.test(bord) && /if \(!renommageOuvert\.current\) return/.test(bord))
+}
+
+// ═══ ✅ SUR COMMANDE CHEZ LE FOURNISSEUR (24/10, Caprice) ═══════════════════
+//
+// Une case par article à variantes + X jours. Une taille sans stock se vend
+// « sur commande » ; la pièce au-delà du stock est une part fournisseur, qui
+// donne ses X jours à la ligne, ne revient pas au stock à l'annulation (sauf
+// « pas venu la chercher »), et se lit chez le commerçant.
+{
+  const SA = await import('../lib/stock-article.js')
+  const { construireLignesCommande } = await import('../lib/lignes-commande.js')
+  const art = (o = {}) => ({ id: 'a1', nom: 'Robe', prix: 50, actif: true, commercant_id: 'c', gere_variantes: true, stock_mode: 'magasin', delai_minutes: 0, ...o })
+  const v38 = { id: 'v38', article_id: 'a1', axe1_valeur: '38', prix: null, stock: 1, actif: true }
+  const calc = (article, panier, extra = {}) => construireLignesCommande({
+    panier, articlesData: [article], optionsValeurs: [], variantesData: [v38], dealsData: [],
+    commercant: { tva_taux_defaut: 21 }, regime: 'emporter', dateCommande: '2026-10-30', ...extra,
+  })
+  const a5 = art({ fournisseur_jours: 5 })
+
+  // La règle, exécutée.
+  v('🔴 sans la case, rien ne change : 2 sur un stock de 1 est refusé', calc(art(), [{ id: 'a1', quantite: 2, variante_id: 'v38' }]).ok === false)
+  let r = calc(a5, [{ id: 'a1', quantite: 3, variante_id: 'v38' }])
+  v('🔴 avec la case : 3 sur un stock de 1 = 2 du fournisseur, la ligne prend 5 jours',
+    r.ok && r.lignes[0].quantite_fournisseur === 2 && r.lignes[0].delai_minutes === 5 * 1440, JSON.stringify(r.lignes?.[0]))
+  v('et la commande encodée sait quoi dire (2 à commander, 5 jours)', r.partsFournisseur?.[0]?.quantite === 2 && r.partsFournisseur[0].jours === 5)
+  r = calc(a5, [{ id: 'a1', quantite: 1, variante_id: 'v38' }])
+  v('🔴 tout en stock : aucune part, aucun délai ajouté', r.ok && r.lignes[0].quantite_fournisseur === 0 && r.lignes[0].delai_minutes === 0)
+  r = calc(a5, [{ id: 'a1', quantite: 1, variante_id: 'v38' }, { id: 'a1', quantite: 1, variante_id: 'v38', options: [] }])
+  v('🔴 deux lignes de la même taille : la première prend le stock, la seconde le fournisseur',
+    r.ok && r.lignes[0].quantite_fournisseur === 0 && r.lignes[1].quantite_fournisseur === 1 && r.lignes[1].delai_minutes === 7200)
+  v('🔴 avec un rendez-vous : coupé, le stock court se refuse comme avant',
+    calc(a5, [{ id: 'a1', quantite: 2, variante_id: 'v38' }], { surCommandeFournisseur: false }).ok === false)
+  r = calc(art({ fournisseur_jours: 2, delai_minutes: 3 * 1440 }), [{ id: 'a1', quantite: 2, variante_id: 'v38' }])
+  v('un délai d’article plus long que le fournisseur est gardé', r.ok && r.lignes[0].delai_minutes === 3 * 1440)
+  r = calc(a5, [{ id: 'a1', quantite: 3, variante_id: 'v38' }], { stockVarianteIndicatif: true })
+  v('encodée : une part fournisseur, pas un « il en reste »', r.ok && r.stocksVariantesCourts.length === 0 && r.partsFournisseur.length === 1)
+  v('🔴 « fabriqué à la demande » n’a pas de délai fournisseur', SA.joursFournisseur(art({ stock_mode: 'illimite', fournisseur_jours: 5 })) === null)
+  v('🔴 un article sans variantes non plus (plus tard, décision d’Alex)', SA.joursFournisseur(art({ gere_variantes: false, fournisseur_jours: 5 })) === null)
+  v('hors bornes (31) : ignoré', SA.joursFournisseur(art({ fournisseur_jours: 31 })) === null)
+  v('la phrase de la fiche', SA.libelleSurCommande(5) === 'Sur commande en 5 jours' && SA.libelleSurCommande(1) === 'Sur commande en 1 jour')
+  v('la phrase du commerçant', SA.mentionFournisseurLigne({ quantite_fournisseur: 2 }) === '2 à commander chez le fournisseur' && SA.mentionFournisseurLigne({ quantite_fournisseur: 0 }) === null)
+  v('🔴 le formulaire borne sous l’horizon de retrait (14 → 13, 7 → 6)', SA.fournisseurJoursMax(14) === 13 && SA.fournisseurJoursMax(7) === 6)
+  v('🔴 le formulaire refuse vide, 0, au-delà, décimal ; accepte 5',
+    !!SA.refusJoursFournisseur('', 14) && !!SA.refusJoursFournisseur('0', 14) && !!SA.refusJoursFournisseur('14', 14)
+    && !!SA.refusJoursFournisseur('2.5', 14) && SA.refusJoursFournisseur('5', 14) === null)
+
+  // Le serveur.
+  v('🔴 le serveur lit le délai fournisseur en base', SELECT_ARTICLES.split(', ').includes('fournisseur_jours'))
+  const cc = code('app/api/stripe/checkout/create-commande/route.js')
+  const eq = code('app/api/equipe/commande/creer/route.js')
+  const rdv = code('app/api/stripe/checkout/create-rdv-commande/route.js')
+  v('🔴 la commande en ligne enregistre la part fournisseur de chaque ligne', /quantite_fournisseur: l\.quantite_fournisseur \|\| 0,/.test(cc))
+  v('🔴 la commande encodée aussi, et elle le dit au commerçant',
+    /quantite_fournisseur: l\.quantite_fournisseur \|\| 0,/.test(eq) && /for \(const p of calcul\.partsFournisseur \|\| \[\]\)/.test(eq))
+  v('🔴 le rendez-vous coupe la commande fournisseur', /surCommandeFournisseur: false,/.test(rdv))
+  v('🔴 « pas venu la chercher » rend tout', /restaurerStockVariantes\(supabase, \[commandeId\], \{ avecFournisseur: true \}\)/.test(code('app/api/commande/non-retire/route.js')))
+  const sv = code('lib/stock-variantes-server.js')
+  v('🔴 les annulations ne rendent pas la part fournisseur',
+    /export async function restaurerStockVariantes\(supabase, commandeIds, \{ avecFournisseur = false \} = \{\}\)/.test(sv)
+    && /- \(avecFournisseur \? 0 : Math\.max\(0, Number\(l\.quantite_fournisseur\) \|\| 0\)\)/.test(sv))
+  v('🔴 le stock se retire sous verrou, en base', /supabase\.rpc\('prelever_stock_variante', \{ p_variante_id: id, p_quantite: q \}\)/.test(sv))
+  // Les six autres sorties gardent la règle par défaut (rien de la part fournisseur).
+  for (const f of ['app/api/cron/expire-reservations/route.js', 'app/api/stripe/webhook/route.js', 'lib/commande-annulation-server.js', 'app/api/rdv/cancel/route.js', 'app/api/rdv/annuler-commercant/route.js']) {
+    v(`une annulation ne rend pas la part fournisseur : ${f}`, !/avecFournisseur/.test(code(f)))
+  }
+
+  // Les écrans.
+  const fiche = code('app/commander/[slug]/page.js')
+  v('🔴 fiche : une taille à 0 qui se recommande reste proposable et le dit',
+    /const commandable = \(v\) => stockDe\(v\) > 0 \|\| jours !== null/.test(fiche)
+    && /const surCommande = !!varianteChoisie && stockChoisi <= 0 && jours !== null/.test(fiche) && /\{libelleSurCommande\(jours\)\}/.test(fiche))
+  v('🔴 fiche : le jour de retrait compte les X jours dès que la taille dépasse son stock',
+    /function ligneAvecFournisseur\(ligne\)/.test(fiche) && /return \{ \.\.\.ligne, delai_minutes: Math\.max\(Number\(ligne\.delai_minutes\) \|\| 0, jours \* 1440\) \}/.test(fiche))
+  v('🔴 fiche : le colis le dit, sans bloquer', /\{joursColisFournisseur\(\) > 0 && \(/.test(fiche) && /ton colis part sous \{joursColisFournisseur\(\)\} jour/.test(fiche))
+  v('fiche : le panier dit la part sur commande', /\{partFourn > 0 && \(/.test(fiche))
+  v('🔴 tableau de bord : la ligne dit ce qu’il faut commander', /\{mentionFournisseurLigne\(ligne\) && \(/.test(code('app/dashboard/page.js')))
+  v('🔴 poste de l’équipe : lu et dit', /commande_articles\(quantite, quantite_fournisseur, article_nom, options\)/.test(code('lib/equipe-poste.js'))
+    && /\{mentionFournisseurLigne\(l\) && <span/.test(code('app/equipe/PosteEquipe.js')))
+  v('🔴 e-mails : lu, dit au commerçant et au client',
+    /commande_articles\(quantite, quantite_fournisseur, prix_unitaire/.test(code('lib/commande-notifs.js'))
+    && /renderArticlesRows\(articles, \{ pourCommercant: true \}\)/.test(code('lib/resend.js'))
+    && /renderArticlesRows\(articles, \{ expedition: estExpedition \}\)/.test(code('lib/resend.js')))
+  const bord = code('app/dashboard/ConfigDashboard.js')
+  v('🔴 formulaire : la case n’agit que sur un article à variantes, vendu en ligne, compté par variante',
+    /const avecFournisseur = aVariantes && form\.vendable && venteJour\s*&& formStock\.stock_mode === 'magasin' && form\.fournisseur_actif === true/.test(bord)
+    && /fournisseur_jours: avecFournisseur \? Number\(String\(form\.fournisseur_jours\)\.trim\(\)\) : null,/.test(bord))
+  v('🔴 formulaire : le délai est refusé au-delà de l’horizon', /refusJoursFournisseur\(form\.fournisseur_jours, horizonBoutique\(commercant\)\)/.test(bord))
+  v('🔴 formulaire : rouvrir l’article relit sa case et son délai', /fournisseur_actif: a\.fournisseur_jours != null, fournisseur_jours: a\.fournisseur_jours != null \? String\(a\.fournisseur_jours\) : ''/.test(bord))
+  v('la copie garde le délai fournisseur', CHAMPS_COPIES.includes('fournisseur_jours'))
 }
 
 console.log(`\nStock et vitrine : ${ok} vérifications`)

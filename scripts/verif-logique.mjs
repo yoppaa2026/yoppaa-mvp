@@ -2493,7 +2493,11 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   // navigateur, qui ne peut pas écrire dans la table des versions : chaque
   // commande déclarée non retirée retirait une pièce des rayons pour toujours.
   const routeNonRetire = sansCommentaires(readFileSync(new URL('../app/api/commande/non-retire/route.js', import.meta.url), 'utf8'))
-  verifier('la route rend le stock des versions', /restaurerStockVariantes\(supabase, \[commandeId\]\)/.test(routeNonRetire))
+  // ⚠️ REPOINTÉE LE 24/10 (Caprice) : « pas venu la chercher » rend TOUT, la
+  // part commandée chez le fournisseur comprise (décision d'Alex : la pièce
+  // est arrivée en magasin).
+  verifier('la route rend le stock des versions, part fournisseur comprise',
+    /restaurerStockVariantes\(supabase, \[commandeId\], \{ avecFournisseur: true \}\)/.test(routeNonRetire))
   // ⚠️ RÉORIENTÉE LE 29/09 (équipe, étape 3) : même garde commune.
   verifier('elle vérifie que le commerçant est propriétaire',
     /const verdict = await gardeLigneEquipe\(request, supabase, 'commandes', commandeId, 'commandes'\)\s*const nonAutorise = refus\(verdict, NextResponse\)\s*if \(nonAutorise\) return nonAutorise/.test(routeNonRetire))

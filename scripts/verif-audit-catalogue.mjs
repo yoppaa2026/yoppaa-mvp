@@ -57,6 +57,17 @@ function v(nom, condition, detail = '') {
   v('un article masqué ou en vitrine n’est jamais signalé', !par[6] && !par[7])
   v('🔴 l’ancien « par jour » sur des variantes : signalé, geste « modifier »', /par jour/.test(par[8]?.raisons?.[0] || '') && par[8].geste === 'modifier')
   v('une variante en stock suffit', !par[9])
+  // ✅ (24/10, Caprice) Recommandable chez le fournisseur : ses tailles à 0 se
+  // vendent « sur commande », rien à corriger. Sans la case, toujours signalé.
+  const surCommande = articlesACorriger({
+    articles: [
+      { id: 30, nom: 'Robe fournisseur', gere_variantes: true, stock_mode: 'magasin', fournisseur_jours: 5, actif: true },
+      { id: 31, nom: 'Robe sans case', gere_variantes: true, stock_mode: 'magasin', fournisseur_jours: null, actif: true },
+    ],
+    variantesParArticle: { 30: [{ actif: true, stock: 0 }], 31: [{ actif: true, stock: 0 }] },
+  })
+  v('🔴 sur commande fournisseur, tailles à 0 : rien à corriger', !surCommande.some(x => x.id === 30), JSON.stringify(surCommande))
+  v('🔴 sans la case, tailles à 0 : toujours signalé', surCommande.some(x => x.id === 31 && /toutes ses variantes sont à 0/.test(x.raisons[0] || '')))
   // (22/10, test C d'Alex) Un ancien stock général sur un article à variantes.
   const anciens = articlesACorriger({
     articles: [

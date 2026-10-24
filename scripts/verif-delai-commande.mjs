@@ -570,7 +570,9 @@ egal('sans nom d’article, la phrase tient debout',
   verifier('🔴 l’ajout d’un article passe par le jour choisi, avant la variante',
     // REPOINTÉE LE 19/10 : le refus de PLAGE (lib/plage-retrait.js) suit celui
     // du jour, et les deux restent AVANT la variante.
-    /function ajouterAuPanier\(article, options = null, variante = null\) \{\s*if \(refuseParDelai\(article, \{ article, options, variante \}\)\) return\s*if \(refuseParPlage\(article\)\) return\s*if \(variante\)/.test(FICHE))
+    // REPOINTÉE LE 24/10 (Caprice) : le jour juge l'article AVEC les X jours
+    // du fournisseur quand la pièce ajoutée dépasse le stock de sa taille.
+    /function ajouterAuPanier\(article, options = null, variante = null\) \{\s*if \(refuseParDelai\(candidatAvecFournisseur\(article, variante\), \{ article, options, variante \}\)\) return\s*if \(refuseParPlage\(article\)\) return\s*if \(variante\)/.test(FICHE))
   verifier('🔴 l’ajout d’un lot ou d’un duo aussi, avec l’article pour ses jours de vente',
     /const delaiOffre = delaiDuDeal\(deal, article\)\s*if \(refuseParDelai\(\{ id: article\.id, nom: deal\.titre, delai_minutes: delaiOffre,/.test(FICHE))
   verifier('la proposition se calcule sur le panier, le jour choisi et le calendrier',

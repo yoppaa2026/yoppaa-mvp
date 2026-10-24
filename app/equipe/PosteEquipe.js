@@ -24,6 +24,7 @@ import { referenceRdv, referenceCommande } from '@/lib/numero-commande'
 import { intituleReservation } from '@/lib/reservation-metier'
 import { estReservationDeTable, couvertsDe } from '@/lib/cours-collectifs'
 import { libelleOptions } from '@/lib/options-ligne'
+import { mentionFournisseurLigne } from '@/lib/stock-article'
 import { libelleRetrait } from '@/lib/libelle-retrait'
 import { libelleStatutCommande } from '@/lib/statuts-commande'
 import { euros } from '@/lib/montants'
@@ -249,6 +250,7 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
             <li key={i} style={{ fontSize: 14, color: T.ink }}>
               <strong>{l.quantite} ×</strong> {l.article_nom}
               {options && <span style={{ display: 'block', fontSize: 12.5, color: T.muted, marginLeft: 22 }}>{options}</span>}
+              {mentionFournisseurLigne(l) && <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: '#B45309', marginLeft: 22 }}>{mentionFournisseurLigne(l)}</span>}
             </li>
           )
         })}

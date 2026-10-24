@@ -50,6 +50,7 @@ import { partagerCommandes } from '@/lib/commandes-vue'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '@/lib/alerte-rdv'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { libelleOptions } from '@/lib/options-ligne'
+import { mentionFournisseurLigne } from '@/lib/stock-article'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
 import { euros } from '@/lib/montants'
 // Les mots des statuts de commande, partagés avec le Poste équipe (29/09).
@@ -230,7 +231,7 @@ function lireCommandes(commercantId, { sansPaiementEnAttente = false } = {}) {
 // encore réglé se dit sur ses séances (`etatPaiementRdv`).
 // ⚠️ Une seule clé relie les deux tables (MIGRATION_ABONNEMENTS:345) : pas
 // d'ambiguïté PGRST201, le nom de contrainte n'est pas nécessaire.
-const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix, par_couverts), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, article_nom, options, article:articles!commande_articles_article_id_fkey(nom))), abonnement:abonnements(paye, prix)`
+const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix, par_couverts), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, quantite_fournisseur, article_nom, options, article:articles!commande_articles_article_id_fkey(nom))), abonnement:abonnements(paye, prix)`
 
 // ─── Notifications système ────────────────────────────────────────────────────
 let _notifPermission = 'default'
@@ -859,6 +860,13 @@ function CarteCommande({ commande, numero, categorie = null, commerceNom = null,
                   })()}
                   <span style={{ fontWeight: 700, color: T.ink }}>{euros(ligne.quantite * ligne.prix_unitaire)}</span>
                 </div>
+                {/* ✅ (24/10, Caprice) Ce qui n'est pas en rayon : à commander
+                    chez le fournisseur avant que le client vienne. */}
+                {mentionFournisseurLigne(ligne) && (
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#B45309', marginLeft: 10, marginTop: 1 }}>
+                    {mentionFournisseurLigne(ligne)}
+                  </div>
+                )}
                 {Object.entries(optionsParGroupe).map(([groupe, vals]) => (
                   <div key={groupe} style={{ fontSize: '0.72rem', color: T.deep, marginLeft: 10, marginTop: 1, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     <span style={{ color: T.muted, fontWeight: 600 }}>{groupe} :</span>
@@ -1212,6 +1220,9 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
                   </p>
                   {version && (
                     <p style={{ fontSize: '0.7rem', color: '#047857', lineHeight: 1.35, margin: 0, fontWeight: 700 }}>{version}</p>
+                  )}
+                  {mentionFournisseurLigne(l) && (
+                    <p style={{ fontSize: '0.7rem', color: '#B45309', lineHeight: 1.35, margin: 0, fontWeight: 800 }}>{mentionFournisseurLigne(l)}</p>
                   )}
                 </div>
               )

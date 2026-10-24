@@ -39,7 +39,8 @@ const MUTATIONS = [
   { nom: '🔴 le serveur ne lit plus la plage en base', fichier: 'lib/lignes-commande.js',
     // ⚠️ ANCRE REPOINTÉE LE 22/10 (`gere_variantes` ferme le select, audit R1).
     // REPOINTÉE LE 22/10 (soir) : `hors_heure_limite` suit `commande_active`.
-    de: 'stock_mode, retrait_des, retrait_jusqua, gere_variantes\'', vers: 'stock_mode, gere_variantes\'' },
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 (Caprice) : `fournisseur_jours` ferme le select.
+    de: 'stock_mode, retrait_des, retrait_jusqua, gere_variantes, fournisseur_jours\'', vers: 'stock_mode, gere_variantes, fournisseur_jours\'' },
   { nom: '🔴 le serveur ne refuse plus un créneau hors plage', fichier: ROUTE,
     de: '        if (refusPlage) {\n          return NextResponse.json({ ok: false, error: refusPlage, creneau_indisponible: true }, { status: 409 })\n        }',
     vers: '' },

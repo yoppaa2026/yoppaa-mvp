@@ -87,7 +87,10 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, deja_traitee: true, stock_rendu: 0 })
     }
 
-    const restitution = await restaurerStockVariantes(supabase, [commandeId])
+    // ✅ (24/10, Caprice) TOUT REVIENT, part fournisseur comprise (décision
+    // d'Alex) : la pièce commandée est arrivée en magasin, le client n'est
+    // simplement pas venu. Les annulations, elles, ne la rendent pas.
+    const restitution = await restaurerStockVariantes(supabase, [commandeId], { avecFournisseur: true })
     await journaliserGeste(supabase, verdict, { action: 'commande_non_retiree', cible_type: 'commande', cible_id: commandeId })
     console.info('[commande/non-retire]', { commandeId, restitution })
 

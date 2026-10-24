@@ -42,7 +42,8 @@ const MUTATIONS = [
     de: '    if (!deal && groupesOptions) {', vers: '    if (!deal && !variante && groupesOptions) {' },
   { nom: '🔴 deux lignes de la même variante passent chacune sur un stock de 1', fichier: REGLE,
     // ⚠️ ANCRE REPOINTÉE LE 22/10 (audit R3 : `stockDeVariante`).
-    de: '      if (stockDeVariante(article, variante) < dejaParVariante[variante.id]) {', vers: '      if (stockDeVariante(article, variante) < quantite) {' },
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 (Caprice : la part fournisseur passe avant).
+    de: '      if (quantiteFournisseur === 0 && stockDeVariante(article, variante) < dejaParVariante[variante.id]) {', vers: '      if (quantiteFournisseur === 0 && stockDeVariante(article, variante) < quantite) {' },
   { nom: '🔴 la consommation d un lot redevient le nombre de lots', fichier: REGLE,
     de: '      quantite_stock: quantite * (deal?.unites_par_deal || 1),', vers: '      quantite_stock: quantite,' },
   // ─── (21/10) le groupe dépendant ────────────────────────────────────────
@@ -236,7 +237,8 @@ const MUTATIONS = [
   { nom: '🔴 R1 : un article à variantes repart sans sa version', fichier: REGLE,
     de: '    if (!variante && !deal && article.gere_variantes === true) {', vers: '    if (false) {' },
   { nom: '🔴 R1 : le serveur ne lit plus gere_variantes', fichier: REGLE,
-    de: "retrait_des, retrait_jusqua, gere_variantes'", vers: "retrait_des, retrait_jusqua'" },
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 (Caprice : `fournisseur_jours` suit).
+    de: "retrait_des, retrait_jusqua, gere_variantes, fournisseur_jours'", vers: "retrait_des, retrait_jusqua, fournisseur_jours'" },
   { nom: '🔴 R2 : le serveur exige un groupe sans assez d options', fichier: REGLE,
     de: '        const { min, max } = bornesChoix(g, nbValeursParGroupe[g.id] || 0)', vers: '        const { min, max } = bornesChoix(g)' },
   { nom: '🔴 R2 : le nombre d options ne compte plus', fichier: REGLE,
@@ -256,7 +258,8 @@ const MUTATIONS = [
   { nom: '🔴 O7 : les pastilles relisent le réglage brut', fichier: 'lib/options-choix.js',
     de: '  return { unique: max === 1, obligatoire: min > 0 }', vers: "  return { unique: groupe?.type === 'unique', obligatoire: !!groupe?.obligatoire }" },
   { nom: '🔴 R3 : le serveur compte le stock d une version à la demande', fichier: REGLE,
-    de: '      if (stockDeVariante(article, variante) < dejaParVariante[variante.id]) {', vers: '      if ((variante.stock ?? 0) < dejaParVariante[variante.id]) {' },
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 (Caprice : la part fournisseur passe avant).
+    de: '      if (quantiteFournisseur === 0 && stockDeVariante(article, variante) < dejaParVariante[variante.id]) {', vers: '      if (quantiteFournisseur === 0 && (variante.stock ?? 0) < dejaParVariante[variante.id]) {' },
   { nom: '🔴 R3 : la vente prélève une version à la demande', fichier: 'lib/stock-variantes-server.js',
     de: '    if (variantesSansLimite(articleParId[l.article_id])) continue', vers: '' },
   { nom: '🔴 R3 : l annulation rend à une version à la demande', fichier: 'lib/stock-variantes-server.js',
@@ -272,7 +275,8 @@ const MUTATIONS = [
   { nom: '🔴 R3 fiche : le sélecteur compte le stock d une version à la demande', fichier: FICHE,
     de: '  const stockDe = (v) => stockDeVariante(article, v)', vers: '  const stockDe = (v) => v.stock' },
   { nom: '🔴 R3 fiche : le panier bloque une version à la demande', fichier: FICHE,
-    de: 'sansLimite: stockDeVariante(article, variante) === Infinity }', vers: 'sansLimite: false }' },
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 (Caprice : `fournisseurJours` suit).
+    de: 'sansLimite: stockDeVariante(article, variante) === Infinity, fournisseurJours: jours }', vers: 'sansLimite: false, fournisseurJours: jours }' },
   { nom: '🔴 R2 éditeur : « au moins 3 » parmi 2 options passe', fichier: 'app/dashboard/ConfigDashboard.js',
     de: '    if ((r.choix_min || 0) > nbOptions) {', vers: '    if (false) {' },
   { nom: '🔴 O7 éditeur : la pastille ne remet plus les bornes à zéro', fichier: 'app/dashboard/ConfigDashboard.js',
@@ -283,7 +287,8 @@ const MUTATIONS = [
     de: '    if (ajoutOption.current) return', vers: '' },
   // ✅ (23/10) le tunnel rendez-vous + produits prélève, et rend en cas d'échec.
   { nom: '🔴 le tunnel rendez-vous ne prélève plus ses versions', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: '    await preleverStockVariantes(supabase, lignes, variantesData, articlesData)', vers: '' },
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 (Caprice : l'appel passe la commande).
+    de: '    await preleverStockVariantes(supabase, lignes, variantesData, articlesData, { commandeId: commande.id })', vers: '' },
   { nom: '🔴 un rendez-vous refusé garde les versions prélevées', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
     de: '        await restaurerStockVariantes(supabase, [commande.id])', vers: '' },
 ]

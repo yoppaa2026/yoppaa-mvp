@@ -28,10 +28,14 @@ const MUTATIONS = [
     de: '    if (!a || a.actif === false || a.est_vitrine === true) continue', vers: '    if (!a) continue' },
   { nom: '🔴 des variantes absentes ne sont plus signalées', fichier: CORRIGER,
     de: '      if (actives.length === 0) {', vers: '      if (false) {' },
+  // ⚠️ ANCRES REPOINTÉES LE 24/10 (Caprice) : la condition exempte aussi
+  // l'article recommandable chez le fournisseur.
   { nom: '🔴 toutes les variantes à 0 ne sont plus signalées', fichier: CORRIGER,
-    de: '      } else if (!variantesSansLimite(a) && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (false) {' },
+    de: '      } else if (!variantesSansLimite(a) && joursFournisseur(a) === null && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (false) {' },
   { nom: '⚠️ « à la demande » à 0 est signalé à tort', fichier: CORRIGER,
-    de: '      } else if (!variantesSansLimite(a) && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (actives.every(v => !(Number(v.stock) > 0))) {' },
+    de: '      } else if (!variantesSansLimite(a) && joursFournisseur(a) === null && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (joursFournisseur(a) === null && actives.every(v => !(Number(v.stock) > 0))) {' },
+  { nom: '🔴 un article sur commande fournisseur, tailles à 0, est signalé à tort', fichier: CORRIGER,
+    de: '      } else if (!variantesSansLimite(a) && joursFournisseur(a) === null && actives.every(v => !(Number(v.stock) > 0))) {', vers: '      } else if (!variantesSansLimite(a) && actives.every(v => !(Number(v.stock) > 0))) {' },
   { nom: '🔴 l ancien « par jour » sur des variantes n est plus signalé', fichier: CORRIGER,
     de: "      if (modeStockDe(a) === 'jour') {", vers: '      if (false) {' },
   { nom: '🔴 un groupe obligatoire vide n est plus signalé', fichier: CORRIGER,

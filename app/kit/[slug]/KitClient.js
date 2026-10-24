@@ -109,9 +109,9 @@ function IconCopy() {
 
 export default function KitClient({ slug, kit, lien, qr, consigne = null }) {
   const [copie, setCopie] = useState(null)
-  // Le blanc par défaut : c'est celui qu'un commerçant imprime lui-même sans
-  // vider une cartouche par affiche.
-  const [fondClair, setFondClair] = useState(true)
+  // ⚠️ QUE DU FOND BLANC (Alex, 24/10), comme dans le tableau de bord. Le
+  // message sous l'accroche est celui par défaut : il ne se règle que là-bas.
+  const fondClair = true
   const [enCours, setEnCours] = useState(null)
   const [erreurTelechargement, setErreurTelechargement] = useState(null)
 
@@ -261,17 +261,6 @@ export default function KitClient({ slug, kit, lien, qr, consigne = null }) {
             <p style={{ margin: '10px 0 14px', fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
               Affiche-la en vitrine : un scan et le client arrive sur ta page, prêt à commander.
             </p>
-
-            {/* Le fond, au choix : le blanc s'imprime chez soi sans vider une
-                cartouche, le violet se remarque de loin. */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              {[{ clair: true, label: 'Fond blanc' }, { clair: false, label: 'Fond violet' }].map(o => (
-                <button key={o.label} onClick={() => setFondClair(o.clair)}
-                  style={{ ...btnBase, flex: 1, background: fondClair === o.clair ? '#fff' : 'rgba(255,255,255,0.10)', color: fondClair === o.clair ? T.main : '#fff' }}>
-                  {o.label}
-                </button>
-              ))}
-            </div>
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button onClick={() => telecharger('png')} disabled={!!enCours}

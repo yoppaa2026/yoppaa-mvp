@@ -283,9 +283,44 @@ const MUTATIONS = [
     de: '      ctx.drawImage(b.img,\n', vers: '      void (b.img,\n' },
 
   { nom: '🔴 un badge absent laisse un trou au milieu du papier',
+    // ⚠️ ANCRE REPOINTÉE LE 24/10 : sans badges, le pied tient aussi compte
+    // de la hauteur du message sous l'accroche.
     banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
-    de: '  const yPied       = badges ? yBadges + hauteurBadges + 48 : yAccroche2 + 54',
+    de: '  const yPied       = badges ? yBadges + hauteurBadges + 48 : yAccroche2 + hauteurMessage + 54',
     vers: '  const yPied       = yBadges + hauteurBadges + 48' },
+
+  // ══ ✅ LE MESSAGE SOUS L'ACCROCHE (Alex, 24/10) ══
+  { nom: '🔴 le message est calculé mais jamais dessiné',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '    lignesMessage.forEach((ligne, i) => ctx.fillText(ligne, W / 2, yMessages[i]))', vers: '' },
+
+  { nom: '🔴 le message sort dans la couleur de l’accroche, rien ne tranche',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: "filet: '#E2D8F4', nom: '#1A0840', accroche: '#1A0840', message: '#6B35C4',", vers: "filet: '#E2D8F4', nom: '#1A0840', accroche: '#1A0840', message: '#1A0840'," },
+
+  { nom: '🔴 le carton de table rapetisse son QR lui aussi',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '  const QR  = texteMessage ? 740 : 820', vers: '  const QR  = 740' },
+
+  { nom: '🔴 les badges se posent sur le message',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '  const yBadges     = yAccroche2 + 36 + hauteurMessage', vers: '  const yBadges     = yAccroche2 + 36' },
+
+  { nom: '🔴 un message vidé ressort avec celui par défaut',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: "  return message === undefined ? TEXTES_AFFICHE : { ...TEXTES_AFFICHE, message: nettoyerMessage(message) }", vers: "  return !message ? TEXTES_AFFICHE : { ...TEXTES_AFFICHE, message: nettoyerMessage(message) }" },
+
+  { nom: '🔴 un long message n’est plus coupé',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '  if (t.length <= MESSAGE_MAX) return t', vers: '  return t' },
+
+  { nom: '🔴 le PDF du tableau de bord oublie le message adapté',
+    banc: 'verif:kit', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      const fait = await telechargerAffichePdf({ qrDataUrl, nomCommerce, clair, slug, format, message })', vers: '      const fait = await telechargerAffichePdf({ qrDataUrl, nomCommerce, clair, slug, format })' },
+
+  { nom: '🔴 l’aperçu ne montre pas le message tapé',
+    banc: 'verif:kit', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      construireAffiche({ qrDataUrl, nomCommerce, clair: fondClair, textes: textesAffiche(message) })', vers: '      construireAffiche({ qrDataUrl, nomCommerce, clair: fondClair })' },
 
   { nom: '⚠️ le badge Google repasse à la hauteur d’Apple et paraît plus petit',
     // ⚠️ ANCRE RECALÉE LE 14/10 : on aligne la partie OPAQUE (Alex : « même

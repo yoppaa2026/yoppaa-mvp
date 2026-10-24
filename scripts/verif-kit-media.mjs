@@ -13,7 +13,7 @@ import { verdictJauge } from '../lib/jauge-page.js'
 import { policesEmbarquees, feuilleEnSvg, _oublierPolices } from '../lib/export-feuille.js'
 import { getPrixPlan } from '../lib/plans.js'
 import { accrocheKit, METIER_LIBRE_MAX } from '../lib/kit-accroche.js'
-import { couperEnDeux, BADGES_AFFICHE } from '../lib/affiche-kit.js'
+import { couperEnDeux, BADGES_AFFICHE, TEXTES_AFFICHE, TEXTES_CARTE_TABLE, MESSAGE_MAX, nettoyerMessage, textesAffiche, paletteAffiche } from '../lib/affiche-kit.js'
 import { tailleBadge, BADGE_APP_STORE, BADGE_GOOGLE_PLAY } from '../lib/stores.js'
 import { sansProse } from './lire-code.mjs'
 
@@ -269,14 +269,19 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ 🔴 LES DEUX ÉCRANS DESSINENT LA MÊME AFFICHE, ET NE LA REDESSINENT PAS.
   // La page du kit ne proposait qu'un QR nu : un carré noir et blanc sans logo,
   // sans nom de commerce et sans accroche, collé tel quel en vitrine.
+  // ⚠️ REPOINTÉE LE 24/10 : le tableau de bord passe aussi le message du
+  // commerçant (Alex : message pré-rempli et modifiable sous l'accroche).
   verifie('🔴 le tableau de bord passe par le module partagé',
-    /telechargerAffichePng\(\{ qrDataUrl, nomCommerce, clair, slug \}\)/.test(dash))
+    /telechargerAffichePng\(\{ qrDataUrl, nomCommerce, clair, slug, message \}\)/.test(dash))
   verifie('🔴 la page du kit aussi',
     /from '@\/lib\/affiche-kit'/.test(kit) && /telechargerAffichePng\(commun\)/.test(kit))
   verifie('🔴 et le kit propose bien l\'AFFICHE, plus le QR nu',
     !/Télécharger le QR/.test(kit) && /Ton affiche de vitrine/.test(kit),
     'le commerçant collerait un carré noir et blanc en vitrine')
-  verifie('le kit propose les deux fonds', /setFondClair\(o\.clair\)/.test(kit))
+  // ⚠️ REPOINTÉE LE 24/10 : « que du fond blanc » (Alex). Le kit proposait
+  // les deux fonds ; il ne garde que le blanc, sans bouton pour en changer.
+  verifie('🔴 le kit ne sort que le fond blanc',
+    /const fondClair = true/.test(kit) && !/setFondClair/.test(kit) && !/Fond violet/.test(kit))
   // ⚠️ RÉORIENTÉE LE 12/10 : les PDF viennent de la liste du module (A4, deux
   // A5, huit petites), plus de boutons écrits un par un.
   verifie('et les formats : le PNG, puis chaque PDF de la liste', /telecharger\('png'\)/.test(kit)
@@ -410,12 +415,19 @@ const egal = (nom, obtenu, attendu) =>
   verifie('et l\'ancien titre « QR Code » aussi', !/>QR Code</.test(dash))
   // ⚠️ L'APERÇU MONTRE LE MÊME FOND QUE LE FICHIER, sinon il ment sur ce qui
   // sortira de l'imprimante.
-  verifie('l\'aperçu suit le fond choisi',
-    /background: fondClair \? '#FFFFFF' : '#201044'/.test(dash))
-  // ⚠️ ET IL UTILISE LE COMPOSANT, il ne redessine plus le logo : cet aperçu en
-  // avait sa propre version, avec TROIS points au lieu de cinq.
-  verifie('🔴 l\'aperçu affiche le vrai logo',
-    /<YoppaaLogo size=\{34\} mode=\{fondClair \? 'light' : 'dark'\} withSlogan\/>/.test(dash))
+  // ⚠️ REPOINTÉE LE 24/10 : l'aperçu EST la vraie affiche, dessinée par le
+  // module avec le même fond et le même message que le fichier. Il suivait le
+  // fond à la main, et il lui manquait les badges des stores.
+  verifie('🔴 l\'aperçu est la vraie affiche, avec le message du fichier',
+    /construireAffiche\(\{ qrDataUrl, nomCommerce, clair: fondClair, textes: textesAffiche\(message\) \}\)/.test(dash)
+    && /src=\{apercuAffiche\}/.test(dash))
+  // ⚠️ REPOINTÉE LE 24/10 : il utilisait le composant du logo pour ne plus
+  // le redessiner (TROIS points au lieu de cinq). Désormais il ne redessine
+  // RIEN : ni logo, ni accroche, ni QR à la main.
+  verifie('🔴 l\'aperçu n\'est plus redessiné à la main',
+    !/TXT_QR/.test(lireCode('app/dashboard/ConfigDashboard.js')) && !/alt="Ton QR code"/.test(dash))
+  verifie('🔴 que du fond blanc dans le tableau de bord (Alex, 24/10)',
+    /const fondClair = true/.test(dash) && !/setFondClair/.test(dash) && !/>Fond de l&rsquo;affiche</.test(dash))
 }
 
 // ═══ 7) LA SORTIE DE LA PAGE KIT ══════════════════════════════════════════
@@ -1150,6 +1162,55 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ L'erreur se VOIT. Un bouton qui échoue en silence fait recommencer
   // trois fois avant qu'on comprenne.
   verifie('🔴 un export raté affiche sa raison', /setErreur\(e\?\.message/.test(page))
+}
+
+// ═══ ✅ LE MESSAGE SOUS L'ACCROCHE (Alex, 24/10) ════════════════════════════
+//
+// Accroche fixe, message pré-rempli et modifiable dessous, en violet pour
+// trancher sur l'accroche presque noire ; le QR rapetisse pour lui faire
+// place. Le carton de table n'a pas de message.
+{
+  const bloc = lire('lib/affiche-kit.js')
+  const dash = lire('app/dashboard/ConfigDashboard.js')
+
+  verifie('le message par défaut est celui d\'Alex',
+    TEXTES_AFFICHE.message === 'Découvre, commande, réserve et suis les actus de tes commerces.')
+  verifie('🔴 l\'accroche, elle, ne bouge pas',
+    TEXTES_AFFICHE.accroche === 'TOUS LES COMMERCES DE TA COMMUNE' && TEXTES_AFFICHE.accrocheSuite === 'DANS UNE SEULE APP')
+  verifie('🔴 le carton de table n\'a pas de message', !('message' in TEXTES_CARTE_TABLE))
+
+  // Le nettoyage, exécuté.
+  verifie('le message par défaut tient sous la limite', nettoyerMessage(TEXTES_AFFICHE.message) === TEXTES_AFFICHE.message)
+  verifie('les espaces sont resserrés', nettoyerMessage('  Viens   nous voir  ') === 'Viens nous voir')
+  verifie('vide reste vide', nettoyerMessage('') === '' && nettoyerMessage(null) === '' && nettoyerMessage(undefined) === '')
+  const long = 'mot '.repeat(40)
+  const coupe = nettoyerMessage(long)
+  verifie('🔴 un message trop long est coupé sous la limite', coupe.length <= MESSAGE_MAX, String(coupe.length))
+  verifie('et coupé à un mot, pas au milieu', /^(mot )*mot$/.test(coupe), coupe)
+  verifie('🔴 sans message choisi, l\'affiche garde celui par défaut', textesAffiche(undefined) === TEXTES_AFFICHE)
+  verifie('🔴 un message vidé ne dessine aucun message', textesAffiche('').message === '')
+  verifie('un message adapté remplace celui par défaut', textesAffiche(' Bienvenue ! ').message === 'Bienvenue !')
+
+  // Le dessin.
+  verifie('🔴 le message est réellement dessiné',
+    /lignesMessage\.forEach\(\(ligne, i\) => ctx\.fillText\(ligne, W \/ 2, yMessages\[i\]\)\)/.test(bloc))
+  verifie('🔴 et contraint à la largeur', /taillePourTenir\(texteMessage, MESSAGE_TAILLE, 700\)/.test(bloc))
+  verifie('🔴 en violet sur blanc, pour trancher sur l\'accroche presque noire',
+    /ctx\.fillStyle = P\.message/.test(bloc) && paletteAffiche(true).message === '#6B35C4'
+    && paletteAffiche(true).message !== paletteAffiche(true).accroche)
+  verifie('🔴 le QR rapetisse seulement quand il y a un message',
+    /const QR  = texteMessage \? 740 : 820/.test(bloc))
+  verifie('🔴 et la largeur de l\'affiche ne dépend plus du QR', /const W   = 820 \+ PAD \* 2/.test(bloc))
+  verifie('🔴 les badges descendent sous le message', /const yBadges\s+= yAccroche2 \+ 36 \+ hauteurMessage/.test(bloc))
+  verifie('🔴 les deux téléchargements dessinent le message reçu',
+    (bloc.match(/construireAffiche\(\{ qrDataUrl, nomCommerce, clair, textes: textesAffiche\(message\) \}\)/g) || []).length === 2)
+
+  // L'écran.
+  verifie('🔴 le PDF du tableau de bord emporte le message aussi',
+    /telechargerAffichePdf\(\{ qrDataUrl, nomCommerce, clair, slug, format, message \}\)/.test(dash))
+  verifie('le message part pré-rempli', /useState\(TEXTES_AFFICHE\.message\)/.test(dash))
+  verifie('la saisie est bornée', /id="message-affiche" value=\{message\} maxLength=\{MESSAGE_MAX\}/.test(dash))
+  verifie('et on peut revenir au message d\'origine', /onClick=\{\(\) => setMessage\(TEXTES_AFFICHE\.message\)\}/.test(dash))
 }
 
 console.log(`\nKit média : ${ok} vérifications`)

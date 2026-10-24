@@ -57,7 +57,7 @@ import {
   parentsPuisEnfants, optionParente,
   problemeDuGroupe, pastillesDuGroupe, basculeType, basculeObligatoire,
 } from '@/lib/options-choix'
-import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
+import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, MESSAGE_MAX, textesAffiche, construireAffiche, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { lireCommandeRealisable } from '@/lib/commande-realisable-lecture'
 import { creneauxPourPrestation, plagesTropCourtesPourCours, prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
@@ -99,7 +99,6 @@ import { avecPlagesDuCours, lirePlagesDuCommerce } from '@/lib/abonnement-cours'
 import { exclusionsQuiSeChevauchent, seancesDeLaFormule, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, verdictReprise, messageRefusReprise, termesInscriptionComptoir, verdictModificationAbonnement, messageRefusModification, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
 // 🔴 Le référentiel officiel, plus Nominatim (Alex, 05/10) : voir le composant.
 import ChampAdresseOfficielle from '@/app/components/ChampAdresseOfficielle'
-import YoppaaLogo from '@/app/components/YoppaaLogo'
 import dynamic from 'next/dynamic'
 import { zoneValide, centreValide, centreDeLaZone, cercle, libelleKm, RAYON_MIN_M, RAYON_MAX_M } from '@/lib/zone-etoile'
 // La carte (et Leaflet, sa feuille de style comprise) ne se charge que si le
@@ -12019,7 +12018,7 @@ function AfficheRetraitBloc({ slug, nomCommerce, clair, toast }) {
         ))}
       </div>
       <p style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.5 }}>
-        Le fond suit ton choix plus haut (blanc ou violet). En A5 : coupe la feuille le long des pointillés.
+        En A5 : coupe la feuille le long des pointillés.
       </p>
     </div>
   )
@@ -12037,10 +12036,16 @@ function QRCodeSection({ commercantId, toast }) {
   // aucun geste transactionnel à proposer (palier Exister).
   const [consigneG, setConsigneG] = useState(null)
   const [envoiKit, setEnvoiKit]   = useState(false)
-  // ⚠️ LE BLANC PAR DÉFAUT, et c'est un choix. Un aplat violet en A4 vide une
-  // cartouche par affiche et sort strié sur la plupart des imprimantes de
-  // commerce ; le violet reste à un clic pour qui fait imprimer en boutique.
-  const [fondClair, setFondClair] = useState(true)
+  // ⚠️ QUE DU FOND BLANC (Alex, 24/10). Le violet restait à un clic ; il ne
+  // l'est plus. Le blanc vaut aussi pour le carton de table et l'affiche du
+  // point de retrait, qui suivaient ce même choix.
+  const fondClair = true
+  // ✅ LE MESSAGE SOUS L'ACCROCHE (Alex, 24/10) : pré-rempli, le commerçant
+  // l'adapte avant de télécharger. Vidé, l'affiche sort sans message.
+  const [message, setMessage] = useState(TEXTES_AFFICHE.message)
+  // L'aperçu est la VRAIE affiche : l'ancien, redessiné à la main, n'avait ni
+  // les badges des stores ni la mise en page du fichier.
+  const [apercuAffiche, setApercuAffiche] = useState(null)
   // Le format en cours de préparation : les points disent le travail, et un
   // double clic ne lance pas deux PDF.
   const [pdfEnCours, setPdfEnCours] = useState(null)
@@ -12090,7 +12095,18 @@ function QRCodeSection({ commercantId, toast }) {
   // l'adresse d'une fiche dans cet écran, et elle a rougi sur cette ligne-là.
   const url = lienFiche(slug)
   // Les textes de l'affiche vivent avec elle, dans `lib/affiche-kit.js`.
-  const TXT_QR = TEXTES_AFFICHE
+
+  // L'aperçu se redessine quand le message change, un instant après la frappe.
+  useEffect(() => {
+    if (!qrDataUrl) return
+    let actif = true
+    const minuteur = setTimeout(() => {
+      construireAffiche({ qrDataUrl, nomCommerce, clair: fondClair, textes: textesAffiche(message) })
+        .then(c => { if (actif && c) setApercuAffiche(c.toDataURL('image/png')) })
+        .catch(() => {})
+    }, 250)
+    return () => { actif = false; clearTimeout(minuteur) }
+  }, [qrDataUrl, nomCommerce, fondClair, message])
 
 
   useEffect(() => {
@@ -12148,7 +12164,7 @@ function QRCodeSection({ commercantId, toast }) {
   // nom du commerce dans du HTML brut : une injection, limitée au commerçant
   // lui-même, disparue avec la fonctionnalité.
   async function downloadPNG(clair) {
-    const fait = await telechargerAffichePng({ qrDataUrl, nomCommerce, clair, slug })
+    const fait = await telechargerAffichePng({ qrDataUrl, nomCommerce, clair, slug, message })
     toast(fait ? 'PNG téléchargé' : 'QR pas encore prêt', fait ? 'success' : 'error')
   }
 
@@ -12156,7 +12172,7 @@ function QRCodeSection({ commercantId, toast }) {
     if (pdfEnCours) return
     setPdfEnCours(format)
     try {
-      const fait = await telechargerAffichePdf({ qrDataUrl, nomCommerce, clair, slug, format })
+      const fait = await telechargerAffichePdf({ qrDataUrl, nomCommerce, clair, slug, format, message })
       toast(fait ? `PDF ${LIBELLES_AFFICHE[format]} téléchargé` : 'QR pas encore prêt', fait ? 'success' : 'error')
     } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
     setPdfEnCours(null)
@@ -12183,49 +12199,30 @@ function QRCodeSection({ commercantId, toast }) {
       <h2 style={{ ...s.h2, marginBottom: 4 }}>Mon kit média</h2>
       <p style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Ton affiche pour la vitrine, ton lien, tes messages prêts à partager.</p>
 
-      {/* ── Aperçu : le MÊME fond que le fichier téléchargé, sinon l'aperçu
-          ment sur ce qui sortira de l'imprimante. ── */}
-      <div style={{ background: fondClair ? '#FFFFFF' : '#201044', border: `1.5px solid ${fondClair ? T.hairline : '#201044'}`, borderRadius: 18, padding: '22px 20px 20px', textAlign: 'center', marginBottom: 12 }}>
-        {/* ⚠️ LE LOGO VIENT DU COMPOSANT, il n'est plus redessiné à la main :
-            cet aperçu en avait sa propre version, avec TROIS points au lieu de
-            cinq et sans le décalage V2-B. */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-          <YoppaaLogo size={34} mode={fondClair ? 'light' : 'dark'} withSlogan/>
-        </div>
-
-        <div style={{ width: 60, height: 1.5, background: fondClair ? '#E2D8F4' : '#4B3178', margin: '14px auto' }}/>
-
-        <p style={{ fontSize: 15, fontWeight: 800, color: fondClair ? '#1A0840' : '#FFFFFF', marginBottom: 14, letterSpacing: '-0.3px' }}>{nomCommerce}</p>
-
-        {qrDataUrl
-          ? <img decoding="async" loading="lazy" src={qrDataUrl} alt="Ton QR code" style={{ width: 180, height: 180, borderRadius: 12, display: 'block', margin: '0 auto', background: '#fff', padding: 8, border: fondClair ? `1px solid ${T.hairline}` : 'none' }}/>
-          : <div style={{ width: 180, height: 180, background: fondClair ? T.pale : '#2D0F6B', borderRadius: 12, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 12 }}>Génération…</div>
-        }
-
-        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '0.95rem', lineHeight: 1.25, color: fondClair ? '#1A0840' : '#FFFFFF', letterSpacing: '-0.3px', margin: '16px 0 0' }}>
-          {TXT_QR.accroche}<br/>{TXT_QR.accrocheSuite}
-        </p>
-        <p style={{ fontSize: 11, fontWeight: 600, color: fondClair ? '#9585AE' : '#A78FD0', marginTop: 10 }}>{TXT_QR.pied}</p>
+      {/* ── Aperçu : LA VRAIE AFFICHE, dessinée par `lib/affiche-kit.js`
+          (24/10). L'ancien aperçu était redessiné à la main : il n'avait ni
+          les badges des stores ni le message, et mentait donc sur ce qui
+          sortait de l'imprimante. ── */}
+      <div style={{ background: T.pale, borderRadius: 18, padding: 14, marginBottom: 12 }}>
+        {apercuAffiche
+          ? <img decoding="async" loading="lazy" src={apercuAffiche} alt="Aperçu de ton affiche de vitrine" style={{ width: '100%', maxWidth: 300, display: 'block', margin: '0 auto', borderRadius: 4, boxShadow: '0 6px 18px rgba(26,8,64,0.15)' }}/>
+          : <div style={{ aspectRatio: '3 / 4', maxWidth: 300, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><DotsAttente taille={6} label="Préparation de l’aperçu"/></div>}
       </div>
 
-      {/* ── Le fond, au choix ── */}
-      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Fond de l&rsquo;affiche</p>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-        {[
-          { clair: true,  label: 'Blanc', aide: 'Le moins gourmand en encre' },
-          { clair: false, label: 'Violet', aide: 'Se remarque de loin en vitrine' },
-        ].map(o => (
-          <button key={o.label} onClick={() => setFondClair(o.clair)}
-            style={{ ...s.btn, ...(fondClair === o.clair ? s.btnPrimary : s.btnGhost), flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            {fondClair === o.clair && <Check size={13} strokeWidth={2.2}/>} {o.label}
+      {/* ── Le message sous l'accroche, pré-rempli et modifiable ── */}
+      <label htmlFor="message-affiche" style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        Message de l&rsquo;affiche
+      </label>
+      <Input id="message-affiche" value={message} maxLength={MESSAGE_MAX} onChange={e => setMessage(e.target.value)} placeholder={TEXTES_AFFICHE.message}/>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, margin: '4px 0 16px' }}>
+        <p style={{ fontSize: 10.5, color: T.muted, margin: 0 }}>{MESSAGE_MAX} caractères au plus. Laisse vide pour une affiche sans message.</p>
+        {message !== TEXTES_AFFICHE.message && (
+          <button type="button" onClick={() => setMessage(TEXTES_AFFICHE.message)}
+            style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, fontWeight: 700, color: T.main, cursor: 'pointer', flexShrink: 0 }}>
+            Remettre le message d&rsquo;origine
           </button>
-        ))}
+        )}
       </div>
-      <p style={{ fontSize: 10.5, color: T.muted, marginBottom: 16, lineHeight: 1.5 }}>
-        {fondClair
-          ? 'Seuls le logo, le QR et le texte consomment de l’encre : c’est la version à imprimer toi-même.'
-          : 'Un aplat violet plein format vide une cartouche par affiche. À réserver à une impression en boutique.'}
-      </p>
 
       {/* ⚠️ CE BANDEAU ANNONÇAIT UNE BASCULE QUI N'EXISTE PLUS. Il disait
           « avant le 1er octobre, ton QR inscrit tes clients ; le jour du

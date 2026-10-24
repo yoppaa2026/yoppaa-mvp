@@ -265,6 +265,26 @@ for (const [nom, c] of ROUTES) {
   v('🔴 impression refusée sans imprimante, ou avec une image mal encodée (en-tête « data: »)',
     refus(() => S.optionsImpression(null, 'x')) && refus(() => S.optionsImpression({ port: 'bluetooth', channelInfo: 'a' }, 'x'))
     && refus(() => S.optionsImpression(imp, 'data:image/png;base64,xx')) && refus(() => S.optionsImpression(imp, '')))
+  // ✅ 24/10 (Alex) : la QL-800 en USB, et le modèle qui suit l'imprimante.
+  // ⚠️ Un refus LÈVE : rattrapé, sinon une régression ferait planter le banc au lieu de le faire rougir.
+  const usb = (() => { try { return S.optionsImpression({ port: 'usb', channelInfo: '', modelName: 'QL-800' }, 'iVBORw0KGgo') } catch { return null } })()
+  v('🔴 en USB : la QL-800 part en « QL_800 », sans adresse, même rouleau et même coupe',
+    usb?.port === 'usb' && usb.modelName === 'QL_800' && usb.channelInfo === '' && usb.labelName === 'RollW62' && usb.autoCut === true, JSON.stringify(usb))
+  v('🔴 le modèle suit l’imprimante trouvée (variantes « c » comprises), le défaut reste la QL-820NWB',
+    S.modeleSdk('QL-800') === 'QL_800' && S.modeleSdk('Brother QL-810Wc') === 'QL_810W' && S.modeleSdk('QL-820NWBc') === 'QL_820NWB'
+    && S.modeleSdk('ql_810w') === 'QL_810W' && S.modeleSdk('') === 'QL_820NWB' && S.modeleSdk(null) === 'QL_820NWB' && S.modeleSdk('PT-P710BT') === 'QL_820NWB')
+  v('🔴 une imprimante valable : USB sans adresse, Wi-Fi AVEC adresse, rien d’autre',
+    S.imprimanteValide({ port: 'usb' }) && S.imprimanteValide({ port: 'wifi', channelInfo: '10.0.0.2' })
+    && !S.imprimanteValide({ port: 'wifi', channelInfo: ' ' }) && !S.imprimanteValide({ port: 'bluetooth', channelInfo: 'a' })
+    && !S.imprimanteValide(null) && !S.imprimanteValide('usb'))
+  v('🔴 la recherche USB qui échoue dit quoi faire (rien de branché, autorisation, demande ouverte, autre)',
+    /Branche la Brother/.test(S.messageRechercheUsb({ message: 'Error - connection failed: device not found' }))
+    && /Autorise Yoppaa Comptoir/.test(S.messageRechercheUsb({ message: "Error - usbReceiver can't current receiver" }))
+    && /déjà ouverte/.test(S.messageRechercheUsb('Error - USB permission request is already pending'))
+    && /Débranche et rebranche/.test(S.messageRechercheUsb({ message: 'Error - startUSBSearch: X' })))
+  v('la clé d’une imprimante trouvée : en USB sans adresse, le numéro de série, sinon le modèle',
+    S.cleImprimante({ port: 'usb', channelInfo: '', serialNumber: 'S1' }) === 'usb:S1' && S.cleImprimante({ port: 'usb', modelName: 'QL-800' }) === 'usb:QL-800'
+    && S.cleImprimante({ port: 'wifi', channelInfo: '10.0.0.2' }) === 'wifi:10.0.0.2')
   v('🔴 les erreurs de la Brother deviennent des raisons lisibles',
     S.raisonDepuisErreur({ message: 'ERROR_PAPER_EMPTY' }) === 'papier'
     && S.raisonDepuisErreur({ message: 'Cover open' }) === 'couvercle'
@@ -293,6 +313,13 @@ for (const [nom, c] of ROUTES) {
   v('🔴 le résultat est renvoyé jusqu’à trois fois (perdu, l’étiquette sortirait deux fois)',
     /for \(let essai = 0; essai < 3; essai\+\+\)/.test(sc) && /await rendreResultat\(\{ commercant_id: commercantId, appareil_id, id: e\.id, ok: !raison, raison \}\)/.test(sc))
   v('le réglage de la tablette ne s’affiche que dans l’app', /if \(!b\?\.brother\) return null/.test(sc))
+  v('🔴 (24/10) la tablette cherche en Wi-Fi ET en USB, et une Brother USB sans adresse est gardée',
+    /await b\.brother\.search\(\{ port: 'wifi', searchDuration: 10 \}\)/.test(sc) && /await b\.brother\.search\(\{ port: 'usb' \}\)/.test(sc)
+    && /if \(!p \|\| \(p\.port !== 'usb' && !p\.channelInfo\)\) return/.test(sc)
+    && /<button type="button" onClick=\{chercherUsb\}/.test(sc)
+    && /b\.retenir\(\{ port: enUsb \? 'usb' : 'wifi', channelInfo: p\.channelInfo \|\| '', serialNumber: p\.serialNumber \|\| '', modelName: modele \}\)/.test(sc))
+  v('🔴 une demande d’autorisation USB sans réponse ne fige pas le bouton (20 s au plus)',
+    /const garde = setTimeout\(\(\) => setEtape\(e => \(e === 'recherche' \? null : e\)\), 20000\)/.test(sc) && /clearTimeout\(garde\)/.test(sc))
   const bord = code('app/dashboard/page.js')
   v('🔴 la boucle est montée à la RACINE du tableau de bord (elle tourne quel que soit l’onglet)',
     bord.indexOf('<BoucleStation commercantId={commercant?.id} comptoir={comptoir} brother={brother}/>') > -1

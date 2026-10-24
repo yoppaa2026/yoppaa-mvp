@@ -111,6 +111,21 @@ const MUTATIONS = [
     de: 'ALTER TABLE public.etiquettes_impression ENABLE ROW LEVEL SECURITY;', vers: '' },
   { nom: '⚠️ les sacs ne sont plus bornés en base', fichier: SQL,
     de: 'CHECK (sacs BETWEEN 1 AND 20)', vers: 'CHECK (sacs > 0)' },
+  // ─── la QL-800 en USB (Alex, 24/10) ─────────────────────────────────────
+  { nom: '🔴 une Brother USB est refusée (la QL-800 du kit n imprime jamais)', fichier: 'lib/station-comptoir.js',
+    de: "  if (i.port === 'usb') return true", vers: '' },
+  { nom: '🔴 toute imprimante part de nouveau en QL_820NWB', fichier: 'lib/station-comptoir.js',
+    de: '    modelName: modeleSdk(imprimante.modelName),', vers: '' },
+  { nom: '🔴 un nom de modèle trop court avale les autres (« QL-810Wc » mal lue)', fichier: 'lib/station-comptoir.js',
+    de: "export const MODELES_BROTHER = ['QL_820NWB', 'QL_810W', 'QL_800']", vers: "export const MODELES_BROTHER = ['QL_800', 'QL_8', 'QL_820NWB', 'QL_810W']" },
+  { nom: '⚠️ un refus d autorisation dit « rien de branché »', fichier: 'lib/station-comptoir.js',
+    de: "  if (/receiver|permission|denied/.test(m)) return", vers: '  if (false) return' },
+  { nom: '🔴 la recherche USB disparaît du réglage', fichier: 'app/dashboard/StationComptoir.js',
+    de: "      await b.brother.search({ port: 'usb' })", vers: "      await b.brother.search({ port: 'wifi', searchDuration: 10 })" },
+  { nom: '🔴 une Brother USB sans adresse est ignorée à la recherche', fichier: 'app/dashboard/StationComptoir.js',
+    de: "        if (!p || (p.port !== 'usb' && !p.channelInfo)) return", vers: '        if (!p?.channelInfo) return' },
+  { nom: '⚠️ une demande d autorisation sans réponse fige le bouton', fichier: 'app/dashboard/StationComptoir.js',
+    de: "    const garde = setTimeout(() => setEtape(e => (e === 'recherche' ? null : e)), 20000)", vers: '    const garde = null' },
 ]
 
 const lancer = () => {

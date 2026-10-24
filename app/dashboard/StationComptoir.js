@@ -20,7 +20,7 @@ import { etiquetteEnBase64, policeMarqueDeLaPage } from '@/lib/etiquette-image'
 import { INTERVALLE_FILE_MS } from '@/lib/file-etiquettes'
 import {
   brotherNatif, imprimanteValide, optionsImpression, raisonDepuisErreur, identifiantAppareil,
-  DELAI_IMPRESSION_MS, CLE_IMPRIMANTE,
+  messageRechercheUsb, cleImprimante, DELAI_IMPRESSION_MS, CLE_IMPRIMANTE,
 } from '@/lib/station-comptoir'
 
 const T = { ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', vert: '#047857', erreur: '#B91C1C' }
@@ -126,19 +126,23 @@ export function BoucleStation({ commercantId, comptoir, brother: b }) {
 
 /**
  * LE RÉGLAGE DE LA TABLETTE, dans « Étiquettes de commande » : seulement dans
- * l'app. Chercher la Brother, la retenir, déclarer cette tablette.
+ * l'app. Chercher la Brother (Wi-Fi ou USB, 24/10), la retenir, déclarer
+ * cette tablette.
  */
 export function ReglageTablette({ commercantId, comptoir, brother: b }) {
   const [trouvees, setTrouvees] = useState([])
   const [etape, setEtape] = useState(null) // 'recherche' | 'declaration'
   const [message, setMessage] = useState(null)
+  const nbTrouvees = useRef(0)
   useEffect(() => {
     if (!b?.brother) return
     let poignee = null
     ;(async () => {
       poignee = await b.brother.addListener('onPrinterAvailable', (p) => {
-        if (!p?.channelInfo) return
-        setTrouvees(prev => prev.some(x => x.channelInfo === p.channelInfo) ? prev : [...prev, p])
+        // ⚠️ EN USB, PAS TOUJOURS D'ADRESSE : la Brother branchée suffit.
+        if (!p || (p.port !== 'usb' && !p.channelInfo)) return
+        nbTrouvees.current += 1
+        setTrouvees(prev => prev.some(x => cleImprimante(x) === cleImprimante(p)) ? prev : [...prev, p])
       })
     })()
     return () => { poignee?.remove?.() }
@@ -152,6 +156,26 @@ export function ReglageTablette({ commercantId, comptoir, brother: b }) {
     try { await b.brother.search({ port: 'wifi', searchDuration: 10 }) } catch { setMessage('La recherche n’a pas pu démarrer. Vérifie le Wi-Fi de la tablette.') }
     setTimeout(() => setEtape(e => (e === 'recherche' ? null : e)), 10500)
   }
+  // ✅ (Alex, 24/10) LA QL-800 BRANCHÉE SUR LE HUB. La première fois, Android
+  // demande l'autorisation ; l'app la retient ensuite (dépôt yoppaa-comptoir).
+  // L'extension annonce chaque Brother trouvée PUIS rend la main.
+  // ⚠️ Une demande d'autorisation sans réponse ne fige pas le bouton : 20 s.
+  async function chercherUsb() {
+    if (etape) return
+    setEtape('recherche'); setMessage(null); setTrouvees([])
+    nbTrouvees.current = 0
+    const garde = setTimeout(() => setEtape(e => (e === 'recherche' ? null : e)), 20000)
+    try {
+      await b.brother.search({ port: 'usb' })
+      if (nbTrouvees.current === 0) setMessage(messageRechercheUsb('not found'))
+    } catch (e) {
+      setMessage(messageRechercheUsb(e))
+    } finally {
+      clearTimeout(garde)
+      setEtape(e => (e === 'recherche' ? null : e))
+    }
+  }
+  const usb = b.imprimante?.port === 'usb'
   async function declarer() {
     if (etape || !imprimanteValide(b.imprimante)) return
     setEtape('declaration'); setMessage(null)
@@ -168,12 +192,15 @@ export function ReglageTablette({ commercantId, comptoir, brother: b }) {
     <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: '#F8F5FF', border: `1px solid ${T.pale}` }}>
       <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: T.ink }}>Cette tablette</p>
       <p style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5, color: T.deep }}>
-        {b.imprimante ? `Imprimante : ${b.imprimante.modelName || 'Brother'} (${b.imprimante.channelInfo}).` : 'Aucune imprimante choisie : cherche la Brother sur le Wi-Fi.'}
+        {b.imprimante ? `Imprimante : ${b.imprimante.modelName || 'Brother'} (${usb ? 'USB' : b.imprimante.channelInfo}).` : 'Aucune imprimante choisie : cherche la Brother en Wi-Fi ou en USB.'}
         {station?.cetAppareil ? ' C’est l’imprimante du comptoir.' : ''}
       </p>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         <button type="button" onClick={chercher} disabled={!!etape} style={bouton(false)}>
-          {etape === 'recherche' ? <DotsAttente/> : null} Chercher la Brother
+          {etape === 'recherche' ? <DotsAttente/> : null} Chercher en Wi-Fi
+        </button>
+        <button type="button" onClick={chercherUsb} disabled={!!etape} style={bouton(false)}>
+          {etape === 'recherche' ? <DotsAttente/> : null} Chercher en USB
         </button>
         {imprimanteValide(b.imprimante) && !station?.cetAppareil && (
           <button type="button" onClick={declarer} disabled={!!etape} style={bouton(true)}>
@@ -183,18 +210,23 @@ export function ReglageTablette({ commercantId, comptoir, brother: b }) {
       </div>
       {trouvees.length > 0 && (
         <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 6 }}>
-          {trouvees.map(p => (
-            <li key={p.channelInfo}>
-              <button type="button" onClick={() => { b.retenir({ port: 'wifi', channelInfo: p.channelInfo, modelName: p.modelName || 'QL-820NWB' }); setMessage(`${p.modelName || 'Brother'} retenue.`) }}
-                style={{ ...bouton(b.imprimante?.channelInfo === p.channelInfo), width: '100%', justifyContent: 'space-between' }}>
-                <span>{p.modelName || 'Brother'}</span><span style={{ fontWeight: 600 }}>{p.channelInfo}</span>
-              </button>
-            </li>
-          ))}
+          {trouvees.map(p => {
+            const enUsb = p.port === 'usb'
+            // Sans nom rendu en USB : la QL-800 du kit (Alex, 24/10).
+            const modele = p.modelName || (enUsb ? 'QL-800' : 'QL-820NWB')
+            return (
+              <li key={cleImprimante(p)}>
+                <button type="button" onClick={() => { b.retenir({ port: enUsb ? 'usb' : 'wifi', channelInfo: p.channelInfo || '', serialNumber: p.serialNumber || '', modelName: modele }); setMessage(`${modele} retenue.`) }}
+                  style={{ ...bouton(!!b.imprimante && cleImprimante(b.imprimante) === cleImprimante(p)), width: '100%', justifyContent: 'space-between' }}>
+                  <span>{modele}</span><span style={{ fontWeight: 600 }}>{enUsb ? 'USB' : p.channelInfo}</span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
       {etape === null && trouvees.length === 0 && message === null && !b.imprimante && (
-        <p style={{ margin: '8px 0 0', fontSize: 12.5, color: T.muted }}>La Brother doit être allumée et sur le même Wi-Fi que la tablette.</p>
+        <p style={{ margin: '8px 0 0', fontSize: 12.5, color: T.muted }}>En Wi-Fi : la Brother allumée, sur le même réseau que la tablette. En USB : branchée sur le hub, voyant « Editor Lite » éteint.</p>
       )}
       {message && <p role="status" style={{ margin: '8px 0 0', fontSize: 12.5, fontWeight: 700, color: T.deep }}>{message}</p>}
       <APropos/>

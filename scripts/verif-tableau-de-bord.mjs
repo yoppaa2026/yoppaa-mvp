@@ -413,8 +413,10 @@ const verifie = (nom, cond, detail = '') => {
       && /\[champ\]: creneauId/.test(bascule) && /\.eq\(champ, creneauId\)/.test(bascule))
   // (11/10, réorientée) le geste vit dans la bande compacte, rendue hors
   // historique pour les DEUX vues (retrait et tournées).
+  // REPOINTÉE LE 24/10 : la bande vit dans le repli « Ma journée »
+  // (`PanneauAPreparer`), lui-même rendu hors historique pour les deux vues.
   verifie('I7 le bouton existe aussi sur les tournées',
-    /\{!modeHistorique && \(\s*<BandeCreneaux creneauxRemplis=\{creneauxRemplis\} estTournee=\{vueMode === 'livraison'\}/.test(dash)
+    /\{!modeHistorique && \(\(\) => \{\s*const fermeture = exceptionDuJour\(exceptionsCommandes, jourActif\)[\s\S]{0,1600}<PanneauAPreparer [\s\S]{0,400}creneaux=\{creneauxRemplis\.length > 0 \? \(\s*<BandeCreneaux creneauxRemplis=\{creneauxRemplis\} estTournee=\{vueMode === 'livraison'\}/.test(dash)
       && /onBasculer=\{basculerBlocageCreneau\}/.test(dash))
   verifie('et il est bien appliqué au remplissage',
     /appliquerBlocage\(c, blocagesDuJour\.has\(c\.creneau\?\.id\)\)/.test(dash))
@@ -1964,6 +1966,22 @@ const verifie = (nom, cond, detail = '') => {
     && /const prep = aPreparer\(commandesDuJour, \{ nomsArticles \}\)/.test(vue)
     && /supabase\.from\('articles'\)\.select\('id, nom'\)\.in\('id', idsDuo\.split\(','\)\)/.test(vue)
     && /const blob = await pdfCommandes\(donnees, \{ commerceNom, periode \}\)/.test(vue) && /\.pdf`, blob\)/.test(vue))
+  // ✅ 24/10 (Alex au tableau, tablette du comptoir en portrait).
+  verifie('🔴 « Ma journée » range les créneaux et « Fermer les commandes de ce jour », et le geste reste celui du tableau de bord',
+    /\{creneaux && \(/.test(vue) && /\{creneaux\}/.test(vue)
+    && /\{onFermerJour && \(\s*<button type="button" onClick=\{onFermerJour\}/.test(vue)
+    && /onFermerJour=\{!fermeCeJour && creneauxRemplis\.length > 0 \? \(\) => setFermeturesOuvertes\(\{ date: jourActif, portee: 'commandes' \}\) : null\}/.test(page))
+  verifie('🔴 un jour fermé reste dit en clair, hors du repli',
+    /\{fermeCeJour && \(\s*<div[^>]*>\s*<span[^>]*>\s*\{porteeDe\(fermeture\) === 'commandes'/.test(page))
+  verifie('🔴 le filtre « Actives ▾ » propose chaque filtre de la vue, avec son nombre, et choisit LE filtre',
+    /<select className="barre-filtre" value=\{filtreStatut\} onChange=\{e => setFiltreStatut\(e\.target\.value\)\}/.test(page)
+    && /\{filtresStatut\.map\(f => \(\s*<option key=\{f\.key\} value=\{f\.key\}/.test(page)
+    && /\{f\.label\}\{f\.count > 0 \? ` · \$\{f\.count\}` : ''\}/.test(page))
+  verifie('🔴 la bascule, les jours et le filtre partagent une ligne dès 600 px ; le téléphone met les jours dessous',
+    /\.barre-jours-piste \{\s*order: 3;\s*flex: 1 1 100%;/.test(page)
+    && /@media \(min-width: 600px\) \{[^}]*\}[\s\S]{0,400}\.barre-jours-piste \{ order: 0; flex: 1 1 0; \}/.test(page))
+  verifie('🔴 trois colonnes tiennent sur la tablette en portrait (210 px au moins chacune)',
+    /gridTemplateColumns: 'repeat\(auto-fit, minmax\(210px, 1fr\)\)'/.test(vue))
   verifie('le bouton d’export montre qu’il travaille, et un échec se dit',
     /\{enExport === q && <DotsAttente/.test(vue) && /setMessage\('Le PDF n’a pas pu être créé\. Réessaie\.'\)/.test(vue))
   const pdfSrc = sansProse(readFileSync(new URL('../lib/export-commandes-pdf.js', import.meta.url), 'utf8'))

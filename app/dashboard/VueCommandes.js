@@ -4,8 +4,8 @@
 //
 // Trois colonnes Nouvelles → En prépa → Prêtes, des cartes compactes triées par
 // heure, UN bouton par carte (l'étape suivante), le reste dans la carte
-// complète qui s'ouvre d'un clic. Au-dessus : la bande des créneaux en une
-// ligne, et le panneau « À préparer » avec l'export.
+// complète qui s'ouvre d'un clic. Au-dessus, un seul repli « Ma journée »
+// (24/10) : la bande des créneaux, À préparer et l'export.
 //
 // ⚠️ CE FICHIER N'ÉCRIT RIEN. Il appelle les gestes du tableau de bord
 // (`onAvancer` = `changerStatut`, `onBasculerCreneau` = fermer / rouvrir) et
@@ -69,7 +69,7 @@ function CarteCompacte({ commande, couleur, aujourdhui, maintenantMin, categorie
     <div role="button" tabIndex={0} onClick={() => onOuvrir(commande)}
       onKeyDown={e => { if (e.key === 'Enter') onOuvrir(commande) }}
       aria-label={`Commande ${ref ? `#${ref}` : ''} de ${commande.client_nom || 'client'}, ouvrir le détail`}
-      style={{ background: '#fff', borderRadius: 12, border: `1.5px solid ${retard ? '#FCA5A5' : T.hairline}`, borderLeft: `4px solid ${couleur}`, padding: '10px 12px', cursor: 'pointer', display: 'grid', gap: 6 }}>
+      style={{ background: '#fff', borderRadius: 12, border: `1.5px solid ${retard ? '#FCA5A5' : T.hairline}`, borderLeft: `4px solid ${couleur}`, padding: '10px', cursor: 'pointer', display: 'grid', gap: 6, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px', fontVariantNumeric: 'tabular-nums' }}>{heure || '—'}</span>
         {ref && <span style={{ fontSize: 13, fontWeight: 800, color: couleur }}>#{ref}</span>}
@@ -105,19 +105,19 @@ function CarteCompacte({ commande, couleur, aujourdhui, maintenantMin, categorie
       <div style={{ display: 'flex', gap: 6 }}>
         {action ? (
           <button type="button" onClick={avancer} disabled={envoi}
-            style={{ flex: 1, padding: '8px 10px', borderRadius: 9, border: 'none', background: couleur, color: '#fff', fontWeight: 800, fontSize: 13, cursor: envoi ? 'default' : 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            style={{ flex: 1, padding: '8px 6px', borderRadius: 9, border: 'none', background: couleur, color: '#fff', fontWeight: 800, fontSize: 13, cursor: envoi ? 'default' : 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {action.libelle} →
             {envoi && <DotsAttente couleur="#fff" taille={4} label="Changement de statut"/>}
           </button>
         ) : (
           <button type="button" onClick={e => { e.stopPropagation(); onOuvrir(commande) }}
-            style={{ flex: 1, padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${couleur}`, background: '#fff', color: couleur, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+            style={{ flex: 1, padding: '8px 6px', borderRadius: 9, border: `1.5px solid ${couleur}`, background: '#fff', color: couleur, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
             Ouvrir la commande
           </button>
         )}
         <button type="button" onClick={e => { e.stopPropagation(); onOuvrir(commande) }} aria-label="Toutes les actions de la commande"
           title="Détail et toutes les actions"
-          style={{ width: 38, borderRadius: 9, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.ink, fontWeight: 900, fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>⋯</button>
+          style={{ width: 34, flexShrink: 0, borderRadius: 9, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.ink, fontWeight: 900, fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>⋯</button>
       </div>
     </div>
   )
@@ -130,9 +130,12 @@ export function ColonnesCommandes({ commandes = [], aujourdhui, categorie, onAva
   const maintenantMin = useMinuteBruxelles()
   const colonnes = colonnesDeCommandes(commandes)
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
+    // ✅ (Alex, 24/10) 210 px au moins par colonne : les trois tiennent côte à
+    // côte sur la tablette du comptoir en portrait (≈ 750 px de large), le
+    // téléphone garde une colonne.
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10, alignItems: 'start' }}>
       {colonnes.map(col => (
-        <section key={col.statut} aria-label={col.titre} style={{ background: col.fond, borderRadius: 14, padding: 10, display: 'grid', gap: 8 }}>
+        <section key={col.statut} aria-label={col.titre} style={{ background: col.fond, borderRadius: 14, padding: 8, display: 'grid', gap: 8, minWidth: 0 }}>
           <header style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px' }}>
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: col.couleur }}/>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 900, color: T.ink, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{col.titre}</h3>
@@ -170,7 +173,7 @@ export function BandeCreneaux({ creneauxRemplis = [], estTournee = false, etatCr
   }
   return (
     <div role="list" aria-label={estTournee ? 'Remplissage des tournées' : 'Remplissage des créneaux'}
-      style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 12, scrollbarWidth: 'thin' }}>
+      style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'thin' }}>
       {creneauxRemplis.map(r => {
         const couleur = couleurDe(r)
         const ratio = r.capacite > 0 ? Math.min(1, r.utiliseEff / r.capacite) : 0
@@ -205,7 +208,12 @@ function telecharger(nomFichier, blob) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], jour, commerceNom = '', categorie = null }) {
+// ✅ « MA JOURNÉE » (Alex, 24/10, décidé au tableau pour la tablette du
+// comptoir) : le repli garde, fermé, une seule ligne (ce qui reste à préparer)
+// et range dedans les créneaux, « Fermer les commandes de ce jour » et les PDF.
+// La bande des créneaux et le geste de fermeture viennent du tableau de bord
+// (`creneaux`, `onFermerJour`) : ce panneau ne les calcule pas.
+export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], jour, commerceNom = '', categorie = null, creneaux = null, titreCreneaux = 'Créneaux du jour', onFermerJour = null }) {
   const [ouvert, setOuvert] = useState(() => { try { return localStorage.getItem(CLE_OUVERT) === '1' } catch { return false } })
   useEffect(() => { try { localStorage.setItem(CLE_OUVERT, ouvert ? '1' : '0') } catch { /* rien à retenir */ } }, [ouvert])
   // Le mot qui suit l'export, ici même : le tableau de bord n'affiche pas les
@@ -261,23 +269,40 @@ export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], j
           style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
             style={{ transform: ouvert ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}><path d="M9 6l6 6-6 6"/></svg>
-          <span style={{ fontSize: 14, fontWeight: 900, color: T.ink, flexShrink: 0 }}>À préparer</span>
+          <span style={{ fontSize: 14, fontWeight: 900, color: T.ink, flexShrink: 0 }}>Ma journée</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: prep.total ? T.main : T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-            {prep.total ? `${prep.total} article${prep.total > 1 ? 's' : ''} · ${resume}` : 'Rien à préparer'}
+            {prep.total ? `${prep.total} article${prep.total > 1 ? 's' : ''} à préparer · ${resume}` : 'Rien à préparer'}
           </span>
         </button>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          {[['jour', 'PDF du jour'], ['semaine', 'PDF de la semaine']].map(([q, l]) => (
-            <button key={q} type="button" onClick={() => exporter(q)} disabled={!!enExport}
-              style={{ ...boutonExport, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-              {l}
-              {enExport === q && <DotsAttente couleur={T.main} taille={4} label="Création du PDF"/>}
-            </button>
-          ))}
-        </div>
-        {message && <p role="status" style={{ flexBasis: '100%', margin: 0, fontSize: 13, fontWeight: 700, color: T.main }}>{message}</p>}
       </div>
+      {ouvert && (
+        <div style={{ borderTop: `1px solid ${T.hairline}`, padding: '10px 12px', display: 'grid', gap: 10 }}>
+          {creneaux && (
+            <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <p style={{ ...titrePanneau, margin: 0 }}>{titreCreneaux}</p>
+                {onFermerJour && (
+                  <button type="button" onClick={onFermerJour} style={{ ...boutonExport, marginLeft: 'auto', fontWeight: 800 }}>
+                    Fermer les commandes de ce jour
+                  </button>
+                )}
+              </div>
+              {creneaux}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[['jour', 'PDF du jour'], ['semaine', 'PDF de la semaine']].map(([q, l]) => (
+              <button key={q} type="button" onClick={() => exporter(q)} disabled={!!enExport}
+                style={{ ...boutonExport, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+                {l}
+                {enExport === q && <DotsAttente couleur={T.main} taille={4} label="Création du PDF"/>}
+              </button>
+            ))}
+          </div>
+          {message && <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.main }}>{message}</p>}
+        </div>
+      )}
       {ouvert && prep.total > 0 && (
         <div style={{ borderTop: `1px solid ${T.hairline}`, padding: '10px 12px', display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
           <div>

@@ -104,6 +104,19 @@ const MUTATIONS = [
     de: '              <TableArticles articles={prep.aLAvance}/>', vers: '              <TableArticles articles={prep.articles}/>' },
   { nom: '⚠️ le nom d un article part brut dans l email', fichier: 'lib/resend.js',
     de: '${echapperHtml(a.nom)}</td>', vers: '${a.nom}</td>' },
+  // ─── 24/10 : LA TABLETTE DU COMPTOIR EN PORTRAIT (décidé au tableau) ────
+  { nom: '🔴 les colonnes repassent à 280 px (« Prêtes » tombe sous les autres en portrait)', fichier: VUE,
+    de: "    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10, alignItems: 'start' }}>",
+    vers: "    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10, alignItems: 'start' }}>" },
+  { nom: '🔴 « Ma journée » perd la bande des créneaux', fichier: VUE,
+    de: '              {creneaux}', vers: '' },
+  { nom: '🔴 un jour fermé n est plus dit', fichier: BORD,
+    de: '                      {fermeCeJour && (', vers: '                      {false && (' },
+  { nom: '🔴 le filtre choisi n est pas appliqué', fichier: BORD,
+    de: '                      <select className="barre-filtre" value={filtreStatut} onChange={e => setFiltreStatut(e.target.value)}',
+    vers: '                      <select className="barre-filtre" value={filtreStatut} onChange={() => {}}' },
+  { nom: '⚠️ sur tablette, les jours restent sous la bascule (une rangée de plus)', fichier: BORD,
+    de: '          .barre-jours-piste { order: 0; flex: 1 1 0; }', vers: '' },
 ]
 
 const lancer = () => {

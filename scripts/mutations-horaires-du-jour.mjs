@@ -170,9 +170,11 @@ const MUTATIONS = [
   { nom: '🔴 des commandes fermées vident les files d’attente', fichier: 'app/dashboard/FermeturesExceptionnelles.js',
     de: "    if (ecrite?.id && !form.adaptes && ligne.portee !== 'commandes') {",
     vers: '    if (ecrite?.id && !form.adaptes) {' },
+  // REPOINTÉE LE 24/10 : le bouton vit dans le repli « Ma journée », qui
+  // reçoit le geste du tableau de bord (`onFermerJour`).
   { nom: '🔴 le bouton de la barre ouvre une fenêtre vide', fichier: 'app/dashboard/page.js',
-    de: "                      <button type=\"button\" onClick={() => setFermeturesOuvertes({ date: jourActif, portee: 'commandes' })}",
-    vers: '                      <button type="button" onClick={() => setFermeturesOuvertes(true)}' },
+    de: "                        onFermerJour={!fermeCeJour && creneauxRemplis.length > 0 ? () => setFermeturesOuvertes({ date: jourActif, portee: 'commandes' }) : null}/>",
+    vers: '                        onFermerJour={!fermeCeJour && creneauxRemplis.length > 0 ? () => setFermeturesOuvertes(true) : null}/>' },
   { nom: '🔴 le catalogue reprend un horaire adapté pour une fermeture', fichier: 'app/dashboard/ConfigDashboard.js',
     de: "      .then(({ data }) => setFermeturesExcept(exceptionsPour(data, 'commandes').filter(estFermetureComplete)))",
     vers: '      .then(({ data }) => setFermeturesExcept(data || []))' },

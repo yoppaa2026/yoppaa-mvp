@@ -3709,27 +3709,39 @@ export default function Dashboard() {
           margin-bottom: 0.625rem;
         }
 
+        /* ── La ligne « vue, jours, filtre » (Alex, 24/10) ──
+           Téléphone : la bascule et le filtre, puis les jours sur toute la
+           largeur. Dès 600 px (tablette en portrait) : une seule ligne. */
+        .barre-jours {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px;
+        }
+        .barre-vue {
+          display: flex;
+          gap: 6px;
+          flex: 1 1 auto;
+        }
+        .barre-filtre {
+          margin-left: auto;
+          flex-shrink: 0;
+        }
+        .barre-jours-piste {
+          order: 3;
+          flex: 1 1 100%;
+          min-width: 0;
+        }
+
         /* ── Jours pills ── */
         .jours-wrap {
           display: flex;
           gap: 5px;
           overflow-x: auto;
           scrollbar-width: none;
-          padding-bottom: 0.625rem;
-          border-bottom: 1px solid ${T.pale};
-          margin-bottom: 0.625rem;
+          padding: 2px 0;
         }
         .jours-wrap::-webkit-scrollbar { display: none; }
-
-        /* ── Filtres statut ── */
-        .filtres-wrap {
-          display: flex;
-          gap: 5px;
-          overflow-x: auto;
-          scrollbar-width: none;
-          padding-bottom: 0.625rem;
-        }
-        .filtres-wrap::-webkit-scrollbar { display: none; }
 
         .pill {
           flex-shrink: 0;
@@ -3803,6 +3815,8 @@ export default function Dashboard() {
         @media (min-width: 600px) {
           .commandes-grid { grid-template-columns: repeat(2, 1fr); }
           .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+          .barre-vue { flex: 0 0 auto; }
+          .barre-jours-piste { order: 0; flex: 1 1 0; }
           .sticky-header { padding: 0.875rem 1.25rem 0; }
           .scroll-zone { padding: 1.25rem; }
           .topbar-inner { padding: 0.875rem 1.25rem; }
@@ -4308,38 +4322,98 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Bascule Retrait / Livraison (si le commerce livre) */}
-              {livraisonActive && (() => {
+              {/* 🔴 UNE SEULE LIGNE POUR CHOISIR CE QU'ON REGARDE (Alex, 24/10,
+                  tablette du comptoir en portrait, décidé au tableau) : la
+                  bascule Retrait / Livraison, les jours, puis le filtre. Trois
+                  rangées mangeaient la moitié de l'écran avant la première
+                  carte. Sur téléphone : la bascule et le filtre, puis les
+                  jours en dessous (`.barre-jours`, dans le style de la page). */}
+              {(() => {
                 // ⚠️ LE COMPTEUR EXISTANT N'EST PAS UNE ALERTE. Il affiche le
                 // TOTAL du jour, commandes déjà traitées comprises, et il ne
                 // bouge pas d'un pixel quand une nouvelle tombe. Un « 4 »
                 // affiché toute la journée finit par ne plus être lu.
                 // Ce qui compte, c'est le nombre de GESTES QUI ATTENDENT, et la
                 // règle vit dans `lib/tableau-de-bord` (demande d'Alex, 22/08).
-                const alerte = alerteAutreOnglet(commandesDuJourTous, vueMode)
+                const alerte = livraisonActive ? alerteAutreOnglet(commandesDuJourTous, vueMode) : null
+                const filtreChoisi = filtresStatut.find(f => f.key === filtreStatut)
+                const teinteFiltre = filtreChoisi?.color || T.main
                 return (
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {[
-                        { v: 'retrait', label: 'Retrait', n: commandesDuJourTous.filter(c => c.mode_retrait !== 'livraison').length },
-                        { v: 'livraison', label: 'Livraison', n: commandesDuJourTous.filter(c => c.mode_retrait === 'livraison').length },
-                      ].map(m => (
-                        <button key={m.v} onClick={() => { setVueMode(m.v); setFiltreStatut('actives') }}
-                          /* T.hairline n'existe pas dans la palette de cet écran : le bouton
-                             inactif rendait « 2px solid undefined », donc AUCUN contour. */
-                          /* Retrait en violet, Livraison en bleu (COULEUR_LIVRAISON, Alex 11/10). */
-                          style={{ position: 'relative', flex: 1, padding: '9px', borderRadius: 10, border: `2px solid ${m.v === 'livraison' ? (vueMode === m.v ? COULEUR_LIVRAISON.fort : `${COULEUR_LIVRAISON.fort}40`) : (vueMode === m.v ? T.main : T.pale)}`, background: vueMode === m.v ? (m.v === 'livraison' ? COULEUR_LIVRAISON.fort : T.main) : (m.v === 'livraison' ? COULEUR_LIVRAISON.pale : '#fff'), color: vueMode === m.v ? '#fff' : (m.v === 'livraison' ? COULEUR_LIVRAISON.texte : T.ink), fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                          {m.label}{m.n > 0 ? ` · ${m.n}` : ''}
-                          {/* La pastille ne vit QUE sur l'onglet qu'il ne
-                              regarde pas : une alerte sur la vue courante
-                              apprend à ignorer les alertes. */}
-                          {alerte?.mode === m.v && (
-                            <span aria-hidden="true" style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 100, background: '#DC2626', color: '#fff', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', lineHeight: 1 }}>
-                              {alerte.nb}
-                            </span>
-                          )}
-                        </button>
-                      ))}
+                  <div style={{ paddingBottom: '0.625rem' }}>
+                    <div className="barre-jours">
+                      {/* Bascule Retrait / Livraison (si le commerce livre) */}
+                      {livraisonActive && (
+                        <div className="barre-vue">
+                          {[
+                            { v: 'retrait', label: 'Retrait', n: commandesDuJourTous.filter(c => c.mode_retrait !== 'livraison').length },
+                            { v: 'livraison', label: 'Livraison', n: commandesDuJourTous.filter(c => c.mode_retrait === 'livraison').length },
+                          ].map(m => (
+                            <button key={m.v} onClick={() => { setVueMode(m.v); setFiltreStatut('actives') }}
+                              /* T.hairline n'existe pas dans la palette de cet écran : le bouton
+                                 inactif rendait « 2px solid undefined », donc AUCUN contour. */
+                              /* Retrait en violet, Livraison en bleu (COULEUR_LIVRAISON, Alex 11/10). */
+                              style={{ position: 'relative', flex: 1, padding: '6px 14px', borderRadius: 10, border: `2px solid ${m.v === 'livraison' ? (vueMode === m.v ? COULEUR_LIVRAISON.fort : `${COULEUR_LIVRAISON.fort}40`) : (vueMode === m.v ? T.main : T.pale)}`, background: vueMode === m.v ? (m.v === 'livraison' ? COULEUR_LIVRAISON.fort : T.main) : (m.v === 'livraison' ? COULEUR_LIVRAISON.pale : '#fff'), color: vueMode === m.v ? '#fff' : (m.v === 'livraison' ? COULEUR_LIVRAISON.texte : T.ink), fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', whiteSpace: 'nowrap' }}>
+                              {m.label}{m.n > 0 ? ` · ${m.n}` : ''}
+                              {/* La pastille ne vit QUE sur l'onglet qu'il ne
+                                  regarde pas : une alerte sur la vue courante
+                                  apprend à ignorer les alertes. */}
+                              {alerte?.mode === m.v && (
+                                <span aria-hidden="true" style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 100, background: '#DC2626', color: '#fff', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', lineHeight: 1 }}>
+                                  {alerte.nb}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Sélecteur jours */}
+                      {joursDispos.length > 0 && (
+                        <div className="barre-jours-piste">
+                          <BandeDefilante className="jours-wrap" libelle="les jours">
+                            {joursDispos.map(jour => {
+                              const actif = !modeHistorique && jour === jourActif
+                              const nbCmds = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jour).length
+                              const nbActives = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jour && ['en_attente','en_preparation','pret'].includes(c.statut)).length
+                              return (
+                                <button key={jour} className="pill" onClick={() => { setJourSelectionne(jour); setModeHistorique(false); setFiltreStatut('actives') }}
+                                  style={{ borderColor: actif ? T.main : `${T.main}28`, background: actif ? T.main : '#fff', color: actif ? '#fff' : T.ink, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                  {dateLabel(jour + 'T00:00:00')}
+                                  {nbActives > 0 && (
+                                    <span style={{ background: actif ? 'rgba(255,255,255,0.3)' : '#DC2626', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{nbActives}</span>
+                                  )}
+                                  {nbActives === 0 && nbCmds > 0 && (
+                                    <span style={{ background: actif ? 'rgba(255,255,255,0.2)' : T.pale, color: actif ? '#fff' : T.main, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{nbCmds}</span>
+                                  )}
+                                </button>
+                              )
+                            })}
+                            {/* Onglet Historique */}
+                            <button className="pill" onClick={() => { setModeHistorique(true); setFiltreStatut('tout') }}
+                              style={{ borderColor: modeHistorique ? '#6B7280' : `${T.main}28`, background: modeHistorique ? '#6B7280' : '#fff', color: modeHistorique ? '#fff' : T.muted, display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <ClipboardList size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Historique
+                              {commandesHistorique.length > 0 && (
+                                <span style={{ background: modeHistorique ? 'rgba(255,255,255,0.3)' : '#E5E7EB', color: modeHistorique ? '#fff' : T.muted, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{commandesHistorique.length}</span>
+                              )}
+                            </button>
+                          </BandeDefilante>
+                        </div>
+                      )}
+
+                      {/* Filtres statut. ✅ (24/10, décidé au tableau) Un seul
+                          menu « Actives ▾ » au lieu d'une rangée de pastilles :
+                          sur « Actives », les trois colonnes disent déjà
+                          combien il y a de nouvelles, en prépa et prêtes. Le
+                          menu garde chaque filtre avec son nombre. */}
+                      <select className="barre-filtre" value={filtreStatut} onChange={e => setFiltreStatut(e.target.value)}
+                        aria-label="Filtrer les commandes"
+                        style={{ appearance: 'none', WebkitAppearance: 'none', padding: '6px 30px 6px 14px', borderRadius: 100, border: `2px solid ${teinteFiltre}`, background: `${teinteFiltre} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center`, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        {filtresStatut.map(f => (
+                          <option key={f.key} value={f.key} style={{ color: T.ink, background: '#fff' }}>
+                            {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     {/* ⚠️ ET LE TEXTE DIT LE CÔTÉ ET LE NOMBRE. Une pastille
                         seule fait basculer pour voir ; la phrase lui permet de
@@ -4355,47 +4429,6 @@ export default function Dashboard() {
                   </div>
                 )
               })()}
-
-              {/* Sélecteur jours */}
-              {joursDispos.length > 0 && (
-                <BandeDefilante className="jours-wrap" libelle="les jours">
-                  {joursDispos.map(jour => {
-                    const actif = !modeHistorique && jour === jourActif
-                    const nbCmds = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jour).length
-                    const nbActives = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jour && ['en_attente','en_preparation','pret'].includes(c.statut)).length
-                    return (
-                      <button key={jour} className="pill" onClick={() => { setJourSelectionne(jour); setModeHistorique(false); setFiltreStatut('actives') }}
-                        style={{ borderColor: actif ? T.main : `${T.main}28`, background: actif ? T.main : '#fff', color: actif ? '#fff' : T.ink, display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {dateLabel(jour + 'T00:00:00')}
-                        {nbActives > 0 && (
-                          <span style={{ background: actif ? 'rgba(255,255,255,0.3)' : '#DC2626', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{nbActives}</span>
-                        )}
-                        {nbActives === 0 && nbCmds > 0 && (
-                          <span style={{ background: actif ? 'rgba(255,255,255,0.2)' : T.pale, color: actif ? '#fff' : T.main, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{nbCmds}</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                  {/* Onglet Historique */}
-                  <button className="pill" onClick={() => { setModeHistorique(true); setFiltreStatut('tout') }}
-                    style={{ borderColor: modeHistorique ? '#6B7280' : `${T.main}28`, background: modeHistorique ? '#6B7280' : '#fff', color: modeHistorique ? '#fff' : T.muted, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <ClipboardList size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Historique
-                    {commandesHistorique.length > 0 && (
-                      <span style={{ background: modeHistorique ? 'rgba(255,255,255,0.3)' : '#E5E7EB', color: modeHistorique ? '#fff' : T.muted, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{commandesHistorique.length}</span>
-                    )}
-                  </button>
-                </BandeDefilante>
-              )}
-
-              {/* Filtres statut */}
-              <BandeDefilante className="filtres-wrap" libelle="les filtres">
-                {filtresStatut.map(f => (
-                  <button key={f.key} className="pill" onClick={() => setFiltreStatut(f.key)}
-                    style={{ borderColor: filtreStatut === f.key ? (f.color || T.main) : `${T.main}28`, background: filtreStatut === f.key ? (f.color || T.main) : '#fff', color: filtreStatut === f.key ? '#fff' : T.ink }}>
-                    {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
-                  </button>
-                ))}
-              </BandeDefilante>
             </div>
           )}
 
@@ -4481,42 +4514,40 @@ export default function Dashboard() {
                     les commandes ») : une seule règle, un seul endroit pour
                     rouvrir. Un jour déjà fermé le dit, au lieu de montrer une
                     barre vide. */}
+                {/* ✅ (Alex, 24/10, décidé au tableau) TOUT CE QUI N'EST PAS LE
+                    TRAVAIL DU MOMENT SE REPLIE dans « Ma journée » : les
+                    créneaux, « Fermer les commandes de ce jour », À préparer et
+                    les PDF. Rien n'est retiré. ⚠️ UN JOUR FERMÉ RESTE DIT EN
+                    CLAIR, hors du repli : c'est un état, pas un réglage. */}
                 {!modeHistorique && (() => {
                   const fermeture = exceptionDuJour(exceptionsCommandes, jourActif)
                   const fermeCeJour = fermeture && estFermetureComplete(fermeture)
-                  if (fermeCeJour) {
-                    return (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 12, padding: '9px 12px', marginBottom: 12 }}>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: '#92400E' }}>
-                          {porteeDe(fermeture) === 'commandes' ? 'Commandes en ligne fermées ce jour-là.' : 'Commerce fermé ce jour-là.'}
-                        </span>
-                        <button type="button" onClick={() => setFermeturesOuvertes(true)}
-                          style={{ padding: '6px 12px', borderRadius: 9, border: '1.5px solid #FDE68A', background: '#fff', color: T.ink, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                          Rouvrir ou modifier
-                        </button>
-                      </div>
-                    )
-                  }
-                  if (creneauxRemplis.length === 0) return null
                   return (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-                      <button type="button" onClick={() => setFermeturesOuvertes({ date: jourActif, portee: 'commandes' })}
-                        style={{ padding: '5px 11px', borderRadius: 9, border: '1.5px solid #E5E7EB', background: '#fff', color: T.ink, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                        Fermer les commandes de ce jour
-                      </button>
-                    </div>
+                    <>
+                      {fermeCeJour && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 12, padding: '9px 12px', marginBottom: 12 }}>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: '#92400E' }}>
+                            {porteeDe(fermeture) === 'commandes' ? 'Commandes en ligne fermées ce jour-là.' : 'Commerce fermé ce jour-là.'}
+                          </span>
+                          <button type="button" onClick={() => setFermeturesOuvertes(true)}
+                            style={{ padding: '6px 12px', borderRadius: 9, border: '1.5px solid #FDE68A', background: '#fff', color: T.ink, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            Rouvrir ou modifier
+                          </button>
+                        </div>
+                      )}
+                      {/* « À préparer » et l'export (Alex, 11/10), dans « Ma journée » (24/10). */}
+                      <PanneauAPreparer commandesDuJour={commandesDuJourTous} toutesCommandes={commandes} jour={jourActif}
+                        commerceNom={commercant?.nom} categorie={commercant?.categorie}
+                        titreCreneaux={vueMode === 'livraison' ? 'Tournées du jour' : 'Créneaux du jour'}
+                        creneaux={creneauxRemplis.length > 0 ? (
+                          <BandeCreneaux creneauxRemplis={creneauxRemplis} estTournee={vueMode === 'livraison'} etatCreneau={etatCreneau}
+                            couleurDe={(r) => r.bloque ? '#6B7280' : r.complet ? T.rouge.badge : r.bientot ? T.orange.badge : r.presque ? '#CA8A04' : T.vert.badge}
+                            onBasculer={basculerBlocageCreneau}/>
+                        ) : null}
+                        onFermerJour={!fermeCeJour && creneauxRemplis.length > 0 ? () => setFermeturesOuvertes({ date: jourActif, portee: 'commandes' }) : null}/>
+                    </>
                   )
                 })()}
-                {!modeHistorique && (
-                  <BandeCreneaux creneauxRemplis={creneauxRemplis} estTournee={vueMode === 'livraison'} etatCreneau={etatCreneau}
-                    couleurDe={(r) => r.bloque ? '#6B7280' : r.complet ? T.rouge.badge : r.bientot ? T.orange.badge : r.presque ? '#CA8A04' : T.vert.badge}
-                    onBasculer={basculerBlocageCreneau}/>
-                )}
-                {/* « À préparer » et l'export (Alex, 11/10). */}
-                {!modeHistorique && (
-                  <PanneauAPreparer commandesDuJour={commandesDuJourTous} toutesCommandes={commandes} jour={jourActif}
-                    commerceNom={commercant?.nom} categorie={commercant?.categorie}/>
-                )}
 
                 {/* Tournées du jour, UNE PAR CRÉNEAU (vue Livraison) */}
                 {vueMode === 'livraison' && !modeHistorique && tourneesDuJour.map(t => {

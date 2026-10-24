@@ -82,11 +82,15 @@ function CarteCompacte({ commande, couleur, aujourdhui, maintenantMin, categorie
         {commande.mode_retrait === 'livraison' && <span style={puce(COULEUR_LIVRAISON.pale, COULEUR_LIVRAISON.texte)}>Livraison</span>}
         {commande.mode_retrait === 'expedition' && <span style={puce('#EEF2FF', '#3730A3')}>Colis</span>}
         {commande.rdv_reservation_id && <span style={puce(T.pale, T.deep)}>Rendez-vous</span>}
+        {/* ✅ (24/10, Alex au test) Visible d'un coup d'œil, même au-delà des 4 lignes. */}
+        {lignes.some(l => l.fournisseur) && <span style={puce('#FFFBEB', '#B45309')}>À commander chez le fournisseur</span>}
       </div>
       <div style={{ display: 'grid', gap: 1 }}>
         {lignes.slice(0, LIGNES_MAX).map((l, i) => (
           <span key={i} style={{ fontSize: 13, color: T.ink, fontWeight: 600, lineHeight: 1.35 }}>
             {l.texte}{l.options ? <span style={{ color: T.muted, fontWeight: 500 }}> · {l.options}</span> : null}
+            {/* ✅ (24/10, Alex au test) Ce qui n'est pas en rayon. */}
+            {l.fournisseur ? <span style={{ display: 'block', fontSize: 12, color: '#B45309', fontWeight: 800 }}>{l.fournisseur}</span> : null}
           </span>
         ))}
         {lignes.length > LIGNES_MAX && <span style={{ fontSize: 12, color: T.muted, fontWeight: 700 }}>+ {lignes.length - LIGNES_MAX} autre{lignes.length - LIGNES_MAX > 1 ? 's' : ''}</span>}

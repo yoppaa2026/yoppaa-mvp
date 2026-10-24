@@ -383,6 +383,10 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
   const stockChoisi = varianteChoisie ? stockDe(varianteChoisie) : 0
   const surCommande = !!varianteChoisie && stockChoisi <= 0 && joursFournisseurVariante(article, varianteChoisie) !== null
   const epuise = !!varianteChoisie && stockChoisi <= 0 && !surCommande
+  // 🟠 (24/10, Alex au test) DEUX AXES : une taille dont aucune couleur ne se
+  // vend disait seulement « Choisis Couleur », sur une couleur barrée. Elle
+  // dit « Épuisé » dès qu'on la choisit.
+  const tailleEpuisee = !varianteChoisie && !!choix1 && !dispo1(choix1)
   const pret = !!varianteChoisie && !epuise
   // 🟠 (22/10, audit O3) LA PHOTO DE LA VERSION : la boutique photographie sa
   // robe en rose et en bleu, le client ne voyait jamais ces photos. Celle de
@@ -433,6 +437,11 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
           </div>
         </div>
       )}
+      {tailleEpuisee && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#DC2626', background: '#FEE2E2', padding: '3px 10px', borderRadius: 100 }}>Épuisé</span>
+        </div>
+      )}
       {varianteChoisie && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           {prixAffiche != null && Number(prixAffiche) > 0 && (
@@ -461,7 +470,7 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
           onAjouter(article, varianteChoisie, choix)
         }} disabled={!pret}
         style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: pret ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: pret ? '#fff' : '#9CA3AF', fontWeight: 800, cursor: pret ? 'pointer' : 'default', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: pret ? `0 4px 14px ${T.main}44` : 'none', marginTop: 4 }}>
-        {pret ? `Ajouter à ma commande${options.supplement > 0 ? ` (+${euros(options.supplement)})` : ''}` : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom || 'ta variante'}` : `Choisis ${article.axe1_nom || 'ta version'}`}
+        {pret ? `Ajouter à ma commande${options.supplement > 0 ? ` (+${euros(options.supplement)})` : ''}` : (tailleEpuisee || epuise) ? 'Épuisé' : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom || 'ta variante'}` : `Choisis ${article.axe1_nom || 'ta version'}`}
       </button>
     </div>
   )

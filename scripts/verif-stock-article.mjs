@@ -960,6 +960,10 @@ const code = (f) => sansProse(lire(f))
   v('🔴 fiche : une taille à 0 qui se recommande reste proposable et le dit',
     /const commandable = \(v\) => stockDe\(v\) > 0 \|\| joursFournisseurVariante\(article, v\) !== null/.test(fiche)
     && /const surCommande = !!varianteChoisie && stockChoisi <= 0 && joursFournisseurVariante\(article, varianteChoisie\) !== null/.test(fiche) && /\{libelleSurCommande\(jours\)\}/.test(fiche))
+  // 🟠 (24/10, Alex au test) Deux axes : la taille dont aucune couleur ne se vend dit « Épuisé ».
+  v('🟠 fiche : une taille épuisée le dit dès qu’on la choisit, avant la couleur',
+    /const tailleEpuisee = !varianteChoisie && !!choix1 && !dispo1\(choix1\)/.test(fiche) && /\{tailleEpuisee && \(/.test(fiche)
+    && /: \(tailleEpuisee \|\| epuise\) \? 'Épuisé' :/.test(fiche))
   v('🔴 fiche : l’ajout ne lève le plafond que pour une taille que le fournisseur a',
     /const jours = joursFournisseurVariante\(article, variante\)\s*if \(jours === null && stockDeVariante\(article, variante\) <= qteDeLaVariante\(variante\.id\)\) return/.test(fiche))
 

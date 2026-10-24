@@ -1835,7 +1835,11 @@ const verifie = (nom, cond, detail = '') => {
       JSON.stringify(exLots.production) === JSON.stringify([{ nom: 'Croissant', quantite: 11 }, { nom: 'Café', quantite: 3 }]), JSON.stringify(exLots.production))
   }
   verifie('les lignes courtes disent la quantité, le nom et les options',
-    JSON.stringify(V.lignesCourtes(cmd({ commande_articles: [ligne('Pizza', 2, ['Grande', 'Olives'])] }))) === JSON.stringify([{ texte: '2× Pizza', options: 'Grande, Olives' }]))
+    // REPOINTÉE LE 24/10 (Caprice) : la ligne porte aussi sa part fournisseur, `null` sans.
+    JSON.stringify(V.lignesCourtes(cmd({ commande_articles: [ligne('Pizza', 2, ['Grande', 'Olives'])] }))) === JSON.stringify([{ texte: '2× Pizza', options: 'Grande, Olives', fournisseur: null }]))
+  verifie('🔴 la carte compacte dit ce qui est à commander chez le fournisseur',
+    V.lignesCourtes(cmd({ commande_articles: [{ ...ligne('Robe', 1, ['XS']), quantite_fournisseur: 1 }] }))[0].fournisseur === '1 à commander chez le fournisseur'
+    && /\{lignes\.some\(l => l\.fournisseur\) && <span/.test(readFileSync(new URL('../app/dashboard/VueCommandes.js', import.meta.url), 'utf8')))
 
   // ─── (12/10) À L'AVANCE / LE JOUR MÊME : « deux blocs, partout » (Alex) ───
   // `created_at` est en UTC SANS fuseau : 22:30 le 10/10 en UTC = 00:30 le 11

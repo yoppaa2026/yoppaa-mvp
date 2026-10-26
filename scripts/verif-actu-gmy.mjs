@@ -96,6 +96,30 @@ const lu = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'u
   verifier('la fiche n’affiche toujours les actus qu’à partir de Communiquer', /canDo\(planEffectif\(commercant\), 'actus_illimitees'\) && actualites\.length > 0/.test(fiche))
 }
 
+// ═══ 6. LA FICHE RDV MONTRE AUSSI SES ACTUS (26/10) ═══════════════════════
+// 🔴 Le Centre Respire : actu dans le Good Morning et chez ses favoris, rien
+// sur sa fiche. La fiche des métiers à rendez-vous ne lisait pas `actualites`.
+{
+  const { actuActiveCeJour } = await import('../lib/actus-fiche.js')
+  const J = '2026-10-26'
+  verifier('une actu sans date vaut', actuActiveCeJour({}, J))
+  verifier('une actu qui commence aujourd’hui vaut', actuActiveCeJour({ date_debut: J }, J))
+  verifier('🔴 une actu qui commence demain ne vaut pas encore', !actuActiveCeJour({ date_debut: '2026-10-27' }, J))
+  verifier('une actu qui finit aujourd’hui vaut encore (jour compris)', actuActiveCeJour({ date_debut: '2026-10-20', date_fin: J }, J))
+  verifier('🔴 une actu finie hier ne vaut plus', !actuActiveCeJour({ date_fin: '2026-10-25' }, J))
+  verifier('une date avec heure se lit au jour', actuActiveCeJour({ date_fin: '2026-10-26T00:00:00+00:00' }, J))
+
+  const rdv = lu('app/commander/rdv/[slug]/page.js')
+  verifier('🔴 la fiche RDV lit les actus du commerce', /\.from\('actualites'\)\s*\.select\('\*'\)\s*\.eq\('commercant_id', c\.id\)\s*\.eq\('actif', true\)/.test(rdv))
+  verifier('la fiche RDV suit le même forfait que la fiche boutique', /if \(canDo\(planEffectif\(c\), 'actus_illimitees'\)\) \{/.test(rdv))
+  verifier('🔴 la fiche RDV filtre sur le jour belge', /setActualites\(\(actusData \|\| \[\]\)\.filter\(a => actuActiveCeJour\(a, auj\)\)\)/.test(rdv))
+  verifier('🔴 la fiche RDV affiche le bandeau à l’étape 1', /\{etape === 1 && actualites\.length > 0 && \(\s*<BandeauActus actus=\{actualites\}/.test(rdv))
+  verifier('la fiche RDV ouvre la modale', /<ModaleActu actu=\{actuDetailOuverte\}/.test(rdv))
+  verifier('🔴 l’article désigné n’a de bouton que s’il est chargé', /\? \(produits \|\| \[\]\)\.find\(p => p\.id === actuDetailOuverte\.article_id\)/.test(rdv))
+  const modale = lu('app/commander/ActusFiche.js')
+  verifier('sans article trouvé, aucun bouton', /\{article && lienArticle && \(/.test(modale))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

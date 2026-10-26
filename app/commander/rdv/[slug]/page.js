@@ -33,6 +33,8 @@ import { isVitrine, isAlimentaire, canDo, planEffectif } from '@/lib/plans'
 import { reservationActive, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
+import { actuActiveCeJour } from '@/lib/actus-fiche'
+import { BandeauActus, ModaleActu } from '../../ActusFiche'
 import { lienFiche } from '@/lib/lien-fiche'
 import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -386,6 +388,8 @@ export default function CommanderRdvSlug() {
   }
   const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
+  const [actualites, setActualites] = useState([])          // actus actives du jour (même règle que la fiche boutique)
+  const [actuDetailOuverte, setActuDetailOuverte] = useState(null)
   const [maCarteFid, setMaCarteFid] = useState(null)
   // Nombre de cartes de CE Yopper chez CE commerçant. Deux numéros de GSM,
   // deux cartes : le dire plutôt que de laisser compter des passages qui ne
@@ -1357,6 +1361,24 @@ export default function CommanderRdvSlug() {
         if (annule) return
         // Même règle de fenêtre que partout ailleurs, tenue dans lib/deals.js
         setDeals((dealsData || []).filter(d => dealActifCeJour(d, auj)))
+      }
+
+      // 🔴 LES ACTUALITÉS N'ÉTAIENT JAMAIS CHARGÉES ICI (26/10). L'actu de
+      // novembre du Centre Respire partait dans le Good Morning et chez ses
+      // favoris, et sa fiche ne la montrait pas. Même place que les deals
+      // (AVANT le early-return du module RDV éteint), même forfait que la
+      // fiche boutique : à partir de Communiquer.
+      if (canDo(planEffectif(c), 'actus_illimitees')) {
+        const { data: actusData, error: errActus } = await supabase
+          .from('actualites')
+          .select('*')
+          .eq('commercant_id', c.id)
+          .eq('actif', true)
+          .order('created_at', { ascending: false })
+        if (errActus) console.warn('[rdv fiche] fetch actus KO', errActus.message)
+        if (annule) return
+        const auj = jourBruxelles()
+        setActualites((actusData || []).filter(a => actuActiveCeJour(a, auj)))
       }
 
       // Catalogue produits (31/07) : chargé AVANT le early-return module RDV
@@ -3164,6 +3186,12 @@ export default function CommanderRdvSlug() {
 
                 {/* Le bouton « Offrir un bon cadeau » est descendu sous les
                     prestations, exactement comme sur la fiche boutique. */}
+
+                {/* Actualités et alertes, juste avant les deals : même ordre
+                    que la fiche boutique. Étape 1 seulement, comme les deals. */}
+                {etape === 1 && actualites.length > 0 && (
+                  <BandeauActus actus={actualites} onOuvrir={setActuDetailOuverte} style={{ marginTop: 12 }}/>
+                )}
 
                 {/* Deals du jour : bandeau cliquable → modale détail + CTA appeler.
                     Affiché uniquement à l'étape 1 (fiche), pas pendant le tunnel RDV. */}
@@ -5236,6 +5264,20 @@ export default function CommanderRdvSlug() {
       {bonModalOuvert && (
         <BonCadeauModal commercant={commercant} validiteMois={bonsCfg?.validite_mois || 12} onClose={() => setBonModalOuvert(false)}/>
       )}
+
+      {/* ─── MODALE ACTU (photo + texte long), comme la fiche boutique ───
+          L'article désigné n'a de bouton que s'il est dans le catalogue
+          chargé, et mène à la boutique, où il s'achète. */}
+      {actuDetailOuverte && (() => {
+        const cible = actuDetailOuverte.article_id
+          ? (produits || []).find(p => p.id === actuDetailOuverte.article_id)
+          : null
+        return (
+          <ModaleActu actu={actuDetailOuverte} onFermer={() => setActuDetailOuverte(null)}
+            article={cible} lienArticle={cible ? `/commander/${commercant.slug}?article=${cible.id}` : null}
+            onVoirArticle={emporterPanierVersBoutique}/>
+        )
+      })()}
 
       {/* ─── MODALE DÉTAIL DEAL (même pattern que la fiche commerce) ─── */}
       {dealDetailOuvert && (

@@ -21,6 +21,9 @@ const MODULE = 'lib/actu-gmy.js'
 const BORD = 'app/dashboard/ConfigDashboard.js'
 const ROUTE = 'app/api/actus/notify-favoris/route.js'
 const CRON = 'app/api/cron/morning-yoppers/route.js'
+const FENETRE = 'lib/actus-fiche.js'
+const FICHE_RDV = 'app/commander/rdv/[slug]/page.js'
+const ACTUS_FICHE = 'app/commander/ActusFiche.js'
 
 const MUTATIONS = [
   { nom: '🔴 la semaine commence le dimanche',
@@ -53,6 +56,25 @@ const MUTATIONS = [
   { nom: '🔴 le cron diffuse toutes les actus d’Exister', fichier: CRON,
     de: '    if (!retenues.has(a.id)) continue',
     vers: '' },
+  // ─── 26/10 : la fiche RDV montre ses actus (Centre Respire) ───
+  { nom: '🔴 une actu pas encore commencée s’affiche', fichier: FENETRE,
+    de: '  if (debut && jour < debut) return false',
+    vers: '' },
+  { nom: '🔴 une actu disparaît le jour de sa fin', fichier: FENETRE,
+    de: '  if (fin && fin < jour) return false',
+    vers: '  if (fin && fin <= jour) return false' },
+  { nom: '🔴 la fiche RDV ne lit plus les actus', fichier: FICHE_RDV,
+    de: "      if (canDo(planEffectif(c), 'actus_illimitees')) {",
+    vers: '      if (false) {' },
+  { nom: '🔴 la fiche RDV affiche les actus hors de leur fenêtre', fichier: FICHE_RDV,
+    de: '        setActualites((actusData || []).filter(a => actuActiveCeJour(a, auj)))',
+    vers: '        setActualites(actusData || [])' },
+  { nom: '🔴 la fiche RDV ne montre pas le bandeau', fichier: FICHE_RDV,
+    de: '                {etape === 1 && actualites.length > 0 && (',
+    vers: '                {false && actualites.length > 0 && (' },
+  { nom: '🔴 le bouton article paraît sans article chargé', fichier: ACTUS_FICHE,
+    de: '          {article && lienArticle && (',
+    vers: '          {(article || lienArticle) && (' },
 ]
 
 const lancer = () => {

@@ -301,6 +301,25 @@ const MUTATIONS = [
     fichier: SITEMAP,
     de: '  return [...staticRoutes, ...communes, ...fiches]',
     vers: '  return [...staticRoutes, ...fiches]' },
+
+  // ── IndexNow (27/10, lot 4) ──
+  { nom: '🔴 le site d’essai prévient Bing (« le site d’essai ne prévient personne »)',
+    fichier: 'lib/indexnow.js',
+    de: "return env.VERCEL_ENV === 'production' && env.NEXT_PUBLIC_SEO_INDEX === 'true'",
+    vers: "return env.NEXT_PUBLIC_SEO_INDEX === 'true'" },
+  { nom: '🔴 une adresse d’un autre domaine part avec les nôtres (« seules nos adresses partent »)',
+    fichier: 'lib/indexnow.js',
+    de: "typeof u === 'string' && (u === BASE || u.startsWith(`${BASE}/`))",
+    vers: "typeof u === 'string'" },
+  { nom: '🔴 un moteur muet fait échouer la publication (« un moteur muet ne fait rien échouer »)',
+    fichier: 'lib/indexnow.js',
+    de: "  } catch (e) {\n    return { ok: false, raison:",
+    vers: "  } catch (e) {\n    throw e\n    return { ok: false, raison:" },
+  { nom: '🔴 la publication ne prévient plus Bing (« la publication prévient Bing »)',
+    fichier: 'app/api/admin/publier/route.js',
+    de: '    const moteurs = await signalerAuxMoteurs(',
+    vers: '    const moteurs = { ok: false } || (',
+  },
 ]
 
 const lancer = () => {

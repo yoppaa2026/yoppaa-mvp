@@ -335,6 +335,45 @@ const SITE = 'https://www.yoppaa.app'
   verifier('la liste des commerces aussi', /<Link href="\/commerces"/.test(lireCode('app/commander/page.js')))
 }
 
+// ── 8. IndexNow : Bing apprend la fiche à sa publication (27/10, lot 4) ──
+{
+  const { corpsIndexNow, indexNowActif, signalerAuxMoteurs, INDEXNOW_CLE } = await import('../lib/indexnow.js')
+  const PROD = { VERCEL_ENV: 'production', NEXT_PUBLIC_SEO_INDEX: 'true' }
+  verifier('🔴 la clé répond sur le site, à la racine',
+    readFileSync(new URL(`../public/${INDEXNOW_CLE}.txt`, import.meta.url), 'utf8').trim() === INDEXNOW_CLE)
+  verifier('🔴 le site d’essai ne prévient personne', !indexNowActif({ VERCEL_ENV: 'preview', NEXT_PUBLIC_SEO_INDEX: 'true' }))
+  verifier('un site fermé aux robots non plus', !indexNowActif({ VERCEL_ENV: 'production', NEXT_PUBLIC_SEO_INDEX: 'false' }))
+  verifier('la production, oui', indexNowActif(PROD))
+  const corps = corpsIndexNow([
+    'https://www.yoppaa.app/commander/ciseaux', 'https://www.yoppaa.app/commander/ciseaux',
+    'https://test.yoppaa.app/commander/ciseaux', 'https://www.yoppaa.app.evil.com/x', null,
+  ])
+  egal('🔴 seules nos adresses partent, une fois chacune', corps?.urlList, ['https://www.yoppaa.app/commander/ciseaux'])
+  egal('la clé et son emplacement accompagnent l’envoi', [corps?.host, corps?.keyLocation],
+    ['www.yoppaa.app', `https://www.yoppaa.app/${INDEXNOW_CLE}.txt`])
+  verifier('rien à envoyer, pas d’envoi', corpsIndexNow([null, 'https://ailleurs.be/']) === null)
+  let appels = 0
+  const r1 = await signalerAuxMoteurs(['https://www.yoppaa.app/commander'], { env: { VERCEL_ENV: 'preview' }, fetchImpl: async () => { appels++; return { status: 200 } } })
+  verifier('🔴 hors production, aucun appel au moteur', appels === 0 && r1.ok === false)
+  // Une exception qui sortirait d'ici ferait échouer la publication : le banc
+  // la rattrape pour la compter, au lieu de planter.
+  const r2 = await signalerAuxMoteurs(['https://www.yoppaa.app/commander'], { env: PROD, fetchImpl: async () => { throw new Error('réseau') } })
+    .catch(() => ({ leve: true }))
+  verifier('🔴 un moteur muet ne fait rien échouer', !r2.leve && r2.ok === false && r2.raison === 'réseau')
+  const r3 = await signalerAuxMoteurs(['https://www.yoppaa.app/commander'], { env: PROD, fetchImpl: async () => ({ status: 202 }) })
+  verifier('202 (clé en cours de vérification) est un succès', r3.ok === true)
+  const r4 = await signalerAuxMoteurs(['https://www.yoppaa.app/commander'], { env: PROD, fetchImpl: async () => ({ status: 403 }) })
+  verifier('403 (clé refusée) est un échec', r4.ok === false && r4.statut === 403)
+
+  const route = lireCode('app/api/admin/publier/route.js')
+  const maj = route.indexOf(".update({ statut_publication: 'publie'")
+  const signal = route.indexOf('await signalerAuxMoteurs(')
+  verifier('🔴 la publication prévient Bing, APRÈS avoir publié', maj > 0 && signal > maj)
+  verifier('la fiche, sa commune, la liste des communes et des commerces partent',
+    /signalerAuxMoteurs\(\[adresseCanonique\(fiche\), pageCommune, `\$\{BASE\}\/commerces`, `\$\{BASE\}\/commander`\]\)/.test(route))
+  verifier('la réponse dit si Bing a été prévenu', /NextResponse\.json\(\{ ok: true, email, bing \}\)/.test(route))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

@@ -22,6 +22,9 @@ import { bilanDeLaFiche } from '@/lib/fiche-complete-server'
 import { phraseManquants } from '@/lib/fiche-complete'
 import { STATUTS_ACCES_AUTORISE, fichePubliee, refusKyb } from '@/lib/statut-commercant'
 import { envoyerAuCommercant, emailValidationCommercant } from '@/lib/resend'
+import { adresseCanonique } from '@/lib/fiche-seo'
+import { getGroupesCommunes } from '@/lib/fiche-seo-server'
+import { signalerAuxMoteurs } from '@/lib/indexnow'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,7 +96,20 @@ export async function POST(request) {
       email = envoi?.ok ? 'envoyé' : `échec : ${envoi?.error || 'inconnu'}`
     }
 
-    return NextResponse.json({ ok: true, email })
+    // ✅ 27/10 (Alex, lot 4) : Bing apprend la fiche tout de suite, avec les
+    // pages qui y mènent désormais (sa commune, la liste des communes, la
+    // liste des commerces). Après la publication, jamais avant, et sans
+    // jamais la bloquer : `signalerAuxMoteurs` ne lève pas.
+    const BASE = 'https://www.yoppaa.app'
+    let pageCommune = null
+    try {
+      const groupe = (await getGroupesCommunes()).find(g => g.commerces.some(c => c.id === commercant_id))
+      if (groupe) pageCommune = `${BASE}/commerces/${groupe.slug}`
+    } catch { /* la fiche part quand même */ }
+    const moteurs = await signalerAuxMoteurs([adresseCanonique(fiche), pageCommune, `${BASE}/commerces`, `${BASE}/commander`])
+    const bing = moteurs.ok ? 'prévenu' : `non prévenu : ${moteurs.raison || `réponse ${moteurs.statut}`}`
+
+    return NextResponse.json({ ok: true, email, bing })
   } catch (e) {
     console.error('[admin/publier] erreur', e)
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })

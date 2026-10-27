@@ -392,7 +392,7 @@ export default function LegalPage() {
             {/* ⚠️ LA DATE DU PIED DE PAGE SUIT LES CGU COMMERÇANT (lib/cgu.js) :
                 la changer forcerait chaque commerçant à les accepter de
                 nouveau. Une mise à jour de cette seule politique se date ici. */}
-            <P>Politique de confidentialité mise à jour le 9 octobre 2026.</P>
+            <P>Politique de confidentialité mise à jour le 27 octobre 2026.</P>
 
             <H3>Données collectées</H3>
             <P><strong>Clients :</strong> prénom, nom, email, téléphone, adresse de livraison (si livraison ou expédition), historique des commandes et rendez-vous, consentements RGPD, identifiant de notifications push (si activées), données de localisation (si autorisées).</P>
@@ -402,6 +402,22 @@ export default function LegalPage() {
                 qu'il faut annoncer ici, avec sa durée. */}
             <P><strong>Commerçants :</strong> données d'identification, coordonnées, numéro d&rsquo;entreprise (BCE), nom et prénom du représentant légal, données de facturation, données d'activité, ainsi que la preuve de la déclaration sur l&rsquo;honneur et de l&rsquo;acceptation des conditions (texte accepté, date et heure, adresse IP, navigateur). Yoppaa ne demande aucune pièce d&rsquo;identité aux commerçants ; l&rsquo;identité de ceux qui encaissent des paiements en ligne est vérifiée par Stripe, selon ses propres règles.</P>
             <P><strong>Préinscrits (site de lancement) :</strong> email, code postal, type d'utilisateur (curieux ou commerçant), nom de commerce éventuel, message facultatif, consentement marketing (opt-in facultatif, jamais pré-coché).</P>
+
+            {/* ⚠️ 27/10 : les publicités Facebook et Instagram portent un
+                formulaire de contact pour les commerçants. Meta y est
+                responsable de traitement DISTINCT, pas sous-traitant (voir
+                « Partage des données »). Et « aucune donnée à des fins
+                publicitaires » ne reste vrai que si la liste des contacts ne
+                repart JAMAIS chez Meta (audience personnalisée, etc.).
+                Ancre volontairement absente du sommaire, qui ne liste que
+                les 6 sections (Alex, 27/10). */}
+            <H3 id="formulaires-meta">Formulaires de contact sur Facebook et Instagram</H3>
+            <P>Lorsque vous remplissez un formulaire Yoppaa dans une publicité sur Facebook ou Instagram, nous recevons les informations que vous y indiquez : votre nom, le nom de votre commerce, votre métier, votre code postal, votre numéro de téléphone et votre adresse email.</P>
+            <P><strong>Pourquoi :</strong> uniquement pour vous recontacter au sujet de Yoppaa, comme vous l'avez demandé.</P>
+            <P><strong>Base légale :</strong> votre demande de contact, et notre intérêt légitime à présenter Yoppaa aux commerçants qui l'ont demandé.</P>
+            <P><strong>Durée de conservation :</strong> 12 mois au maximum si aucune suite n'est donnée, puis suppression. Si vous créez ensuite un compte, vos données suivent les règles applicables aux comptes commerçants.</P>
+            <P><strong>Meta :</strong> Meta Platforms Ireland Limited agit comme responsable de traitement distinct pour les données traitées sur ses plateformes, selon sa propre politique de confidentialité.</P>
+            <P>Ces données ne sont jamais vendues ni utilisées pour d'autres publicités. Vous pouvez demander à tout moment l'accès, la rectification ou la suppression de vos données à <strong>dpo@yoppaa.app</strong>.</P>
 
             <H3>Finalités du traitement</H3>
             <Ul items={[
@@ -468,6 +484,8 @@ export default function LegalPage() {
               'Upstash : limitation du nombre de requêtes pour prévenir les abus. Votre adresse IP y sert de clé de comptage, sur une fenêtre de quelques minutes.',
               'Anthropic : assistant de rédaction proposé aux commerçants. Seuls les textes que le commerçant fournit lui-même sont transmis, jamais les données des Clients.',
             ]}/>
+            {/* Hors de la liste : Meta n'est PAS un sous-traitant (27/10). */}
+            <P><strong>Meta Platforms Ireland Limited</strong> n'est pas un sous-traitant de Yoppaa. Pour les formulaires de contact de nos publicités sur Facebook et Instagram, Meta agit comme responsable de traitement distinct, selon sa propre politique de confidentialité (voir « Formulaires de contact sur Facebook et Instagram » ci-dessus).</P>
 
             <H3 id="cartographie">Localisation et cartographie</H3>
             <P>Situer un commerce, calculer une distance ou préparer une tournée de livraison suppose de convertir des adresses en coordonnées. Yoppaa s'appuie pour cela sur le référentiel officiel des adresses, dont il conserve une copie, et, pour deux usages précis, sur des services extérieurs.</P>

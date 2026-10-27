@@ -129,6 +129,7 @@ import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2, SlidersHoriz
 import { chezLeCommerce } from '@/lib/nom-commerce'
 import BarreYopper from '../BarreYopper'
 import { barreSurLaFiche, HAUTEUR_BARRE_YOPPER } from '@/lib/barre-yopper'
+import { useFicheServeur } from '../FicheServeurContexte'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1444,6 +1445,9 @@ function BarreCategories({ categories, scrollRef, headerRef, barreRef, catRefs, 
 export default function CommanderSlug() {
   const { slug } = useParams()
   const router = useRouter()
+  // ✅ 27/10 : la fiche écrite par le serveur (pendant le chargement) et les
+  // liens de la commune (en bas). Voir app/commander/FicheServeurContexte.js.
+  const ficheServeur = useFicheServeur()
 
   const [etape, setEtape] = useState(2)
   const [showSignalement, setShowSignalement] = useState(false)
@@ -4922,14 +4926,23 @@ export default function CommanderSlug() {
         {/* ── SCROLL BODY ── */}
         <div className="scroll-body" ref={scrollRef}>
 
-          {loading && (
+          {/* ✅ 27/10 (Alex, tableau) : pendant le chargement, la fiche écrite
+              par le serveur À LA PLACE des blocs gris. C'est ce que Google lit
+              en premier : nom, horaires, carte, prix. Sans elle (fiche non
+              publiée), les blocs gris comme avant. */}
+          {loading && (ficheServeur.resume ? (
+            <>
+              {ficheServeur.resume}
+              {ficheServeur.liens}
+            </>
+          ) : (
             <>
               <SkeletonHeader/>
               <div style={{ padding: '1rem' }}>
                 {[1,2,3,4].map(i => <SkeletonArticle key={i}/>)}
               </div>
             </>
-          )}
+          ))}
 
           {/* ÉTAPE 2 - Articles */}
           {/* Fiche non publiée (brouillon, en_attente_validation, refusée) → bloc d'info */}
@@ -5721,6 +5734,10 @@ export default function CommanderSlug() {
                     </button>
                   )}
                 </div>
+
+                {/* ✅ 27/10 : « Autres commerces à … », par où Google trouve
+                    les fiches voisines. */}
+                {ficheServeur.liens}
 
                 <div style={{ height: 24 }}/>
               </div>

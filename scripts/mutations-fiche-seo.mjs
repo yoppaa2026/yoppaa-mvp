@@ -61,8 +61,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le titre ignore la preuve de commande (verif:avis « pose ses métadonnées »)',
     fichier: LAYOUT_FICHE,
-    de: '  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable })',
-    vers: '  return metadataFiche(c, PAGE_BOUTIQUE)' },
+    // ⚠️ ANCRE RECALÉE LE 27/10 : le titre reçoit aussi les lieux.
+    de: '  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable, lieux })',
+    vers: '  return metadataFiche(c, PAGE_BOUTIQUE, { lieux })' },
 
   { nom: '🔴 une fiche non publiée devient indexable (« jamais indexée »)',
     de: '      robots: { index: false, follow: false },',
@@ -81,18 +82,20 @@ const MUTATIONS = [
   { nom: '🔴 la fiche rendez-vous se prend pour la boutique (verif:avis « la fiche rendez-vous pose ses métadonnées »)',
     fichier: LAYOUT_RDV,
     // ⚠️ ANCRE RECALÉE LE 15/10 : le titre reçoit la preuve de commande.
-    de: '  return metadataFiche(c, PAGE_RDV, { commandeRealisable })',
-    vers: '  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable })' },
+    // ⚠️ ET LE 27/10 : les lieux.
+    de: '  return metadataFiche(c, PAGE_RDV, { commandeRealisable, lieux })',
+    vers: '  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable, lieux })' },
 
   { nom: '🔴 la fiche rendez-vous perd son balisage (verif:avis « pose le balisage »)',
     fichier: LAYOUT_RDV,
     // ⚠️ ANCRE RECALÉE LE 15/10 : le balisage reçoit la preuve de commande.
-    de: '  const jsonLd = jsonLdFiche(c, PAGE_RDV, avis, { commandeRealisable })',
+    // ⚠️ ET LE 27/10 : les lieux et la carte.
+    de: '  const jsonLd = jsonLdFiche(c, PAGE_RDV, avis, { commandeRealisable, lieux, catalogue })',
     vers: '  const jsonLd = null' },
 
   { nom: '🔴 la fiche boutique perd son balisage (verif:avis « la fiche boutique pose le balisage »)',
     fichier: LAYOUT_FICHE,
-    de: '  const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis, { commandeRealisable })',
+    de: '  const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis, { commandeRealisable, lieux, catalogue })',
     vers: '  const jsonLd = null' },
 
   // ─── LA PREUVE DE COMMANDE (15/10, le Bistrologue) ─────────────────────
@@ -100,6 +103,12 @@ const MUTATIONS = [
     fichier: LAYOUT_FICHE,
     de: '  const commandeRealisable = c ? await getCommandeRealisable(c) : false',
     vers: '  const commandeRealisable = false' },
+
+  // ⚠️ 27/10 : le balisage lit la preuve dans un `Promise.all`.
+  { nom: '🔴 le balisage de la boutique ne lit plus la preuve (verif:avis « avec la preuve de commande »)',
+    fichier: LAYOUT_FICHE,
+    de: '    ? await Promise.all([getAvisAgregat(c.id), getCommandeRealisable(c), getLieux(c.id), getArticles(c.id), getGroupesCommunes()])',
+    vers: '    ? await Promise.all([getAvisAgregat(c.id), false, getLieux(c.id), getArticles(c.id), getGroupesCommunes()])' },
 
   { nom: '🔴 le balisage oublie la preuve et redevient muet sur la commande (verif:avis « le balisage appelle le geste »)',
     de: '    ...potentialActionJsonLd(c, options),',
@@ -224,6 +233,73 @@ const MUTATIONS = [
     fichier: 'app/robots.js',
     de: "        '/commander/rdv/cancel',",
     vers: '' },
+
+  // ─── 27/10 : LE SIÈGE SOCIAL NE SORT PLUS ──────────────────────────────
+  { nom: '🔴 la ville du titre retombe sur le siège (« le siège seul ne donne jamais la ville »)',
+    de: '  const ville = extraireVille(lieuPublic(options.lieux)?.adresse)',
+    vers: '  const ville = extraireVille(lieuPublic(options.lieux)?.adresse || c.adresse)' },
+
+  { nom: '🔴 le balisage publie le siège (« sans lieu, aucune adresse publiée »)',
+    de: "    ...(lieu?.adresse ? { address: { '@type': 'PostalAddress', streetAddress: lieu.adresse, addressCountry: 'BE' } } : {}),",
+    vers: "    ...((lieu?.adresse || c.adresse) ? { address: { '@type': 'PostalAddress', streetAddress: lieu?.adresse || c.adresse, addressCountry: 'BE' } } : {})," },
+
+  { nom: '🔴 le balisage publie les coordonnées du siège (« ni ses coordonnées »)',
+    de: "    ...(lieu?.latitude && lieu?.longitude ? { geo: { '@type': 'GeoCoordinates', latitude: lieu.latitude, longitude: lieu.longitude } } : {}),",
+    vers: "    ...(c.latitude && c.longitude ? { geo: { '@type': 'GeoCoordinates', latitude: c.latitude, longitude: c.longitude } } : {})," },
+
+  { nom: '🔴 la lecture rapatrie de nouveau le siège (« ne rapatrie plus le siège social »)',
+    fichier: 'lib/fiche-seo-server.js',
+    de: "      .select('id, rdv_actif, commande_actif, livraison_actif, nom, description, logo_url, slug, type, categorie, telephone, horaires_detail, ordre_categories, plan, essai_plan, created_at')",
+    vers: "      .select('id, rdv_actif, commande_actif, livraison_actif, nom, description, logo_url, adresse, slug, type, categorie, telephone, horaires_detail, ordre_categories, plan, essai_plan, created_at')" },
+
+  { nom: '🔴 une commune se déduit du siège (« jamais par son siège »)',
+    fichier: 'lib/commerces-commune.js',
+    de: '    const commune = communeDuCodePostal(codePostalDe(lieu?.adresse), communes)',
+    vers: '    const commune = communeDuCodePostal(codePostalDe(lieu?.adresse || c.adresse), communes)' },
+
+  // ─── 27/10 : LA FICHE COMPLÈTE CHEZ GOOGLE ─────────────────────────────
+  { nom: '🔴 un jour fermé s’annonce ouvert (« un jour fermé n’est jamais annoncé ouvert »)',
+    fichier: 'lib/fiche-contenu-seo.js',
+    de: '  if (!jour || !jour.ouvert) return []',
+    vers: '  if (!jour) return []' },
+
+  { nom: '🔴 un itinérant annonce des heures d’ouverture (« aucune heure d’ouverture »)',
+    fichier: 'lib/fiche-contenu-seo.js',
+    de: '  if (estItinerant(lieux)) return []',
+    vers: '' },
+
+  { nom: '🔴 les tables et jointures deviennent des prestations (« ni table de restaurant ni jointure »)',
+    fichier: 'lib/fiche-contenu-seo.js',
+    de: '      .filter(p => p && p.nom && !estJointure(p) && !estParCouverts(p))',
+    vers: '      .filter(p => p && p.nom)' },
+
+  { nom: '🔴 un prix nul s’affiche (« un prix nul ne s’affiche pas »)',
+    fichier: 'lib/fiche-contenu-seo.js',
+    de: "  return valeur != null && valeur !== '' && Number.isFinite(n) && n > 0 ? n : null",
+    vers: '  return Number.isFinite(n) ? n : null' },
+
+  { nom: '🔴 le balisage perd les horaires (« le balisage porte les horaires »)',
+    de: '    ...(horaires.length ? { openingHoursSpecification: horaires } : {}),',
+    vers: '' },
+
+  { nom: '🔴 le balisage perd la carte (« et la carte »)',
+    de: '    ...catalogueJsonLd(options.catalogue || [], c.nom),',
+    vers: '' },
+
+  { nom: '🔴 la boutique remet les blocs gris (« montre la fiche du serveur pendant le chargement »)',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '          {loading && (ficheServeur.resume ? (',
+    vers: '          {loading && (false ? (' },
+
+  { nom: '🔴 la fiche rendez-vous perd ses liens (« garde les liens en bas de la fiche »)',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '              {etape === 1 && ficheServeur.liens}',
+    vers: '' },
+
+  { nom: '🔴 le plan du site oublie les communes (« le plan du site annonce les communes »)',
+    fichier: SITEMAP,
+    de: '  return [...staticRoutes, ...communes, ...fiches]',
+    vers: '  return [...staticRoutes, ...fiches]' },
 ]
 
 const lancer = () => {

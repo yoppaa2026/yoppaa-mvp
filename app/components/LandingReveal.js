@@ -1612,6 +1612,11 @@ export default function LandingReveal({ referent = null }) {
               ))}
               <Link href="/legal">Mentions légales, CGU et confidentialité</Link>
             </p>
+            {/* ✅ 27/10 (Alex) : le chemin de Google vers les communes, puis
+                vers chaque fiche. */}
+            <p>
+              <Link href="/commerces">Les commerces par commune</Link>
+            </p>
           </footer>
         </div>
       </section>

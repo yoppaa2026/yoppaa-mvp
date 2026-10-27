@@ -9,29 +9,48 @@
 // (`app/commander/rdv/[slug]/layout.js`). Ils n'étaient écrits qu'ici, et la
 // fiche d'un salon partait chez Google sans titre ni balisage.
 
+//
+// ✅ 27/10 (Alex, tableau) : la fiche arrive COMPLÈTE chez Google. Le layout
+// écrit la fiche en version simple (`FicheServeur`, à la place des blocs gris
+// du chargement) et les liens de la commune (`LiensCommune`, en bas), et les
+// passe à la page par `FournisseurFicheServeur`.
+
 import { echapperJsonLd } from '@/lib/seo-landing'
 import { metadataFiche, jsonLdFiche, PAGE_BOUTIQUE } from '@/lib/fiche-seo'
-import { getCommercantPublic, getAvisAgregat, getCommandeRealisable } from '@/lib/fiche-seo-server'
+import { catalogueDeFiche } from '@/lib/fiche-contenu-seo'
+import { communeDuCommerce } from '@/lib/commerces-commune'
+import { getCommercantPublic, getAvisAgregat, getCommandeRealisable, getLieux, getArticles, getGroupesCommunes } from '@/lib/fiche-seo-server'
+import { FournisseurFicheServeur } from '../FicheServeurContexte'
+import FicheServeur from '../FicheServeur'
+import LiensCommune from '../LiensCommune'
 
 export async function generateMetadata({ params }) {
   const { slug } = await params
   const c = await getCommercantPublic(slug)
   // Le titre ne dit « Commander » que si une commande peut aller au bout.
   const commandeRealisable = c ? await getCommandeRealisable(c) : false
-  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable })
+  // La ville du titre vient du LIEU déclaré, jamais du siège (27/10).
+  const lieux = c ? await getLieux(c.id) : []
+  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable, lieux })
 }
 
 export default async function CommercantLayout({ children, params }) {
   const { slug } = await params
   const c = await getCommercantPublic(slug)
-  const avis = c ? await getAvisAgregat(c.id) : null
-  const commandeRealisable = c ? await getCommandeRealisable(c) : false
+  const [avis, commandeRealisable, lieux, articles, groupes] = c
+    ? await Promise.all([getAvisAgregat(c.id), getCommandeRealisable(c), getLieux(c.id), getArticles(c.id), getGroupesCommunes()])
+    : [null, false, [], [], []]
+  const catalogue = catalogueDeFiche({ page: 'boutique', articles, ordreCategories: c?.ordre_categories })
   // `null` aussi quand Google doit retenir l'agenda (un salon) : le balisage
   // vit alors sur la fiche rendez-vous.
-  const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis, { commandeRealisable })
+  const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis, { commandeRealisable, lieux, catalogue })
   return (
     <>
-      {children}
+      <FournisseurFicheServeur
+        resume={c ? <FicheServeur commercant={c} lieux={lieux} sections={catalogue}/> : null}
+        liens={c ? <LiensCommune commune={communeDuCommerce(c.id, groupes)} commercantId={c.id}/> : null}>
+        {children}
+      </FournisseurFicheServeur>
       {/* ⚠️ `echapperJsonLd`, JAMAIS `JSON.stringify` NU, ET C'EST UNE FAILLE
           RÉELLE QUI DORMAIT ICI. `JSON.stringify` n'échappe pas le « < » : un
           commerçant qui écrit « </script><script>… » dans le NOM ou la

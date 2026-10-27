@@ -384,8 +384,12 @@ const egalJson = (nom, obtenu, attendu) =>
   // EFFECTIF, il lui faut aussi `essai_plan` et `created_at`. La garde exige
   // les quatre, `plan` compris. ⚠️ ET LES TROIS INTERRUPTEURS DEPUIS LE 15/10 :
   // sans `rdv_actif`, plus aucune réservation ne serait déclarée.
+  // ⚠️ REPOINTÉE LE 27/10, PAS DÉSARMÉE : `adresse`, `latitude`, `longitude`
+  // (le SIÈGE SOCIAL) sortent de la lecture, les horaires et l'ordre des
+  // catégories y entrent. Les quatre colonnes du forfait et les trois
+  // interrupteurs restent exigés.
   verifie('🔴 et il rapatrie `plan`, l’essai et les interrupteurs, sans quoi tout serait muet',
-    /\.select\('id, rdv_actif, commande_actif, livraison_actif, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan, essai_plan, created_at'\)/.test(lecture))
+    /\.select\('id, rdv_actif, commande_actif, livraison_actif, nom, description, logo_url, slug, type, categorie, telephone, horaires_detail, ordre_categories, plan, essai_plan, created_at'\)/.test(lecture))
   verifie('🔴 la preuve de commande se lit par la règle partagée',
     /lireCommandeRealisable\(client\(\), commercant\)/.test(lecture))
   for (const [nom, chemin, page] of [
@@ -394,13 +398,16 @@ const egalJson = (nom, obtenu, attendu) =>
   ]) {
     const l = lireCode(chemin)
     verifie(`🔴 ${nom} pose le balisage, avec la preuve de commande`,
-      new RegExp(`jsonLdFiche\\(c, ${page}, avis, \\{ commandeRealisable \\}\\)`).test(l)
+      new RegExp(`jsonLdFiche\\(c, ${page}, avis, \\{ commandeRealisable, lieux, catalogue \\}\\)`).test(l)
         // ⚠️ ON COMPTE : la preuve se lit DEUX fois par layout (le titre, le
         // balisage). En chercher une seule laissait l'autre se taire sans bruit
-        // (vu par mutation le 15/10).
-        && (l.match(/const commandeRealisable = c \? await getCommandeRealisable\(c\) : false/g) || []).length === 2)
+        // (vu par mutation le 15/10). ⚠️ REPOINTÉE LE 27/10 : le balisage la
+        // lit désormais dans un `Promise.all`, avec les lieux et la carte.
+        && (l.match(/const commandeRealisable = c \? await getCommandeRealisable\(c\) : false/g) || []).length === 1
+        && /const \[avis, commandeRealisable, lieux, [^\]]*\] = c\s*\? await Promise\.all\(\[\s*getAvisAgregat\(c\.id\), getCommandeRealisable\(c\),/.test(l))
     // ⚠️ REPOINTÉE LE 15/10 : le titre reçoit lui aussi la preuve de commande.
-    verifie(`🔴 ${nom} pose ses métadonnées`, new RegExp(`metadataFiche\\(c, ${page}, \\{ commandeRealisable \\}\\)`).test(l))
+    // ⚠️ ET LE 27/10 : les lieux, pour la ville (jamais le siège).
+    verifie(`🔴 ${nom} pose ses métadonnées`, new RegExp(`metadataFiche\\(c, ${page}, \\{ commandeRealisable, lieux \\}\\)`).test(l))
   }
 
   // La consigne du kit

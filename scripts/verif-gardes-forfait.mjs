@@ -470,7 +470,9 @@ for (const r of ROUTES) {
     // ⚠️ REPOINTÉE LE 15/10 : la lecture vit dans `lib/fiche-seo-server.js`,
     // partagée par la fiche boutique et la fiche rendez-vous.
     { nom: 'le balisage Google de la fiche', chemin: 'lib/fiche-seo-server.js', regles: [
-      ['charge l’essai', /longitude, plan, essai_plan, created_at'/],
+      // ⚠️ REPOINTÉE LE 27/10, PAS DÉSARMÉE : le siège (`longitude`) a quitté
+      // la lecture ; l'essai et sa date restent exigés.
+      ['charge l’essai', /ordre_categories, plan, essai_plan, created_at'/],
     ] },
     { nom: 'la consigne Google du kit', chemin: 'app/kit/[slug]/page.js', regles: [
       // ⚠️ Ancre repointée le 14/10 : la requête lit aussi `statut_publication`

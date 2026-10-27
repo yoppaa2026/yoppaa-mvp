@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Bell } from 'lucide-react'
 import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
@@ -4255,6 +4256,13 @@ export default function Commander() {
                   {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} tablesDuJour={tablesDuJour} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
                 </div>
               )}
+
+              {/* ✅ 27/10 (Alex) : un vrai lien vers les communes. Les cartes
+                  ci-dessus s'ouvrent au toucher, Google n'y voit aucun lien :
+                  c'est par ici qu'il trouve les fiches. */}
+              <p style={{ textAlign: 'center', margin: '18px 0 6px', fontSize: '0.85rem' }}>
+                <Link href="/commerces" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>Les commerces par commune →</Link>
+              </p>
 
             </div>
           )}

@@ -15,6 +15,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { adresseCanonique } from '@/lib/fiche-seo'
 import { plusRecente } from '@/lib/plan-du-site'
+import { getGroupesCommunes } from '@/lib/fiche-seo-server'
 
 const BASE_URL = 'https://www.yoppaa.app'
 const SEO_INDEX = process.env.NEXT_PUBLIC_SEO_INDEX === 'true'
@@ -58,6 +59,22 @@ export default async function sitemap() {
     // ⚠️ PAS /concours : en noindex pour le moment (Alex, 17/10). Annoncer une
     // page qu'on interdit d'indexer, la Search Console le signale en erreur.
   ]
+  // ✅ 27/10 (Alex) : les pages des communes qui ont au moins un commerce, et
+  // la page qui les liste. Chacune porte la date de son commerce le plus récent.
+  let groupes = []
+  try {
+    groupes = await getGroupesCommunes()
+  } catch {
+    groupes = []
+  }
+  const communes = groupes.length ? [
+    { url: `${BASE_URL}/commerces`, ...(liste ? { lastModified: liste } : {}), changeFrequency: 'weekly', priority: 0.7 },
+    ...groupes.map(g => {
+      const recente = plusRecente(g.commerces)
+      return { url: `${BASE_URL}/commerces/${g.slug}`, ...(recente ? { lastModified: recente } : {}), changeFrequency: 'weekly', priority: 0.7 }
+    }),
+  ] : []
+
   const fiches = publies.map(c => ({
     url: adresseCanonique(c),
     ...(c.created_at ? { lastModified: new Date(c.created_at) } : {}),
@@ -65,5 +82,5 @@ export default async function sitemap() {
     priority: 0.8,
   }))
 
-  return [...staticRoutes, ...fiches]
+  return [...staticRoutes, ...communes, ...fiches]
 }

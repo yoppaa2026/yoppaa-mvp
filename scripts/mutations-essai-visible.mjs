@@ -182,8 +182,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le balisage Google ne charge plus l’essai',
     fichier: BALISAGE,
-    de: "longitude, plan, essai_plan, created_at'",
-    vers: "longitude, plan'" },
+    // ⚠️ ANCRE RECALÉE LE 27/10 : le siège (`longitude`) a quitté la lecture.
+    de: "ordre_categories, plan, essai_plan, created_at'",
+    vers: "ordre_categories, plan'" },
 
   { nom: '🔴 le kit ne charge plus l’essai',
     fichier: KIT,

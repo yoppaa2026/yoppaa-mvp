@@ -169,7 +169,6 @@ import { mentionVitrine } from '@/lib/stock-article'
 // pas de l'autre. Cette page n'affichait aucun avis jusqu'au 21/09.
 import BlocAvis from '../../BlocAvis'
 import { resumeAvis } from '@/lib/avis-affichage'
-import { useFicheServeur } from '../../FicheServeurContexte'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
 // Affiche les jours de l'horizon, regroupes par mois. ⚠️ L'HORIZON N'EST PLUS
@@ -287,9 +286,6 @@ function MiniCalendrier({ jours, dateChoisie, onSelect }) {
 export default function CommanderRdvSlug() {
   const { slug } = useParams()
   const router = useRouter()
-  // ✅ 27/10 : la fiche écrite par le serveur (pendant le chargement) et les
-  // liens de la commune (en bas). Voir app/commander/FicheServeurContexte.js.
-  const ficheServeur = useFicheServeur()
 
   const [commercant, setCommercant] = useState(null)
   // 🔴 CETTE PAGE N'AFFICHAIT AUCUN AVIS (Alex, 21/09, chez Salon Nathalie).
@@ -2935,19 +2931,11 @@ export default function CommanderRdvSlug() {
 
         <div className="scroll-body" ref={scrollRef} style={barrePanierVisible ? { paddingBottom: 170 } : undefined}>
 
-          {/* ✅ 27/10 (Alex, tableau) : pendant le chargement, la fiche écrite
-              par le serveur (prestations, horaires, prix) À LA PLACE du simple
-              « Chargement ». C'est ce que Google lit en premier. */}
-          {loading && (ficheServeur.resume ? (
-            <>
-              {ficheServeur.resume}
-              {ficheServeur.liens}
-            </>
-          ) : (
+          {loading && (
             <div style={{ padding: '3rem 1rem', textAlign: 'center', color: T.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               Chargement <DotsAttente couleur={T.muted} taille={6} label="Chargement en cours"/>
             </div>
-          ))}
+          )}
 
           {!loading && erreur && (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
@@ -3537,10 +3525,6 @@ export default function CommanderRdvSlug() {
                   Étape 1 uniquement : pendant le choix d'un créneau, on ne
                   propose pas de partir ailleurs. */}
               {etape === 1 && <BandeAutourDeToi onVoir={() => router.push('/commander')}/>}
-
-              {/* ✅ 27/10 : « Autres commerces à … », par où Google trouve
-                  les fiches voisines. La fiche seulement, pas le tunnel. */}
-              {etape === 1 && ficheServeur.liens}
 
               {/* ─── ÉTAPE 2 - CALENDRIER + SLOTS CRÉNEAUX ─── */}
               {etape === 2 && prestationChoisie && (

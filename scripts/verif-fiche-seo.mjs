@@ -241,7 +241,7 @@ const SITE = 'https://www.yoppaa.app'
 // ✅ ALEX, 27/10 : « il faut impérativement que sa fiche soit indexée et
 // visible sur Google ». La fiche écrite au serveur dit la MÊME chose que l'écran.
 {
-  const { lignesHoraires, specificationsHoraires, catalogueDeFiche, catalogueJsonLd } = await import('../lib/fiche-contenu-seo.js')
+  const { specificationsHoraires, catalogueDeFiche, catalogueJsonLd } = await import('../lib/fiche-contenu-seo.js')
   const GRILLE = {
     lundi: { ouvert: true, debut: '07:00', fin: '12:30', debut2: '13:30', fin2: '18:00' },
     mardi: { ouvert: false, debut: '07:00', fin: '14:00' },
@@ -251,19 +251,13 @@ const SITE = 'https://www.yoppaa.app'
     jeudi: { debut: '07:00', fin: '14:00' },
     dimanche: { ouvert: true, debut: '07:00', fin: '12:00' },
   }
-  egal('les horaires, ligne par ligne, du lundi au dimanche', lignesHoraires(GRILLE), [
-    { jour: 'Lundi', texte: '07:00 – 12:30 · 13:30 – 18:00' },
-    { jour: 'Mardi', texte: 'Fermé' },
-    { jour: 'Mercredi', texte: '08:00 – 12:00' },
-    { jour: 'Jeudi', texte: 'Fermé' },
-    { jour: 'Dimanche', texte: '07:00 – 12:00' },
-  ])
+  egal('les jours annoncés, dans l’ordre de la semaine', [...new Set(specificationsHoraires(GRILLE).map(s => s.dayOfWeek.split('/').pop()))], ['Monday', 'Wednesday', 'Sunday'])
   // 🔴 Un jour fermé GARDE ses heures en base : sans `ouvert`, on l'annonçait ouvert.
   verifier('🔴 un jour fermé n’est jamais annoncé ouvert à Google',
     !specificationsHoraires(GRILLE).some(s => s.dayOfWeek.endsWith('Tuesday') || s.dayOfWeek.endsWith('Thursday')))
   egal('les plages à pause font deux créneaux', specificationsHoraires(GRILLE).filter(s => s.dayOfWeek.endsWith('Monday')).map(s => [s.opens, s.closes]), [['07:00', '12:30'], ['13:30', '18:00']])
   egal('🔴 un commerce itinérant n’annonce aucune heure d’ouverture', specificationsHoraires(GRILLE, [{ type: 'hebdo', actif: true }]), [])
-  egal('sans grille, rien', lignesHoraires(null), [])
+  egal('sans grille, rien', specificationsHoraires(null), [])
 
   const ARTICLES = [
     { nom: 'Baguette', prix: 1.4, categorie: 'Pains', ordre: 2 },
@@ -294,7 +288,7 @@ const SITE = 'https://www.yoppaa.app'
   verifier('🔴 le balisage porte les horaires', Array.isArray(balise?.openingHoursSpecification) && balise.openingHoursSpecification.length === 4)
   verifier('🔴 et la carte', balise?.hasOfferCatalog?.itemListElement?.length === 3)
 
-  const { codePostalDe, slugCommune, communeDuCodePostal, regrouperParCommune, communeDuCommerce } = await import('../lib/commerces-commune.js')
+  const { codePostalDe, slugCommune, communeDuCodePostal, regrouperParCommune } = await import('../lib/commerces-commune.js')
   egal('le code postal se lit dans l’adresse', codePostalDe('Rue X 12, 5640 Mettet, Belgique'), '5640')
   egal('sans code postal, rien', codePostalDe('Rue sans code'), null)
   egal('l’adresse d’une commune', slugCommune('Braine-l’Alleud'), 'braine-l-alleud')
@@ -317,30 +311,23 @@ const SITE = 'https://www.yoppaa.app'
   egal('ses commerces par nom, la section comprise (Saint-Gérard est à Mettet)', groupes[0].commerces.map(c => c.nom), ['Aux Délices', 'Zèbre'])
   verifier('🔴 un commerce sans lieu permanent n’est rangé nulle part (jamais par son siège)',
     !groupes.some(g => g.commerces.some(c => c.id === 'c' || c.id === 'd')))
-  egal('la commune d’un commerce', communeDuCommerce('b', groupes)?.slug, 'mettet')
 
   // ⚠️ ET C'EST BRANCHÉ ? Une règle juste que personne n'appelle (23/08).
   const lecture = lireCode('lib/fiche-seo-server.js')
   verifier('🔴 la lecture de la fiche ne rapatrie plus le siège social',
     !/\.select\('[^']*\badresse\b[^']*'\)\s*\n?\s*\.eq\('slug'/.test(lecture) && /\.select\('id, rdv_actif, commande_actif, livraison_actif, nom, description, logo_url, slug, type, categorie, telephone, horaires_detail, ordre_categories, plan, essai_plan, created_at'\)/.test(lecture))
-  for (const [nom, chemin, page, contexte] of [
-    ['la fiche boutique', 'app/commander/[slug]/layout.js', 'PAGE_BOUTIQUE', '../FicheServeurContexte'],
-    ['la fiche rendez-vous', 'app/commander/rdv/[slug]/layout.js', 'PAGE_RDV', '../../FicheServeurContexte'],
+  for (const [nom, chemin, page] of [
+    ['la fiche boutique', 'app/commander/[slug]/layout.js', 'PAGE_BOUTIQUE'],
+    ['la fiche rendez-vous', 'app/commander/rdv/[slug]/layout.js', 'PAGE_RDV'],
   ]) {
     const l = lireCode(chemin)
     verifier(`🔴 ${nom} : le titre lit la ville sur les lieux`, new RegExp(`metadataFiche\\(c, ${page}, \\{ commandeRealisable, lieux \\}\\)`).test(l))
     verifier(`🔴 ${nom} : le balisage reçoit les lieux et la carte`, new RegExp(`jsonLdFiche\\(c, ${page}, avis, \\{ commandeRealisable, lieux, catalogue \\}\\)`).test(l))
-    verifier(`🔴 ${nom} : la fiche écrite au serveur et les liens sont passés à la page`,
-      l.includes(`from '${contexte}'`) && /resume=\{c \? <FicheServeur commercant=\{c\} lieux=\{lieux\} sections=\{catalogue\}\/> : null\}/.test(l)
-        && /liens=\{c \? <LiensCommune commune=\{communeDuCommerce\(c\.id, groupes\)\} commercantId=\{c\.id\}\/> : null\}/.test(l))
-  }
-  for (const [nom, chemin, bas] of [
-    ['la fiche boutique', 'app/commander/[slug]/page.js', /\{ficheServeur\.liens\}\s*<div style=\{\{ height: 24 \}\}\/>/],
-    ['la fiche rendez-vous', 'app/commander/rdv/[slug]/page.js', /\{etape === 1 && ficheServeur\.liens\}/],
-  ]) {
-    const p = lireCode(chemin)
-    verifier(`🔴 ${nom} montre la fiche du serveur pendant le chargement`, /\{loading && \(ficheServeur\.resume \? \(/.test(p))
-    verifier(`🔴 ${nom} garde les liens en bas de la fiche`, bas.test(p))
+    // ❌ ALEX, 27/10 : « ça devient un vrai bazar ». Le layout ne rend RIEN de
+    // visible autour de la fiche : la page, puis le seul bloc JSON-LD.
+    verifier(`🔴 ${nom} : rien de visible en plus de la fiche`,
+      // (le commentaire JSX sur l'échappement devient `{ }` une fois la prose ôtée)
+      /return \(\s*<>\s*\{children\}\s*(\{\s*\}\s*)?\{jsonLd && \(/.test(l))
   }
   const plan = lireCode('app/sitemap.js')
   verifier('🔴 le plan du site annonce les communes', /url: `\$\{BASE_URL\}\/commerces\/\$\{g\.slug\}`/.test(plan) && /\.\.\.communes, \.\.\.fiches/.test(plan))

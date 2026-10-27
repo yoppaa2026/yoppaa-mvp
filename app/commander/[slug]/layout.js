@@ -8,21 +8,16 @@
 // vivent dans `lib/fiche-seo.js`, partagé avec la fiche rendez-vous
 // (`app/commander/rdv/[slug]/layout.js`). Ils n'étaient écrits qu'ici, et la
 // fiche d'un salon partait chez Google sans titre ni balisage.
-
 //
-// ✅ 27/10 (Alex, tableau) : la fiche arrive COMPLÈTE chez Google. Le layout
-// écrit la fiche en version simple (`FicheServeur`, à la place des blocs gris
-// du chargement) et les liens de la commune (`LiensCommune`, en bas), et les
-// passe à la page par `FournisseurFicheServeur`.
+// ✅ 27/10 (Alex, tableau) : la fiche technique (JSON-LD) porte aussi les
+// horaires et la carte, et l'adresse du LIEU déclaré, jamais celle du siège.
+// ❌ RIEN DE VISIBLE EN PLUS SUR LA FICHE (Alex, 27/10 : « ça devient un vrai
+// bazar »). Le vrai rendu serveur de la fiche est un chantier à part.
 
 import { echapperJsonLd } from '@/lib/seo-landing'
 import { metadataFiche, jsonLdFiche, PAGE_BOUTIQUE } from '@/lib/fiche-seo'
 import { catalogueDeFiche } from '@/lib/fiche-contenu-seo'
-import { communeDuCommerce } from '@/lib/commerces-commune'
-import { getCommercantPublic, getAvisAgregat, getCommandeRealisable, getLieux, getArticles, getGroupesCommunes } from '@/lib/fiche-seo-server'
-import { FournisseurFicheServeur } from '../FicheServeurContexte'
-import FicheServeur from '../FicheServeur'
-import LiensCommune from '../LiensCommune'
+import { getCommercantPublic, getAvisAgregat, getCommandeRealisable, getLieux, getArticles } from '@/lib/fiche-seo-server'
 
 export async function generateMetadata({ params }) {
   const { slug } = await params
@@ -37,20 +32,16 @@ export async function generateMetadata({ params }) {
 export default async function CommercantLayout({ children, params }) {
   const { slug } = await params
   const c = await getCommercantPublic(slug)
-  const [avis, commandeRealisable, lieux, articles, groupes] = c
-    ? await Promise.all([getAvisAgregat(c.id), getCommandeRealisable(c), getLieux(c.id), getArticles(c.id), getGroupesCommunes()])
-    : [null, false, [], [], []]
+  const [avis, commandeRealisable, lieux, articles] = c
+    ? await Promise.all([getAvisAgregat(c.id), getCommandeRealisable(c), getLieux(c.id), getArticles(c.id)])
+    : [null, false, [], []]
   const catalogue = catalogueDeFiche({ page: 'boutique', articles, ordreCategories: c?.ordre_categories })
   // `null` aussi quand Google doit retenir l'agenda (un salon) : le balisage
   // vit alors sur la fiche rendez-vous.
   const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis, { commandeRealisable, lieux, catalogue })
   return (
     <>
-      <FournisseurFicheServeur
-        resume={c ? <FicheServeur commercant={c} lieux={lieux} sections={catalogue}/> : null}
-        liens={c ? <LiensCommune commune={communeDuCommerce(c.id, groupes)} commercantId={c.id}/> : null}>
-        {children}
-      </FournisseurFicheServeur>
+      {children}
       {/* ⚠️ `echapperJsonLd`, JAMAIS `JSON.stringify` NU, ET C'EST UNE FAILLE
           RÉELLE QUI DORMAIT ICI. `JSON.stringify` n'échappe pas le « < » : un
           commerçant qui écrit « </script><script>… » dans le NOM ou la

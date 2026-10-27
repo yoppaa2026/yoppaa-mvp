@@ -107,8 +107,8 @@ const MUTATIONS = [
   // ⚠️ 27/10 : le balisage lit la preuve dans un `Promise.all`.
   { nom: '🔴 le balisage de la boutique ne lit plus la preuve (verif:avis « avec la preuve de commande »)',
     fichier: LAYOUT_FICHE,
-    de: '    ? await Promise.all([getAvisAgregat(c.id), getCommandeRealisable(c), getLieux(c.id), getArticles(c.id), getGroupesCommunes()])',
-    vers: '    ? await Promise.all([getAvisAgregat(c.id), false, getLieux(c.id), getArticles(c.id), getGroupesCommunes()])' },
+    de: '    ? await Promise.all([getAvisAgregat(c.id), getCommandeRealisable(c), getLieux(c.id), getArticles(c.id)])',
+    vers: '    ? await Promise.all([getAvisAgregat(c.id), false, getLieux(c.id), getArticles(c.id)])' },
 
   { nom: '🔴 le balisage oublie la preuve et redevient muet sur la commande (verif:avis « le balisage appelle le geste »)',
     de: '    ...potentialActionJsonLd(c, options),',
@@ -286,15 +286,16 @@ const MUTATIONS = [
     de: '    ...catalogueJsonLd(options.catalogue || [], c.nom),',
     vers: '' },
 
-  { nom: '🔴 la boutique remet les blocs gris (« montre la fiche du serveur pendant le chargement »)',
-    fichier: 'app/commander/[slug]/page.js',
-    de: '          {loading && (ficheServeur.resume ? (',
-    vers: '          {loading && (false ? (' },
+  // ❌ Alex, 27/10 : « ça devient un vrai bazar ». Rien de visible autour de la fiche.
+  { nom: '🔴 un bloc visible revient autour de la fiche (« rien de visible en plus de la fiche »)',
+    fichier: LAYOUT_FICHE,
+    de: '      {children}',
+    vers: '      <nav>Autres commerces</nav>{children}' },
 
-  { nom: '🔴 la fiche rendez-vous perd ses liens (« garde les liens en bas de la fiche »)',
-    fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '              {etape === 1 && ficheServeur.liens}',
-    vers: '' },
+  { nom: '🔴 un bloc visible revient autour de la fiche rendez-vous (« rien de visible en plus de la fiche »)',
+    fichier: LAYOUT_RDV,
+    de: '      {children}',
+    vers: '      {children}<nav>Autres commerces</nav>' },
 
   { nom: '🔴 le plan du site oublie les communes (« le plan du site annonce les communes »)',
     fichier: SITEMAP,

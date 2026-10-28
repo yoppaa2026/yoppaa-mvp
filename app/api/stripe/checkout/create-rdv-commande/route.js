@@ -33,7 +33,7 @@
 
 import { NextResponse } from 'next/server'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
-import { prixPrestationServeur } from '@/lib/prix-prestation-server'
+import { prixPrestationServeur, traceRdv, metaTraceRdv } from '@/lib/prix-prestation-server'
 import { estParCouverts } from '@/lib/cours-collectifs'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
@@ -223,7 +223,7 @@ export async function POST(request) {
     // ✅ 18/10 : ET LE TARIF DÉCOUVERTE, si ce client n'a jamais suivi ce cours.
     // ✅ AU JOUR DU RENDEZ-VOUS (28/10, Alex au tableau), comme les produits
     // de ce même tunnel (`dateCommande: date_rdv` plus bas).
-    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {
+    const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {
       client: { email: normaliserEmail(client_email), telephone: client_telephone },
     })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
@@ -648,6 +648,8 @@ export async function POST(request) {
           heure_fin: String(heure_fin).slice(0, 5),
           duree_minutes: Number(duree_minutes || prestation.duree_minutes) || null,
           prix_estime: prixBase,
+          // ✅ (28/10) La trace de la promo (`traceRdv`) : prix plein et promo.
+          ...traceRdv(remiseRdv),
           tarif_decouverte: decouverte === true,
           // Aucun acompte n'a été encaissé : il n'y avait rien à encaisser.
           acompte_montant: null,
@@ -856,6 +858,8 @@ export async function POST(request) {
             heure_fin: String(heure_fin).slice(0, 5),
             duree_minutes: String(duree_minutes || prestation.duree_minutes),
             prix_estime: String(prixBase ?? ''),
+            // ✅ (28/10) La trace de la promo voyage avec, relue par le webhook.
+            ...metaTraceRdv(remiseRdv),
             // ✅ 18/10 : le tarif découverte voyage avec, pour le badge.
             ...(decouverte ? { tarif_decouverte: '1' } : {}),
             acompte_montant: String(acompteMontant),

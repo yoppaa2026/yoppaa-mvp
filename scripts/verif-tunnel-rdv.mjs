@@ -2563,8 +2563,9 @@ for (const chemin of [
   for (const r of ROUTES) {
     const src = lireCode(r)
     // REPOINTÉE LE 18/10 : l'appel rend aussi `decouverte` (tarif découverte).
+    // REPOINTÉE LE 28/10 : et la remise, pour la trace de la promo (`traceRdv`).
     verifie(`🔴 ${r.split('/').slice(-2)[0]} part du prix REMISÉ`,
-      /const \{ prix: prixBase, decouverte \} = await prixPrestationServeur\(/.test(src),
+      /const \{ prix: prixBase, decouverte, remise: remiseRdv \} = await prixPrestationServeur\(/.test(src),
       'la carte serait débitée du tarif plein sur une prestation en promotion')
     // 🔴 ET PLUS AUCUNE LECTURE DU PRIX PLEIN À CÔTÉ. Une ligne oubliée juste
     // en dessous rendrait la garde ci-dessus décorative.
@@ -2673,8 +2674,11 @@ for (const chemin of [
   verifie('🔴 l’acompte annoncé suit le prix remisé',
     (FICHE.match(/prixEffectifPrestation\(prestationChoisie, dealsActifs, jourPrix\)/g) || []).length >= 3,
     'un acompte assis sur le prix plein ferait avancer plus que sa part')
+  // ⚠️ L'ACCOLADE OUVRANTE COMPTE (28/10) : la pastille « -20 % mercredi »
+  // s'écrit `{!remiseSurPrestation(…) && (`, et sans `\{` la garde la prenait
+  // pour le prix barré — le harnais l'a vu : supprimer le prix barré restait vert.
   verifie('et le prix barré se montre',
-    /remiseSurPrestation\(p, dealsActifs, jourPrix\) && \(/.test(FICHE))
+    /\{remiseSurPrestation\(p, dealsActifs, jourPrix\) && \(/.test(FICHE))
   // 🔴 28/10 : le jour du prix est celui du rendez-vous choisi, et plus aucun
   // calcul de prix ne lit la liste filtrée sur aujourd'hui.
   verifie('🔴 le jour du prix est celui du rendez-vous choisi',

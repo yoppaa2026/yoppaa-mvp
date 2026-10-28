@@ -34,7 +34,7 @@
 
 import { NextResponse } from 'next/server'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
-import { prixPrestationServeur } from '@/lib/prix-prestation-server'
+import { prixPrestationServeur, traceRdv } from '@/lib/prix-prestation-server'
 import { createClient } from '@supabase/supabase-js'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { identiteProuvee } from '@/lib/yopper-auth'
@@ -352,7 +352,7 @@ export async function POST(request) {
     // ✅ 18/10 : ET LE TARIF DÉCOUVERTE, si ce client n'a jamais suivi ce cours.
     // ✅ AU JOUR DU RENDEZ-VOUS (28/10, Alex au tableau), plus au jour où le
     // client réserve : « -20 % le mercredi » vaut pour un rendez-vous un mercredi.
-    const { prix: prixBase, decouverte } = await prixPrestationServeur(db, prestation, String(date_rdv).slice(0, 10), {
+    const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(db, prestation, String(date_rdv).slice(0, 10), {
       client: { email, telephone: client_telephone },
     })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
@@ -437,6 +437,8 @@ export async function POST(request) {
         // ⚠️ LE TARIF RESTE LE BRUT, et la remise voyage à côté : une remise ne
         // réécrit pas un tarif, et tous les calculs de solde la retranchent.
         prix_estime: prixBase,
+        // ✅ (28/10) La trace de la promo (`traceRdv`) : prix plein et promo.
+        ...traceRdv(remiseRdv),
         // ✅ 18/10 : pris au tarif découverte (badge dans l'agenda).
         tarif_decouverte: decouverte === true,
         // ⚠️ `null` ET NON `0` quand il n'y a pas d'acompte : l'écran de
@@ -565,6 +567,8 @@ export async function POST(request) {
         heure_fin: heureFin,
         duree_minutes: dureeMinutes,
         prix_estime: prixBase,
+        // ✅ (28/10) La trace de la promo (`traceRdv`) : prix plein et promo.
+        ...traceRdv(remiseRdv),
         // ✅ 19/10 : l'écran de confirmation dit « Séance découverte ».
         tarif_decouverte: !!decouverte,
         acompte_montant: vent.acompte > 0 ? vent.acompte : null,

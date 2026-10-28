@@ -154,6 +154,83 @@ egal('rien, rien', economieDesLignesCents(null), 0)
     /Number\(ligne\.prix_plein\) > Number\(ligne\.prix_unitaire\) && \(/.test(lireCode('app/dashboard/page.js')))
 }
 
+// ─── 7. LA TRACE SUR LE RENDEZ-VOUS (28/10, lot 1c, Salon Nathalie) ──────
+{
+  const { traceRdv, metaTraceRdv } = await import('../lib/prix-prestation-server.js')
+  const remise = { deal: { id: 'd9' }, prix: 40, prixBarre: 50 }
+  egal('🔴 un rendez-vous remisé garde son prix plein et sa promo', traceRdv(remise), { prix_plein: 50, promo_deal_id: 'd9' })
+  egal('sans remise (ou au tarif découverte), rien', traceRdv(null), { prix_plein: null, promo_deal_id: null })
+  egal('une « remise » qui ne baisse rien n’est pas une promo', traceRdv({ deal: { id: 'x' }, prix: 50, prixBarre: 50 }), { prix_plein: null, promo_deal_id: null })
+  egal('les métadonnées Stripe : des chaînes, et aucune clé sans promo',
+    [metaTraceRdv(remise), metaTraceRdv(null)], [{ prix_plein: '50', promo_deal_id: 'd9' }, {}])
+  const reserver = lireCode('app/api/rdv/reserver/route.js')
+  verifier('🔴 la réservation directe écrit la trace (les deux insertions)',
+    (reserver.match(/\.\.\.traceRdv\(remiseRdv\),/g) || []).length === 2
+    && /const \{ prix: prixBase, decouverte, remise: remiseRdv \} = await prixPrestationServeur\(/.test(reserver))
+  const tunnel = lireCode('app/api/stripe/checkout/create-rdv-commande/route.js')
+  verifier('🔴 le tunnel avec produits l’écrit, et l’envoie au webhook',
+    /\.\.\.traceRdv\(remiseRdv\),/.test(tunnel) && /\.\.\.metaTraceRdv\(remiseRdv\),/.test(tunnel))
+  verifier('🔴 l’acompte l’envoie au webhook',
+    /\.\.\.metaTraceRdv\(remiseRdv\),/.test(lireCode('app/api/stripe/checkout/create-rdv-acompte/route.js')))
+  const webhook = lireCode('app/api/stripe/webhook/route.js')
+  verifier('🔴 le webhook la relit dans les métadonnées',
+    /prix_plein: Number\(meta\.prix_plein\) > 0 \? Number\(meta\.prix_plein\) : null,/.test(webhook) && /promo_deal_id: meta\.promo_deal_id \|\| null,/.test(webhook))
+  verifier('🔴 les deux chemins d’email la lisent et la passent',
+    /prix_estime, prix_plein, acompte_paye/.test(lireCode('app/api/emails/rdv-confirme/route.js'))
+    && /duree_minutes, prix_estime, prix_plein,/.test(webhook)
+    && (webhook.match(/prix_plein:\s+rdv\.abonnement_id \? null : \(rdv\.prix_plein \?\? null\),/g) || []).length === 2)
+  const { emailRdvConfirme, emailNouveauRdvCommercant } = await import('../lib/resend.js')
+  const base = { yopper_prenom: 'Alex', commercant_nom: 'Salon Nathalie', nom_commercant: 'Salon Nathalie', prestation_nom: 'Soin visage', date_rdv: '2026-11-04', heure_debut: '10:00', heure_fin: '11:00', duree_minutes: 60, prix_estime: 40 }
+  const mailRdv = emailRdvConfirme({ ...base, prix_plein: 50 })
+  verifier('🔴 l’email RDV barre le prix plein et dit l’économie',
+    /text-decoration:line-through[^>]*>50,00[\s ]€/.test(mailRdv) && /Tu as économisé 10,00[\s ]€ grâce à la promo/.test(mailRdv))
+  verifier('sans promo, l’email RDV n’en parle pas', !/économisé/.test(emailRdvConfirme(base)))
+  verifier('🔴 l’email du commerçant dit ce qu’il a offert',
+    /Dont 10,00[\s ]€ offerts en promo/.test(emailNouveauRdvCommercant({ ...base, prix_plein: 50 })))
+}
+
+// ─── 8. LA RÉCURRENCE (lot 2) : EXÉCUTÉE ─────────────────────────────────
+{
+  const R = await import('../lib/recurrence-promo.js')
+  // Novembre 2026 : le dimanche 1er, donc les samedis 7, 14, 21, 28.
+  const mercredis = { recurrence: 'hebdo', jours_semaine: [3], date_debut: '2026-11-01' }
+  verifier('🔴 « chaque mercredi » revient le mercredi', R.recurrenceAccepte(mercredis, '2026-11-04') && R.recurrenceAccepte(mercredis, '2026-11-11'))
+  verifier('et pas le jeudi', !R.recurrenceAccepte(mercredis, '2026-11-05'))
+  verifier('ni avant son début', !R.recurrenceAccepte({ ...mercredis, date_debut: '2026-11-05' }, '2026-11-04'))
+  verifier('ni après sa fin', !R.recurrenceAccepte({ ...mercredis, date_fin: '2026-11-10' }, '2026-11-11'))
+  verifier('sans fin, elle revient toujours', R.recurrenceAccepte(mercredis, '2027-06-02'))
+  const premierSamedi = { recurrence: 'mensuel', rang_mois: 1, jour_semaine_mois: 6, date_debut: '2026-11-01' }
+  verifier('🔴 « le 1er samedi du mois » : le 7 novembre, pas le 14',
+    R.recurrenceAccepte(premierSamedi, '2026-11-07') && !R.recurrenceAccepte(premierSamedi, '2026-11-14'))
+  verifier('et le 5 décembre', R.recurrenceAccepte(premierSamedi, '2026-12-05'))
+  const dernierSamedi = { recurrence: 'mensuel', rang_mois: -1, jour_semaine_mois: 6, date_debut: '2026-11-01' }
+  verifier('🔴 « le dernier samedi » : le 28 novembre, pas le 21',
+    R.recurrenceAccepte(dernierSamedi, '2026-11-28') && !R.recurrenceAccepte(dernierSamedi, '2026-11-21'))
+  const tous3 = { recurrence: 'intervalle', intervalle_jours: 3, date_debut: '2026-11-01' }
+  verifier('🔴 « tous les 3 jours » depuis le début', R.recurrenceAccepte(tous3, '2026-11-01') && R.recurrenceAccepte(tous3, '2026-11-04') && !R.recurrenceAccepte(tous3, '2026-11-05'))
+  verifier('une promo sans récurrence n’est pas jugée ici', !R.recurrenceAccepte({ date_debut: '2026-11-01', date_fin: '2026-11-30' }, '2026-11-04'))
+  egal('les rythmes dits comme au comptoir', [
+    R.libelleRecurrence(mercredis),
+    R.libelleRecurrence({ recurrence: 'hebdo', jours_semaine: [6, 3, 0] }),
+    R.libelleRecurrence(premierSamedi),
+    R.libelleRecurrence(dernierSamedi),
+    R.libelleRecurrence(tous3),
+    R.libelleRecurrence({ recurrence: 'hebdo', jours_semaine: [0, 1, 2, 3, 4, 5, 6] }),
+  ], ['Chaque mercredi', 'Chaque mercredi, samedi et dimanche', 'Le 1er samedi du mois', 'Le dernier samedi du mois', 'Tous les 3 jours', 'Tous les jours'])
+  egal('les trois prochaines fois', R.prochainsJours(premierSamedi, '2026-11-02'), ['2026-11-07', '2026-12-05', '2027-01-02'])
+  verifier('🔴 la plage horaire se juge à l’heure du retrait',
+    R.plageAccepte({ plage_debut: '11:00', plage_fin: '14:00' }, '12:30') && !R.plageAccepte({ plage_debut: '11:00', plage_fin: '14:00' }, '14:00'))
+  verifier('sans heure connue, c’est le jour qui décide', R.plageAccepte({ plage_debut: '11:00', plage_fin: '14:00' }, null))
+  egal('la plage dite', R.libellePlage({ plage_debut: '11:30:00', plage_fin: '14:00:00' }), '11 h 30 à 14 h')
+  egal('le formulaire refuse ce qui ne tient pas', [
+    R.refusRecurrence({ recurrence: 'hebdo', jours_semaine: [] }),
+    R.refusRecurrence({ recurrence: 'mensuel', rang_mois: 5, jour_semaine_mois: 6 }),
+    R.refusRecurrence({ recurrence: 'intervalle', intervalle_jours: 0 }),
+    R.refusRecurrence({ recurrence: 'hebdo', jours_semaine: [3], plage_debut: '14:00', plage_fin: '11:00' }),
+    R.refusRecurrence({ recurrence: 'hebdo', jours_semaine: [3], plage_debut: '11:00', plage_fin: '14:00' }),
+  ], ['Coche au moins un jour de la semaine.', 'Choisis le 1er, 2e, 3e, 4e ou dernier jour du mois.', 'Indique tous les combien de jours (1 à 365).', 'L’heure de fin doit venir après l’heure de début.', null])
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

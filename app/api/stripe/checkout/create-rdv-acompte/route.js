@@ -22,7 +22,7 @@
 
 import { NextResponse } from 'next/server'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
-import { prixPrestationServeur } from '@/lib/prix-prestation-server'
+import { prixPrestationServeur, metaTraceRdv } from '@/lib/prix-prestation-server'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
@@ -175,7 +175,7 @@ export async function POST(request) {
     // au client plus que sa part.
     // ✅ 18/10 : ET LE TARIF DÉCOUVERTE, si ce client n'a jamais suivi ce cours.
     // ✅ AU JOUR DU RENDEZ-VOUS (28/10, Alex au tableau) : voir rdv/reserver.
-    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {
+    const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {
       client: { email: normaliserEmail(client_email), telephone: client_telephone },
     })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
@@ -369,6 +369,8 @@ export async function POST(request) {
             // affiché, et une remise ne réécrit pas un tarif. La remise voyage
             // à côté, et tous les calculs de solde la retranchent.
             prix_estime: String(prixBase),
+            // ✅ (28/10) La trace de la promo voyage avec, relue par le webhook.
+            ...metaTraceRdv(remiseRdv),
             // ✅ 18/10 : le tarif découverte voyage avec, pour le badge.
             ...(decouverte ? { tarif_decouverte: '1' } : {}),
             acompte_montant: String(acompteMontant),

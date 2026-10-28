@@ -78,7 +78,7 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, duree_minutes,
-        prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
+        prix_estime, prix_plein, acompte_paye, acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
         empreinte_statut, empreinte_montant,
         client_email, client_prenom, client_nom, client_telephone, notes_client, client_id,
         annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id,
@@ -166,6 +166,8 @@ export async function POST(request) {
           heure_fin:               rdv.heure_fin,
           duree_minutes:           rdv.duree_minutes,
           prix_estime:             rdv.prix_estime,
+          // ✅ (28/10) Le prix sans la promo, barré dans l'email (lot 1c).
+          prix_plein:              rdv.abonnement_id ? null : (rdv.prix_plein ?? null),
           seance_abonnement:       !!rdv.abonnement_id,
           // La MÊME référence qu'à l'écran et qu'à l'agenda du commerçant.
           numero_rdv:              referenceRdv(rdv),
@@ -264,6 +266,7 @@ export async function POST(request) {
           heure_fin:       rdv.heure_fin,
           duree_minutes:   rdv.duree_minutes,
           prix_estime:     rdv.prix_estime,
+          prix_plein:      rdv.abonnement_id ? null : (rdv.prix_plein ?? null),
           acompte_paye:    !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
           // Le commercant voit ce qui a fait baisser son acompte (27/08).
           fidelite_remise: rdv.fidelite_remise || 0,

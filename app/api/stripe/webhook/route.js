@@ -276,6 +276,10 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       // la salle : ce qui arrive des métadonnées n'autorise rien.
       ...(Number(meta.couverts) ? { couverts: Number(meta.couverts) } : {}),
       prix_estime: Number(meta.prix_estime) || null,
+      // ✅ (28/10, lot 1c) La trace de la promo, décidée par la route avant
+      // Stripe (`traceRdv`, lib/prix-prestation-server.js) : nulle sans promo.
+      prix_plein: Number(meta.prix_plein) > 0 ? Number(meta.prix_plein) : null,
+      promo_deal_id: meta.promo_deal_id || null,
       // ✅ 18/10 : pris au tarif découverte (décidé par la route, avant Stripe).
       tarif_decouverte: meta.tarif_decouverte === '1',
       // ⚠️ LA REMISE EST FIGÉE SUR LE RENDEZ-VOUS, comme sur une commande.
@@ -1650,7 +1654,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
   const { data: rdv } = await supabase
     .from('rdv_reservations')
     .select(`
-      id, date_rdv, heure_debut, heure_fin, duree_minutes, prix_estime,
+      id, date_rdv, heure_debut, heure_fin, duree_minutes, prix_estime, prix_plein,
       numero_rdv, numero_prefixe,
       acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
       empreinte_statut, empreinte_montant,
@@ -1732,6 +1736,8 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       heure_fin:               rdv.heure_fin,
       duree_minutes:           rdv.duree_minutes,
       prix_estime:             rdv.prix_estime,
+      // ✅ (28/10) Le prix sans la promo, barré dans l'email (lot 1c).
+      prix_plein:              rdv.abonnement_id ? null : (rdv.prix_plein ?? null),
       // Même champ que la route de confirmation (garde de parité) : une séance
       // d'abonnement n'a pas de prix, elle est déjà payée.
       seance_abonnement:       !!rdv.abonnement_id,
@@ -1785,6 +1791,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       heure_fin:       rdv.heure_fin,
       duree_minutes:   rdv.duree_minutes,
       prix_estime:     rdv.prix_estime,
+      prix_plein:      rdv.abonnement_id ? null : (rdv.prix_plein ?? null),
       acompte_paye:    !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
       // Le commercant voit ce qui a fait baisser son acompte (27/08).
       fidelite_remise: rdv.fidelite_remise || 0,

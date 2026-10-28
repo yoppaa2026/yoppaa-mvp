@@ -626,18 +626,19 @@ const MUTATIONS = [
     // REPOINTÉES LE 18/10 (les trois) : l'appel rend aussi `decouverte` et
     // passe le client sur les lignes suivantes, que le mutant garde lisibles.
     // Recalées le 28/10 (les trois) : le jour du rendez-vous remplace `undefined`.
-    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(db, prestation, String(date_rdv).slice(0, 10), {',
-    vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
+    // Recalées le 28/10 (les trois) : l'appel rend aussi la remise (`remiseRdv`).
+    de: '    const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(db, prestation, String(date_rdv).slice(0, 10), {',
+    vers: '    const decouverte = false, remiseRdv = null, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   { nom: '🔴 l acompte est calcule sur le prix PLEIN',
     fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
-    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {',
-    vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
+    de: '    const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {',
+    vers: '    const decouverte = false, remiseRdv = null, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   { nom: '🔴 le tunnel complet repart du prix PLEIN',
     fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {',
-    vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
+    de: '    const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {',
+    vers: '    const decouverte = false, remiseRdv = null, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   // 🔴 UNE LECTURE EN ECHEC NE DOIT RIEN BRADER : mieux vaut ne pas appliquer
   // une remise que la deviner.

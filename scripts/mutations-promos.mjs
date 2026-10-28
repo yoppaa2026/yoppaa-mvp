@@ -79,6 +79,23 @@ const MUTATIONS = [
     de: '        ${ligneEconomiePromo(economie_promo, { pourCommercant: true })}',
     vers: '',
     garde: 'l’email commerçant dit ce que la promo a offert' },
+  // ── Lot 1c : la trace sur le rendez-vous ──
+  { nom: '🔴 la trace RDV garde une remise qui ne baisse rien', fichier: 'lib/prix-prestation-server.js',
+    de: '  if (!remise?.deal?.id || !Number.isFinite(plein) || !Number.isFinite(paye) || plein <= paye) {',
+    vers: '  if (!remise?.deal?.id || !Number.isFinite(plein) || !Number.isFinite(paye)) {',
+    garde: 'une « remise » qui ne baisse rien n’est pas une promo' },
+  { nom: '🔴 le webhook oublie la trace de l acompte', fichier: 'app/api/stripe/webhook/route.js',
+    de: '      prix_plein: Number(meta.prix_plein) > 0 ? Number(meta.prix_plein) : null,',
+    vers: '',
+    garde: 'le webhook la relit dans les métadonnées' },
+  { nom: '🔴 la reservation directe n ecrit plus la trace', fichier: 'app/api/rdv/reserver/route.js',
+    de: '        ...traceRdv(remiseRdv),\n        // ✅ 18/10',
+    vers: '        // ✅ 18/10',
+    garde: 'la réservation directe écrit la trace' },
+  { nom: '🔴 l email RDV ne barre plus le prix plein', fichier: 'lib/resend.js',
+    de: '${prixPleinBarre({ prix_plein_total: prix_plein, prix_total: prix_estime })}${euros(Number(prix_estime))}</td></tr>${prix_plein != null ? ligneEconomiePromo(Number(prix_plein) - Number(prix_estime)) : \'\'}',
+    vers: '${euros(Number(prix_estime))}</td></tr>',
+    garde: 'l’email RDV barre le prix plein et dit l’économie' },
 ]
 
 const lancer = () => {

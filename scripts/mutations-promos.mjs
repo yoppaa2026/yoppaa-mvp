@@ -67,6 +67,18 @@ const MUTATIONS = [
     de: 'const venir = promoAVenirPourPrestation(p, dealsActifs, jourPrix, aujourdhuiPromos)',
     vers: 'const venir = null',
     garde: 'la pastille sur la prestation' },
+  { nom: '🔴 l email ne barre plus le prix plein', fichier: 'lib/resend.js',
+    de: '  if (!Number.isFinite(plein) || !Number.isFinite(paye) || plein <= paye) return \'\'',
+    vers: '  return \'\'',
+    garde: 'l’email client barre le prix plein de la ligne en promo' },
+  { nom: '🔴 les notifications ne lisent plus le prix plein', fichier: 'lib/commande-notifs.js',
+    de: 'quantite_fournisseur, prix_unitaire, prix_plein, options,',
+    vers: 'quantite_fournisseur, prix_unitaire, options,',
+    garde: 'les notifications lisent le prix plein en base' },
+  { nom: '🔴 l email commercant tait la promo', fichier: 'lib/resend.js',
+    de: '        ${ligneEconomiePromo(economie_promo, { pourCommercant: true })}',
+    vers: '',
+    garde: 'l’email commerçant dit ce que la promo a offert' },
 ]
 
 const lancer = () => {

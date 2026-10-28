@@ -860,6 +860,14 @@ function CarteCommande({ commande, numero, categorie = null, commerceNom = null,
                   })()}
                   <span style={{ fontWeight: 700, color: T.ink }}>{euros(ligne.quantite * ligne.prix_unitaire)}</span>
                 </div>
+                {/* ✅ (28/10, lot 1 du module promo) Une ligne vendue en promo
+                    le DIT, avec ce que la promo a offert : sans elle, le
+                    commerçant lisait un prix plus bas sans savoir pourquoi. */}
+                {Number(ligne.prix_plein) > Number(ligne.prix_unitaire) && (
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#059669', marginLeft: 10, marginTop: 1 }}>
+                    Promo · {euros((Math.round(Number(ligne.prix_plein) * 100) - Math.round(Number(ligne.prix_unitaire) * 100)) * Number(ligne.quantite) / 100)} offerts (prix plein {euros(Number(ligne.prix_plein) * Number(ligne.quantite))})
+                  </div>
+                )}
                 {/* ✅ (24/10, Caprice) Ce qui n'est pas en rayon : à commander
                     chez le fournisseur avant que le client vienne. */}
                 {mentionFournisseurLigne(ligne) && (

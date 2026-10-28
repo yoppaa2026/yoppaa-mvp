@@ -119,6 +119,41 @@ egal('rien, rien', economieDesLignesCents(null), 0)
   verifier('🔴 le récapitulatif RDV dit l’économie', /Tu économises \{euros\(Number\(r\.prixBarre\) - Number\(r\.prix\)\)\}/.test(R))
 }
 
+// ─── 6. LES EMAILS ET LE TABLEAU DE BORD (28/10, Alex : « prix barré + économie ») ─
+{
+  const { emailCommandeConfirmee, emailNouvelleCommandeCommercant } = await import('../lib/resend.js')
+  const lignes = [
+    { nom: 'Boucles d’oreille', quantite: 1, prix_total: 10.32, prix_plein_total: 12.9 },
+    { nom: 'Donut', quantite: 2, prix_total: 5, prix_plein_total: null },
+  ]
+  const client = emailCommandeConfirmee({
+    yopper_prenom: 'Alex', commercant_nom: 'Le Dressing', numero_commande: 'P1', articles: lignes,
+    total: 15.32, economie_promo: 2.58, date_retrait: '2026-11-04', mode_retrait: 'retrait_boutique', commercant_categorie: 'detail',
+  })
+  verifier('🔴 l’email client barre le prix plein de la ligne en promo',
+    /text-decoration:line-through[^>]*>12,90[\s ]€/.test(client))
+  verifier('et seulement elle', (client.match(/text-decoration:line-through/g) || []).length === 1)
+  verifier('🔴 l’email client dit ce qu’il a économisé', /Tu as économisé 2,58[\s ]€ grâce à la promo/.test(client))
+  const sans = emailCommandeConfirmee({
+    yopper_prenom: 'Alex', commercant_nom: 'Le Dressing', numero_commande: 'P2', articles: [lignes[1]],
+    total: 5, date_retrait: '2026-11-04', mode_retrait: 'retrait_boutique',
+  })
+  verifier('sans promo, l’email ne parle ni de prix barré ni d’économie',
+    !/line-through/.test(sans) && !/économisé/.test(sans))
+  const commercant = emailNouvelleCommandeCommercant({
+    nom_commercant: 'Le Dressing', yopper_prenom: 'Alex', numero_commande: 'P1', articles: lignes,
+    total: 15.32, economie_promo: 2.58, date_retrait: '2026-11-04',
+  })
+  verifier('🔴 l’email commerçant dit ce que la promo a offert', /Dont 2,58[\s ]€ offerts en promo/.test(commercant))
+  const notifs = lireCode('lib/commande-notifs.js')
+  verifier('🔴 les notifications lisent le prix plein en base',
+    /articles:commande_articles\([^)]*\bprix_plein\b/.test(notifs))
+  verifier('et passent l’économie aux deux emails',
+    (notifs.match(/economie_promo:\s+economieDesLignesCents\(cmd\.articles\) \/ 100,/g) || []).length === 2)
+  verifier('🔴 le tableau de bord dit « Promo · X offerts » sur la ligne',
+    /Number\(ligne\.prix_plein\) > Number\(ligne\.prix_unitaire\) && \(/.test(lireCode('app/dashboard/page.js')))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

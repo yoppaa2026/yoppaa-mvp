@@ -278,6 +278,44 @@ egal('rien, rien', economieDesLignesCents(null), 0)
     /const hDebut = d\.plage_debut \?/.test(C) && /recurrence: d\.recurrence \|\| '',/.test(C))
 }
 
+// ─── 11. « ACHETEZ N, RECEVEZ X » : LE MOTEUR (lot 3, pur et inerte) ─────
+{
+  const { calculerOffrePanier, phraseEncore, accrocheOffrePanier } = await import('../lib/offre-panier.js')
+  // Les pizzas d'Alex : 2 pizzas achetées, 1 boisson offerte, choisie.
+  const PIZZAS = { id: 'pz', mode: 'choisi', seuil: 2, nombre_offerts: 1, declencheurs: [{ categorie: 'Pizzas' }], offerts: [{ categorie: 'Boissons' }] }
+  const marg = { article_id: 'marg', categorie: 'Pizzas', prix_unitaire: 9, quantite: 1 }
+  const coca = { article_id: 'coca', categorie: 'Boissons', prix_unitaire: 2.5, quantite: 1, offert_par: 'pz' }
+  const un = calculerOffrePanier(PIZZAS, [marg])
+  egal('🔴 1 pizza : pas encore de droit, il en manque 1', [un.droits, un.manque], [0, 1])
+  egal('« Encore 1 pizza et ta boisson est offerte »',
+    phraseEncore(PIZZAS, un, { objet: 'pizza', apres: 'ta boisson est offerte' }), 'Encore 1 pizza et ta boisson est offerte')
+  egal('sans fin de phrase donnée, une phrase juste quand même',
+    phraseEncore(PIZZAS, un, { objet: 'pizza' }), 'Encore 1 pizza et ton cadeau est offert')
+  const deux = calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 2 }, coca])
+  egal('🔴 2 pizzas : la boisson choisie est offerte', [deux.droits, deux.cadeaux, deux.refus], [1, [{ index: 1, unites: 1 }], null])
+  egal('🔴 la boisson offerte ne compte pas comme pizza', calculerOffrePanier(PIZZAS, [marg, coca]).compte, 1)
+  egal('🔴 deux boissons pour un seul droit : la seconde est refusée',
+    calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 2 }, { ...coca, quantite: 2 }]).refus, 'trop_de_cadeaux')
+  egal('🔴 un cadeau hors liste est refusé',
+    calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 2 }, { ...coca, article_id: 'tira', categorie: 'Desserts' }]).refus, 'article_non_offert')
+  egal('4 pizzas : 2 boissons', calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 4 }]).droits, 2)
+  // Les fringues : 3 achetés, le moins cher offert, toutes tailles confondues.
+  const FRINGUES = { id: 'fr', mode: 'moins_cher', seuil: 3, nombre_offerts: 1, declencheurs: [{ categorie: 'Tops' }] }
+  const top = (prix, quantite = 1, extra = {}) => ({ article_id: `t${prix}`, categorie: 'Tops', prix_unitaire: prix, quantite, ...extra })
+  const r = calculerOffrePanier(FRINGUES, [top(30), top(20), top(25)])
+  egal('🔴 3 tops : le moins cher (20 €) est offert', r.remises, [{ index: 1, unites: 1, montant: 20 }])
+  egal('🔴 6 tops : les deux moins chers (les deux à 15 €)', calculerOffrePanier(FRINGUES, [top(30, 2), top(20), top(25), top(15, 2)]).remises,
+    [{ index: 3, unites: 2, montant: 30 }])
+  egal('6 tops tous différents : les deux moins chers, sur deux lignes',
+    calculerOffrePanier(FRINGUES, [top(30), top(20), top(25), top(15), top(40), top(35)]).remises,
+    [{ index: 1, unites: 1, montant: 20 }, { index: 3, unites: 1, montant: 15 }])
+  egal('2 tops : rien, il en manque 1', [calculerOffrePanier(FRINGUES, [top(30), top(20)]).remises, calculerOffrePanier(FRINGUES, [top(30), top(20)]).manque], [[], 1])
+  egal('un article qui ne participe pas ne compte pas', calculerOffrePanier(FRINGUES, [top(30), top(20), { article_id: 'jean', categorie: 'Jeans', prix_unitaire: 50, quantite: 1 }]).droits, 0)
+  egal('une promo mal formée ne donne rien', calculerOffrePanier({ id: 'x', seuil: 0, nombre_offerts: 1 }, [top(10, 5)]).droits, 0)
+  egal('les accroches', [accrocheOffrePanier(PIZZAS), accrocheOffrePanier(FRINGUES)], ['2 achetés, 1 offert', '3 achetés, le moins cher offert'])
+  egal('rien à dire tant qu’aucun article ne participe', phraseEncore(PIZZAS, calculerOffrePanier(PIZZAS, [])), null)
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

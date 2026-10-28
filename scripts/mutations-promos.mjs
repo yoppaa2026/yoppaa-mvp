@@ -121,6 +121,27 @@ const MUTATIONS = [
     de: '    const dateDebut = `${dDebut}T00:00:00`',
     vers: '    const dateDebut = `${dDebut}T${form.heure_debut || \'00:00\'}:00`',
     garde: 'les heures ne sont plus collées dans les dates' },
+  // ── Retours d'Alex au test (28/10) : la promo à heures se VOIT ──
+  { nom: '🔴 le bandeau du jour tait ses heures', fichier: FICHE,
+    de: '      return plage ? `${jour} · ${plage}` : jour',
+    vers: '      return jour',
+    garde: 'le bandeau du jour dit ses heures' },
+  { nom: '🔴 les creneaux de la promo ne se distinguent plus', fichier: FICHE,
+    de: '                    const promo = !complet && creneauDonneLaPromo(c.heure_debut)',
+    vers: '                    const promo = false',
+    garde: 'les créneaux de la promo sont teintés et marqués' },
+  { nom: '🔴 la grille juge le creneau a l heure choisie', fichier: FICHE,
+    de: "    const heure = 'heure' in opts ? opts.heure : heureDuCreneauChoisi()",
+    vers: '    const heure = heureDuCreneauChoisi()',
+    garde: 'le créneau se juge au panier recalculé à SON heure' },
+  { nom: '🔴 « Promo appliquée » revient avant le creneau', fichier: FICHE,
+    de: '                    if (plages && sansCreneau) {',
+    vers: '                    if (false) {',
+    garde: 'pas de « Promo appliquée » avant le créneau' },
+  { nom: '🔴 la carte du commercant tait la promo', fichier: 'app/dashboard/VueCommandes.js',
+    de: "        {promoCents > 0 && <span style={puce('#FEF2F2', '#B91C1C')}>Promo · {euros(promoCents / 100)} offerts</span>}",
+    vers: '',
+    garde: 'la carte compacte du commerçant dit la promo' },
 ]
 
 const lancer = () => {

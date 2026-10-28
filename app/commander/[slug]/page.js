@@ -26,7 +26,10 @@ import { plageDeLaLigne, plageCommune, creneauDansPlage, refusDePlageALAjout, ra
 import { delaiEnClair, phraseLimiteFiche, limiteDeLaVeille } from '@/lib/heure-veille'
 import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
-import { promosAVenir, promoAVenirPourArticle, accrocheDuDeal, economieDesLignesCents, nomDuJour, momentDuDeal } from '@/lib/promos-visibles'
+import { promosAVenir, promoAVenirPourArticle, accrocheDuDeal, economieDesLignesCents, nomDuJour, momentDuDeal, pourQuelJour } from '@/lib/promos-visibles'
+// ⚠️ RENOMMÉ : `libellePlage` est déjà celui de la plage de retrait d'un
+// article (`lib/plage-retrait`). Celui-ci dit les heures d'une PROMO.
+import { libellePlage as heuresDeLaPromo } from '@/lib/recurrence-promo'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
@@ -595,6 +598,45 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 // `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
 // est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
 // de l'alimentaire et ne concerne pas une boutique.
+// ═══ UN SEUL BANDEAU POUR TOUTES LES PROMOS (28/10, Alex au test) ═══
+// La promo du jour choisi avait son bandeau violet, celles des autres jours une
+// ligne de pastilles où le taux se faisait couper par le bouton (« -2 »). Une
+// promo se présente désormais toujours de la même façon : quand (avec ses
+// heures), quoi, combien ; et, un autre jour, le bouton qui choisit ce jour-là.
+function BandeauPromo({ deal, etiquette, vedette = false, cta = null, onOuvrir, onCta }) {
+  return (
+    <div style={{ margin: '0 12px 10px', borderRadius: 14, background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, animation: vedette ? 'dealGlow 1.8s ease-in-out infinite' : 'none' }}>
+      <button type="button" onClick={onOuvrir}
+        style={{ width: '100%', background: 'none', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
+        <Flame size={20} strokeWidth={2} color={T.light} style={{ flexShrink: 0 }}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>{etiquette}</p>
+          <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{deal.titre}</p>
+        </div>
+        {/* Une remise % n'a pas de prix propre : c'est le taux qui accroche
+            l'œil, sinon le bandeau reste muet. */}
+        {deal.remise_pct ? (
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>-{deal.remise_pct}%</p>
+          </div>
+        ) : deal.prix_deal ? (
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            {deal.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{euros(Number(deal.prix_original))}</p>}
+            <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{euros(Number(deal.prix_deal))}</p>
+          </div>
+        ) : null}
+        <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
+      </button>
+      {cta && (
+        <button type="button" onClick={onCta}
+          style={{ display: 'block', width: 'calc(100% - 32px)', margin: '0 16px 12px', padding: '9px 12px', borderRadius: 100, border: 'none', background: '#fff', color: T.deep, fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+          {cta} →
+        </button>
+      )}
+    </div>
+  )
+}
+
 function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = null, relais = null, onCommanderAutreJour = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, promoAVenir = null, mentionVitrineTexte = 'Disponible sur place', coupDeCoeur = false }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
@@ -699,6 +741,11 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
                 <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#fff', background: '#DC2626', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.2px' }}>
                   {remise.deal.remise_pct ? `-${remise.deal.remise_pct}%` : 'PROMO'}
                 </span>
+                {/* ✅ (28/10, Alex au test) LA PLAGE SE DIT SUR L'ARTICLE : le
+                    prix barré ne vaut que pour un retrait dans ces heures. */}
+                {heuresDeLaPromo(remise.deal) && (
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#DC2626', whiteSpace: 'nowrap' }}>de {heuresDeLaPromo(remise.deal)}</span>
+                )}
               </>
             ) : (
               <>
@@ -3177,7 +3224,11 @@ export default function CommanderSlug() {
     return h ? String(h).slice(0, 5) : null
   }
 
-  function calculDuServeur() {
+  // `{ heure }` calcule le panier à une AUTRE heure que le créneau choisi
+  // (`null` : le jour seul) : c'est ainsi que la grille des créneaux sait
+  // lesquels donnent la promo.
+  function calculDuServeur(opts = {}) {
+    const heure = 'heure' in opts ? opts.heure : heureDuCreneauChoisi()
     const items = articlesDuPanier()
     if (items.length === 0) return null
     try {
@@ -3199,7 +3250,7 @@ export default function CommanderSlug() {
         dateCommande: dateDeLaCommande(),
         // ✅ (28/10, lot 2) L'heure du créneau choisi, comme le serveur : une
         // promo « 11 h à 14 h » ne vaut que pour un retrait dans sa plage.
-        heureRetrait: heureDuCreneauChoisi(),
+        heureRetrait: heure,
       })
       return r?.ok ? r : null
     } catch {
@@ -3240,6 +3291,20 @@ export default function CommanderSlug() {
   }
   function economiePanier() {
     return economieDesLignesCents(calculDuServeur()?.lignes) / 100
+  }
+
+  // ✅ LA PROMO À HEURES, DITE À L'ÉTAPE DU CRÉNEAU (28/10, Alex au test :
+  // « rien n'indique le changement de prix et le fait qu'il soit hors ou
+  // dans ces créneaux »). Les promos du panier qui ont une plage horaire, lues
+  // dans le MÊME calcul que le prix, fait sans heure (le jour seul) : chaque
+  // ligne y porte la promo qui l'a remisée (`tracePromo`).
+  function promosAPlageDuPanier() {
+    const ids = new Set((calculDuServeur({ heure: null })?.lignes || []).map(l => l.promo_deal_id).filter(Boolean))
+    return (dealsTous || []).filter(d => ids.has(d.id) && heuresDeLaPromo(d))
+  }
+  // « 11 h à 14 h », ou « 11 h à 14 h et 18 h à 20 h » s'il y en a deux.
+  function plagesDuPanierDites() {
+    return [...new Set(promosAPlageDuPanier().map(d => heuresDeLaPromo(d)))].join(' et ')
   }
 
   // 🔴 LE MINIMUM DE LIVRAISON, DIT AVANT LE PAIEMENT (audit, 06/10). Il
@@ -3967,6 +4032,14 @@ export default function CommanderSlug() {
     ? promosAVenir(dealsTous, aujourdhuiPromos, { garder: d => !d.prestation_id && d.cible_tout !== 'prestations' })
         .filter(p => p.deal.id !== dealVedette?.id)
     : []
+  // Le panier a-t-il une promo à heures ce jour-là ? Lu UNE fois par rendu :
+  // la grille des créneaux s'en sert pour chaque case.
+  const panierAPromoAHeures = promosAPlageDuPanier().length > 0
+  // Ce créneau donne-t-il la promo ? Le panier recalculé à SON heure.
+  function creneauDonneLaPromo(heureDebut) {
+    if (!panierAPromoAHeures) return false
+    return economieDesLignesCents(calculDuServeur({ heure: String(heureDebut || '').slice(0, 5) || null })?.lignes) > 0
+  }
   // Choisir le jour d'une promo depuis la section, quand ce jour est proposé
   // au retrait. Rend `false` sinon (livraison, expédition, jour non proposé) :
   // le bouton ne s'affiche pas.
@@ -3983,6 +4056,31 @@ export default function CommanderSlug() {
     if (i < 0) return
     if (estDetail) setJourBoutiqueChoisi(i)
     else setJourSelectionne(i)
+  }
+  // ✅ (28/10, Alex au test) Les bandeaux de la fiche, tous au modèle du deal
+  // du jour : celui du jour choisi d'abord (« Deal de jeudi · 11 h à 14 h »),
+  // puis les autres avec leur moment et le bouton qui choisit leur jour.
+  function bandeauxDesPromos() {
+    if (!commercant || !canDo(planEffectif(commercant), 'deals')) return []
+    const auJourChoisi = (deal) => {
+      const plage = heuresDeLaPromo(deal)
+      const jour = jourDesPromos === aujourdhuiPromos ? 'Deal du jour' : `Deal de ${nomDuJour(jourDesPromos)}`
+      return plage ? `${jour} · ${plage}` : jour
+    }
+    return [
+      ...(dealVedette ? [{ deal: dealVedette, moment: null, premierJour: jourDesPromos }] : []),
+      ...promosDeLaFiche,
+    ].slice(0, 4).map(p => {
+      const leJourChoisi = dealActifCeJour(p.deal, jourDesPromos)
+      const peutChoisir = !leJourChoisi && peutCommander && indexDuJourDePromo(p.premierJour) >= 0
+      return {
+        deal: p.deal,
+        vedette: p.deal.id === dealVedette?.id,
+        etiquette: leJourChoisi ? auJourChoisi(p.deal) : (p.moment || 'Promo'),
+        cta: peutChoisir ? `Commander pour ${pourQuelJour(p.premierJour, aujourdhuiPromos)}` : null,
+        premierJour: p.premierJour,
+      }
+    })
   }
 
   // Le jour de retrait du panier. `null` en expédition : pas de jour, donc
@@ -4663,13 +4761,13 @@ export default function CommanderSlug() {
                   <button type="button" onClick={() => { choisirJourDePromo(premier); setDealDetailOuvert(null) }}
                     style={{ width: '100%', marginTop: 14, padding: '0.95rem', border: 'none', borderRadius: 100, background: 'linear-gradient(135deg, #DC2626, #F97316)', color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     <Calendar size={16} strokeWidth={2.4}/>
-                    Commander pour ce jour
+                    Commander pour {pourQuelJour(premier, aujourdhuiPromos)}
                   </button>
                 )
               })()}
               {dealDetailOuvert.article_id && (
                 <p style={{ fontSize: '0.78rem', color: T.main, fontWeight: 700, margin: '0 0 6px' }}>
-                  <Check size={13} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Appliqué automatiquement à l&rsquo;article concerné
+                  <Check size={13} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Appliqué automatiquement à l&rsquo;article concerné{heuresDeLaPromo(dealDetailOuvert) ? `, pour un retrait de ${heuresDeLaPromo(dealDetailOuvert)}` : ''}
                 </p>
               )}
 
@@ -5351,70 +5449,17 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Bandeau deal du jour - cliquable pour ouvrir le détail.
-                    ✅ (28/10) Celui du JOUR CHOISI (`dealVedette`), plus celui
-                    d'aujourd'hui : c'est ce jour-là que le panier se calcule. */}
-                {canDo(planEffectif(commercant), 'deals') && dealVedette && (() => { const dealActif = dealVedette; return (
-                  <div style={{ margin: '0 12px 12px' }}>
-                    <button onClick={() => setDealDetailOuvert(dealActif)}
-                      style={{ width: '100%', background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
-                      <Flame size={20} strokeWidth={2} color={T.light} style={{ flexShrink: 0 }}/>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>{jourDesPromos === aujourdhuiPromos ? 'Deal du jour' : `Deal de ${nomDuJour(jourDesPromos)}`}</p>
-                        <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{dealActif.titre}</p>
-                      </div>
-                      {/* Une remise % n'a pas de prix propre : c'est le taux qui
-                          accroche l'œil, sinon le bandeau reste muet. */}
-                      {dealActif.remise_pct ? (
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>-{dealActif.remise_pct}%</p>
-                        </div>
-                      ) : dealActif.prix_deal ? (
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          {dealActif.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{euros(Number(dealActif.prix_original))}</p>}
-                          <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{euros(Number(dealActif.prix_deal))}</p>
-                        </div>
-                      ) : null}
-                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
-                    </button>
-                  </div>
-                ) })()}
-
-                {/* ═══ LES PROMOS, AVEC LEUR MOMENT (28/10, Alex au tableau) ═══
-                    Toutes les promos en cours et à venir (14 jours), sauf celle
-                    du bandeau. Le client voit QUAND venir ; s'il peut choisir
-                    ce jour-là, un bouton le fait pour lui. */}
-                {promosDeLaFiche.length > 0 && (
-                  <div style={{ margin: '0 12px 12px', padding: '12px 14px', borderRadius: 14, background: '#fff', border: `1.5px solid ${T.pale}` }}>
-                    <p style={{ fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 8px' }}>Promos</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {promosDeLaFiche.slice(0, 4).map(p => {
-                        const leJourChoisi = dealActifCeJour(p.deal, jourDesPromos)
-                        const peutChoisir = !leJourChoisi && peutCommander && indexDuJourDePromo(p.premierJour) >= 0
-                        return (
-                          <div key={p.deal.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <button type="button" onClick={() => setDealDetailOuvert(p.deal)}
-                              style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-                              <span style={{ flexShrink: 0, fontSize: '0.68rem', fontWeight: 800, color: leJourChoisi ? '#fff' : T.deep, background: leJourChoisi ? '#DC2626' : T.pale, padding: '3px 9px', borderRadius: 100, whiteSpace: 'nowrap' }}>
-                                {p.moment}
-                              </span>
-                              <span style={{ minWidth: 0, fontSize: '0.85rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {p.deal.titre}
-                              </span>
-                              <span style={{ flexShrink: 0, fontSize: '0.75rem', fontWeight: 900, color: '#DC2626' }}>{accrocheDuDeal(p.deal)}</span>
-                            </button>
-                            {peutChoisir && (
-                              <button type="button" onClick={() => choisirJourDePromo(p.premierJour)}
-                                style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                                Commander pour ce jour
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+                {/* ═══ LES PROMOS, EN BANDEAUX (28/10, Alex au test) ═══
+                    Celle du JOUR CHOISI (`dealVedette`) d'abord : c'est ce
+                    jour-là que le panier se calcule. Puis les promos en cours
+                    et à venir (14 jours), avec leur moment et leurs heures.
+                    Toutes au même modèle : la ligne de pastilles d'avant se
+                    coupait (« -2 ») sous son bouton. */}
+                {bandeauxDesPromos().map(b => (
+                  <BandeauPromo key={b.deal.id} deal={b.deal} etiquette={b.etiquette} vedette={b.vedette} cta={b.cta}
+                    onOuvrir={() => setDealDetailOuvert(b.deal)}
+                    onCta={() => choisirJourDePromo(b.premierJour)}/>
+                ))}
 
                 {/* Bouton Prendre RDV - module natif Yoppaa pour vitrine FULL avec rdv_actif */}
                 {/* ═══ QUE VENEZ-VOUS FAIRE ? (Alex, 09/09) ═══════════════════
@@ -5940,12 +5985,36 @@ export default function CommanderSlug() {
                   {/* ✅ (28/10, Alex au tableau) CE QUE LA PROMO FAIT GAGNER,
                       dit avant de payer : sans cette ligne, un client payait
                       moins sans savoir pourquoi. */}
-                  {economiePanier() > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginTop: 6, color: '#059669' }}>
-                      <span style={{ fontWeight: 700 }}>Promo appliquée</span>
-                      <span style={{ fontWeight: 800 }}>Tu économises {euros(economiePanier())}</span>
-                    </div>
-                  )}
+                  {/* ✅ (28/10, Alex au test) UNE PROMO À HEURES NE SE DIT PAS
+                      ACQUISE AVANT LE CRÉNEAU : sans heure, le calcul l'applique
+                      (le jour seul décide), et « Promo appliquée » s'affichait
+                      avant même le choix. Trois états : pas encore de créneau,
+                      créneau dans la plage, créneau hors plage. */}
+                  {(() => {
+                    const plages = plagesDuPanierDites()
+                    const sansCreneau = !heureDuCreneauChoisi()
+                    if (plages && sansCreneau) {
+                      const possible = economieDesLignesCents(calculDuServeur({ heure: null })?.lignes) / 100
+                      return (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: '0.8rem', marginTop: 6, color: '#DC2626' }}>
+                          <span style={{ fontWeight: 700 }}>Promo de {plages}</span>
+                          <span style={{ fontWeight: 800, textAlign: 'right' }}>-{euros(possible)} sur un créneau promo</span>
+                        </div>
+                      )
+                    }
+                    if (economiePanier() > 0) return (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginTop: 6, color: '#059669' }}>
+                        <span style={{ fontWeight: 700 }}>Promo appliquée</span>
+                        <span style={{ fontWeight: 800 }}>Tu économises {euros(economiePanier())}</span>
+                      </div>
+                    )
+                    if (plages) return (
+                      <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#B45309', margin: '6px 0 0', lineHeight: 1.45 }}>
+                        Ce créneau est hors promo : prix plein. La promo vaut pour {modeCommande === 'livraison' ? 'une livraison' : 'un retrait'} de {plages}.
+                      </p>
+                    )
+                    return null
+                  })()}
                   {(modeCommande === 'livraison' || (estDetail && modeBoutiqueEff === 'expedition')) && (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>
@@ -6193,6 +6262,15 @@ export default function CommanderSlug() {
                   </p>
                 )}
 
+                {/* ✅ (28/10, Alex au test) LES CRÉNEAUX DE LA PROMO SE VOIENT :
+                    teintés et marqués « Promo », pour orienter le client vers
+                    les heures où son prix baisse. */}
+                {panierAPromoAHeures && (
+                  <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#B91C1C', background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 12, padding: '0.625rem 0.75rem', margin: '0 0 0.875rem', lineHeight: 1.45 }}>
+                    Ta promo vaut pour un retrait de {plagesDuPanierDites()} : les créneaux marqués « Promo » en profitent.
+                  </p>
+                )}
+
                 <div className="grid3" style={{ marginBottom: '1.5rem' }}>
                   {[...new Map(
                     creneauxProposables()
@@ -6206,14 +6284,16 @@ export default function CommanderSlug() {
                       creneauPrecedent: idxCourant > 0 ? creneauxTries[idxCourant - 1] : null,
                     })
                     const choisi = creneauChoisi === c.id
+                    const promo = !complet && creneauDonneLaPromo(c.heure_debut)
+                    const bordRepos = promo ? '#FCA5A5' : T.pale
                     return (
                       <div key={c.id} onClick={() => { if (!complet) { setCreneauChoisi(c.id); setErreurCommande(null); setAjustementStock(null) } }}
                         style={{
                           position: 'relative',
                           padding: '0.75rem 0.5rem',
                           borderRadius: 14,
-                          border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`,
-                          background: complet ? '#F9FAFB' : choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
+                          border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : bordRepos}`,
+                          background: complet ? '#F9FAFB' : choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : promo ? '#FEF2F2' : '#fff',
                           cursor: complet ? 'default' : 'pointer',
                           textAlign: 'center',
                           transition: 'all 0.15s',
@@ -6221,7 +6301,7 @@ export default function CommanderSlug() {
                           overflow: 'hidden',
                         }}
                         onMouseOver={e => { if (!complet && !choisi) { e.currentTarget.style.borderColor = T.main + '88'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
-                        onMouseOut={e => { if (!complet && !choisi) { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)' } }}>
+                        onMouseOut={e => { if (!complet && !choisi) { e.currentTarget.style.borderColor = bordRepos; e.currentTarget.style.transform = 'translateY(0)' } }}>
                         {/* Check overlay coin haut droit quand choisi */}
                         {choisi && (
                           <span style={{ position: 'absolute', top: 4, right: 4, width: 16, height: 16, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
@@ -6231,6 +6311,9 @@ export default function CommanderSlug() {
                         <p style={{ fontWeight: 800, fontSize: '0.95rem', color: complet ? '#D1D5DB' : choisi ? '#fff' : T.ink, textDecoration: complet ? 'line-through' : 'none', letterSpacing: '-0.3px', margin: 0, lineHeight: 1.1 }}>
                           {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
                         </p>
+                        {promo && (
+                          <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: choisi ? '#fff' : '#DC2626', marginTop: 5, letterSpacing: '0.3px', textTransform: 'uppercase' }}>Promo</span>
+                        )}
                         {/* Mention etat : SVG + texte, harmonise */}
                         {complet && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.62rem', fontWeight: 800, color: '#DC2626', marginTop: 5 }}>

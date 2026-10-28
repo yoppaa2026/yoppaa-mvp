@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs'
 import {
   momentDuDeal, promosAVenir, promoAVenirPourArticle, promoAVenirPourPrestation,
-  economieDesLignesCents, accrocheDuDeal, fenetreDuDeal, ajouterJoursISO, nomDuJour,
+  economieDesLignesCents, accrocheDuDeal, fenetreDuDeal, ajouterJoursISO, nomDuJour, pourQuelJour,
 } from '../lib/promos-visibles.js'
 import { sansProse } from './lire-code.mjs'
 
@@ -37,6 +37,9 @@ const periode = (a, b, extra = {}) => ({ id: `r${a}-${b}`, titre: 'Période', de
 // ─── 1. LE MOMENT, DIT COMME AU COMPTOIR ─────────────────────────────────
 egal('ajouter des jours traverse le mois', ajouterJoursISO('2026-10-30', 3), '2026-11-02')
 egal('le nom du jour', nomDuJour(LUNDI), 'lundi')
+egal('« Commander pour … » : le jour dit',
+  [pourQuelJour(LUNDI, LUNDI), pourQuelJour(jour(1), LUNDI), pourQuelJour(jour(3), LUNDI), pourQuelJour(jour(9), LUNDI), pourQuelJour(null, LUNDI)],
+  ["aujourd'hui", 'demain', 'jeudi', 'le 11 nov.', ''])
 egal('aujourd’hui', momentDuDeal(ponctuel(0), LUNDI), "Aujourd'hui")
 egal('demain', momentDuDeal(ponctuel(1), LUNDI), 'Demain')
 egal('dans la semaine : le jour', momentDuDeal(ponctuel(2), LUNDI), 'Mercredi')
@@ -105,8 +108,29 @@ egal('rien, rien', economieDesLignesCents(null), 0)
     !/remiseSurArticle\([^()]*, dealsActifs\)/.test(F) && !/offresSepareesPourArticle\(a, dealsActifs\)/.test(F))
   verifier('🔴 et toujours AVEC le jour (sinon `lib/deals.js` refiltre sur aujourd’hui)',
     (F.match(/remiseSurArticle\(\w+, dealsDuJourChoisi, jourDesPromos\)/g) || []).length >= 6)
-  verifier('le bandeau suit le jour choisi', /dealVedette && \(\(\) => \{ const dealActif = dealVedette;/.test(F))
-  verifier('la section « Promos » s’affiche', /\{promosDeLaFiche\.length > 0 && \(/.test(F) && />Promos<\/p>/.test(F))
+  // ⚠️ REPOINTÉES (28/10, Alex au test) : le bandeau et la section « Promos »
+  // sont devenus UN modèle de bandeau (`BandeauPromo`), le deal du jour choisi
+  // en premier, puis les autres promos. Les deux règles restent gardées.
+  verifier('le bandeau suit le jour choisi',
+    /\.\.\.\(dealVedette \? \[\{ deal: dealVedette, moment: null, premierJour: jourDesPromos \}\] : \[\]\)/.test(F)
+    && /etiquette: leJourChoisi \? auJourChoisi\(p\.deal\)/.test(F))
+  verifier('les promos à venir s’affichent, au même modèle', /\.\.\.promosDeLaFiche,/.test(F)
+    && /\{bandeauxDesPromos\(\)\.map\(b => \(\s*<BandeauPromo /.test(F))
+  verifier('🔴 le bandeau du jour dit ses heures', /return plage \? `\$\{jour\} · \$\{plage\}` : jour/.test(F))
+  verifier('🔴 le bouton dit le jour, plus « ce jour »',
+    !/Commander pour ce jour/.test(F) && /`Commander pour \$\{pourQuelJour\(p\.premierJour, aujourdhuiPromos\)\}`/.test(F))
+  verifier('🔴 l’article dit la plage de sa promo', /\{heuresDeLaPromo\(remise\.deal\) && \(/.test(F))
+  // 🔴 Deux `libellePlage` existent (plage de retrait, heures de promo) : les
+  // importer tous deux sous ce nom casse la construction (28/10).
+  verifier('🔴 les heures de la promo ont leur propre nom', /import \{ libellePlage as heuresDeLaPromo \} from '@\/lib\/recurrence-promo'/.test(F))
+  verifier('🔴 les créneaux de la promo sont teintés et marqués',
+    /const promo = !complet && creneauDonneLaPromo\(c\.heure_debut\)/.test(F) && /: promo \? '#FEF2F2' : '#fff'/.test(F))
+  verifier('🔴 le créneau se juge au panier recalculé à SON heure',
+    /calculDuServeur\(\{ heure: String\(heureDebut \|\| ''\)\.slice\(0, 5\) \|\| null \}\)/.test(F)
+    && /const heure = 'heure' in opts \? opts\.heure : heureDuCreneauChoisi\(\)/.test(F)
+    && /heureRetrait: heure,/.test(F))
+  verifier('🔴 pas de « Promo appliquée » avant le créneau quand la promo a des heures',
+    /if \(plages && sansCreneau\) \{/.test(F) && /Ce créneau est hors promo : prix plein\./.test(F))
   verifier('🔴 la pastille « -20 % mercredi » est passée aux articles',
     (F.match(/promoAVenir=\{promoAVenirPourArticle\(a, dealsTous, jourDesPromos, aujourdhuiPromos\)\}/g) || []).length >= 3)
   verifier('🔴 une offre ne s’achète qu’au jour choisi', /if \(!dealActifCeJour\(deal, jourDesPromos\)\) return false/.test(F))
@@ -116,6 +140,11 @@ egal('rien, rien', economieDesLignesCents(null), 0)
     // ⚠️ REPOINTÉE (lot 2) : la liste COMPLÈTE, l'heure choisie ne cache rien ici.
     /const promosAVenirFiche = promosAVenir\(dealsActifsTous, aujourdhuiPromos\)\.filter\(p => !p\.enCours\)/.test(R)
     && /\{etape === 1 && promosAVenirFiche\.length > 0 && \(/.test(R))
+  verifier('🔴 la fiche RDV : le deal du jour dit ses heures', /libellePlage\(d\) \? `Deal du jour · \$\{libellePlage\(d\)\}` : 'Deal du jour'/.test(R))
+  verifier('la fiche RDV : les promos à venir au modèle du bandeau', !/>Promos à venir<\/p>/.test(R))
+  const V = lireCode('app/dashboard/VueCommandes.js')
+  verifier('🔴 la carte compacte du commerçant dit la promo',
+    /const promoCents = economieDesLignesCents\(commande\.commande_articles\)/.test(V) && /\{promoCents > 0 && <span/.test(V))
   verifier('🔴 la pastille sur la prestation', /promoAVenirPourPrestation\(p, dealsActifs, jourPrix, aujourdhuiPromos\)/.test(R))
   verifier('🔴 le récapitulatif RDV dit l’économie', /Tu économises \{euros\(Number\(r\.prixBarre\) - Number\(r\.prix\)\)\}/.test(R))
 }
@@ -257,7 +286,10 @@ egal('rien, rien', economieDesLignesCents(null), 0)
   verifier('🔴 et la liste des commerces', /est_bonne_affaire, \$\{COLONNES_RECURRENCE\}`\)/.test(lireCode('app/commander/page.js')))
   verifier('🔴 la commande passe l’heure du créneau',
     /heureRetrait: creneau\?\.heure_debut \? String\(creneau\.heure_debut\)\.slice\(0, 5\) : null,/.test(lireCode('app/api/stripe/checkout/create-commande/route.js')))
-  verifier('🔴 le panier aussi', /heureRetrait: heureDuCreneauChoisi\(\),/.test(lireCode('app/commander/[slug]/page.js')))
+  // ⚠️ REPOINTÉE (28/10, Alex au test) : le calcul accepte une autre heure
+  // (la grille des créneaux), mais par défaut c'est TOUJOURS le créneau choisi.
+  verifier('🔴 le panier aussi', /heureRetrait: heure,/.test(lireCode('app/commander/[slug]/page.js'))
+    && /const heure = 'heure' in opts \? opts\.heure : heureDuCreneauChoisi\(\)/.test(lireCode('app/commander/[slug]/page.js')))
   for (const r of ['app/api/rdv/reserver/route.js', 'app/api/stripe/checkout/create-rdv-acompte/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js']) {
     verifier(`🔴 ${r} juge la plage à l’heure du RDV`, /heure: String\(heure(_debut)?\)\.slice\(0, 5\),/.test(lireCode(r)))
   }

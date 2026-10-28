@@ -34,7 +34,7 @@ import { reservationActive, motsReservation, fonctionReservation } from '@/lib/r
 import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
 import { promosAVenir, promoAVenirPourPrestation, accrocheDuDeal } from '@/lib/promos-visibles'
-import { plageAccepte } from '@/lib/recurrence-promo'
+import { plageAccepte, libellePlage } from '@/lib/recurrence-promo'
 import { actuActiveCeJour } from '@/lib/actus-fiche'
 import { BandeauActus, ModaleActu } from '../../ActusFiche'
 import { lienFiche } from '@/lib/lien-fiche'
@@ -3228,7 +3228,7 @@ export default function CommanderRdvSlug() {
                         style={{ width: '100%', background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
                         <Flame size={20} strokeWidth={2} color={T.light} style={{ flexShrink: 0 }}/>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Deal du jour</p>
+                          <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>{libellePlage(d) ? `Deal du jour · ${libellePlage(d)}` : 'Deal du jour'}</p>
                           <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{d.titre}</p>
                         </div>
                         {d.remise_pct ? (
@@ -3249,19 +3249,23 @@ export default function CommanderRdvSlug() {
                     Celles du jour ont leur bandeau juste au-dessus. Ici, les
                     autres, sur 14 jours : « Demain », « Mercredi »… Le prix,
                     lui, suit le jour du rendez-vous choisi (`jourPrix`). */}
+                {/* ✅ (28/10, Alex au test) Au MÊME modèle que le deal du jour,
+                    comme sur la fiche commande : le moment (avec ses heures) en
+                    étiquette, sans l'éclat réservé à la promo d'aujourd'hui. */}
                 {etape === 1 && promosAVenirFiche.length > 0 && (
-                  <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 14, background: '#fff', border: `1.5px solid ${T.pale}` }}>
-                    <p style={{ fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 8px' }}>Promos à venir</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {promosAVenirFiche.slice(0, 4).map(p => (
-                        <button key={p.deal.id} type="button" onClick={() => setDealDetailOuvert(p.deal)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-                          <span style={{ flexShrink: 0, fontSize: '0.68rem', fontWeight: 800, color: T.deep, background: T.pale, padding: '3px 9px', borderRadius: 100, whiteSpace: 'nowrap' }}>{p.moment}</span>
-                          <span style={{ flex: 1, minWidth: 0, fontSize: '0.85rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.deal.titre}</span>
-                          <span style={{ flexShrink: 0, fontSize: '0.75rem', fontWeight: 900, color: '#DC2626' }}>{accrocheDuDeal(p.deal)}</span>
-                        </button>
-                      ))}
-                    </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                    {promosAVenirFiche.slice(0, 4).map(p => (
+                      <button key={p.deal.id} type="button" onClick={() => setDealDetailOuvert(p.deal)}
+                        style={{ width: '100%', background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
+                        <Flame size={20} strokeWidth={2} color={T.light} style={{ flexShrink: 0 }}/>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>{p.moment}</p>
+                          <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{p.deal.titre}</p>
+                        </div>
+                        <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px', flexShrink: 0 }}>{accrocheDuDeal(p.deal)}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
+                      </button>
+                    ))}
                   </div>
                 )}
 

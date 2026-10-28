@@ -21,6 +21,7 @@ import { etatPaiementCommande, couleurPaiement } from '@/lib/rdv-paiement'
 import { getMinutesBrussels } from '@/lib/ouverture'
 import { ORIGINE_COMMERCANT } from '@/lib/commande-encodee'
 import { COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
+import { economieDesLignesCents } from '@/lib/promos-visibles'
 import { confirme } from './PosteConfirmation'
 import { confirmationSimple } from '@/lib/confirmations'
 import {
@@ -57,6 +58,9 @@ function CarteCompacte({ commande, couleur, aujourdhui, maintenantMin, categorie
   const ref = referenceCommande(commande)
   const jour = String(commande.date_commande || '').slice(0, 10)
   const autreJour = jour && aujourdhui && jour !== aujourdhui
+  // ✅ (28/10, Alex au test) La promo se voit sur la carte, pas seulement dans
+  // le détail : sans elle, le total plus bas ne s'expliquait pas.
+  const promoCents = economieDesLignesCents(commande.commande_articles)
 
   async function avancer(e) {
     e.stopPropagation()
@@ -82,6 +86,7 @@ function CarteCompacte({ commande, couleur, aujourdhui, maintenantMin, categorie
         {commande.mode_retrait === 'livraison' && <span style={puce(COULEUR_LIVRAISON.pale, COULEUR_LIVRAISON.texte)}>Livraison</span>}
         {commande.mode_retrait === 'expedition' && <span style={puce('#EEF2FF', '#3730A3')}>Colis</span>}
         {commande.rdv_reservation_id && <span style={puce(T.pale, T.deep)}>Rendez-vous</span>}
+        {promoCents > 0 && <span style={puce('#FEF2F2', '#B91C1C')}>Promo · {euros(promoCents / 100)} offerts</span>}
         {/* ✅ (24/10, Alex au test) Visible d'un coup d'œil, même au-delà des 4 lignes. */}
         {lignes.some(l => l.fournisseur) && <span style={puce('#FFFBEB', '#B45309')}>À commander chez le fournisseur</span>}
       </div>

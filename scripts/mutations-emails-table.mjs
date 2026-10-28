@@ -154,9 +154,11 @@ const MUTATIONS = [
   { nom: '🔴 l’annulation du client perd l’organisateur', banc: 'verif:table', fichier: 'app/api/rdv/cancel/route.js',
     de: '          commercant_email: commercant?.email,',
     vers: '' },
+  // Recalée le 28/10 : l'adresse visée est l'EMAIL du commerce (l'ORGANIZER du
+  // calendrier) ; le siège (`adresse`) a quitté la requête.
   { nom: '🔴 l’annulation du client ne charge plus l’adresse du commerce', banc: 'verif:table', fichier: 'app/api/rdv/cancel/route.js',
-    de: 'adresse, telephone, email, stripe_account_id',
-    vers: 'adresse, telephone, stripe_account_id' },
+    de: 'telephone, email, stripe_account_id',
+    vers: 'telephone, stripe_account_id' },
   { nom: '⚠️ le déplacement recalcule l’horloge à la main', banc: 'verif:table', fichier: 'app/api/emails/rdv-confirme/route.js',
     de: '          sequence: deplace ? sequenceIcs() : 0,',
     vers: '          sequence: deplace ? Math.floor(Date.now() / 60000) : 0,' },
@@ -262,6 +264,20 @@ const MUTATIONS = [
   { nom: '🔴 le montant promis sur les produits redevient le brut', banc: 'verif:table', fichier: 'app/commander/page.js',
     de: 'euros(p.rembourse != null ? Number(p.rembourse) : Number(p.total) + Number(p.acompte))',
     vers: 'euros(Number(p.total) + Number(p.acompte))' },
+
+  // ── 28/10 : le SIÈGE ne sort plus vers le client (Alex au tableau) ──
+  { nom: '🔴 sans lieu gravé, l’email retombe sur le siège', banc: 'verif:logique', fichier: 'lib/lieu-fige.js',
+    de: "  return libelleLieu(principal) || ''",
+    vers: "  return libelleLieu(principal) || rdv?.commercant?.adresse || ''" },
+  { nom: '🔴 un canal oublie de joindre les lieux du commerce', banc: 'verif:logique', fichier: 'app/api/emails/commande-prete/route.js',
+    de: 'commercant:commercants(nom, slug, commercant_lieux(type, libelle, adresse, principal, actif)),',
+    vers: 'commercant:commercants(nom, slug),' },
+  { nom: '🔴 la carte de la liste relit la commune du siège', banc: 'verif:logique', fichier: 'app/commander/page.js',
+    de: '    adresse: adresseLieu,',
+    vers: '    adresse: c.adresse,' },
+  { nom: '🔴 la recherche fouille de nouveau le siège', banc: 'verif:logique', fichier: 'app/commander/page.js',
+    de: 'sansAccents(adressesLieu[c.id]).includes(q)',
+    vers: 'sansAccents(c.adresse).includes(q)' },
 ]
 
 const lancer = (banc) => {

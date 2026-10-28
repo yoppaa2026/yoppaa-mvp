@@ -90,8 +90,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le Good Morning juge sans la colonne : plus aucun commercant eligible',
     fichier: 'app/api/cron/morning-yoppers/route.js',
-    de: 'commercant:commercants (id, nom, adresse, plan, essai_plan, created_at, statut_publication)',
-    vers: 'commercant:commercants (id, nom, adresse, plan, essai_plan, created_at)' },
+    // Recalée le 28/10 : `adresse` (le siège) a quitté la requête.
+    de: 'commercant:commercants (id, nom, plan, essai_plan, created_at, statut_publication)',
+    vers: 'commercant:commercants (id, nom, plan, essai_plan, created_at)' },
 
   // ─── CE QUE L'ADMIN MONTRE DE CES ETATS (16/09, trouve par Alex) ────────
   { nom: '🔴 la modale reinvente « publie » sur un etat qu elle ignore',

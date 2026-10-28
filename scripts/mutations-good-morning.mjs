@@ -35,7 +35,26 @@ const MUTATIONS = [
     fichier: CONTENU,
     de: ".from('commercants_public')",
     vers: ".from('commercants')",
-    garde: 'le commerce se lit dans la vue publique, jamais dans la table' },
+    garde: 'le commerce se lit dans la vue publique, ses lieux à part, jamais dans la table' },
+
+  // ── 28/10 : la commune vient du LIEU déclaré, plus du siège social ──
+  { nom: '🔴 la règle relit le siège pour situer le commerce',
+    fichier: 'lib/morning-eligibilite.js',
+    de: 'const cp = extraireCodePostal(c.adresse_lieu)',
+    vers: 'const cp = extraireCodePostal(c.adresse)',
+    garde: 'un commerçant publié de la commune passe' },
+
+  { nom: '🔴 la zone n est plus posée sur le commerce',
+    fichier: CONTENU,
+    de: 'const commerces = await attacherAdresseLieu(supabase, data || [])',
+    vers: 'const commerces = data || []',
+    garde: 'le commerce reçoit sa zone depuis son lieu' },
+
+  { nom: '🔴 le cron de 7h30 range de nouveau par le siège',
+    fichier: 'app/api/cron/morning-yoppers/route.js',
+    de: 'const commune = communeDuCommerce(c)',
+    vers: 'const commune = communeDuCp(extraireCodePostal(c.adresse))',
+    garde: 'le cron de 7h30 range par le lieu, plus par le siège' },
 
   { nom: '🔴 la pastille ne rattache plus le commerce de ses deals',
     fichier: CONTENU,
@@ -45,8 +64,8 @@ const MUTATIONS = [
 
   { nom: '🔴 les colonnes de l essai disparaissent : un commerce en essai est juge sur son forfait gratuit',
     fichier: CONTENU,
-    de: "'id, nom, type, adresse, plan, essai_plan, created_at, statut_publication, logo_url, slug, telephone'",
-    vers: "'id, nom, type, adresse, plan, statut_publication, logo_url, slug, telephone'",
+    de: "'id, nom, type, plan, essai_plan, created_at, statut_publication, logo_url, slug, telephone'",
+    vers: "'id, nom, type, plan, statut_publication, logo_url, slug, telephone'",
     garde: 'un commerce en essai de Vendre allume la pastille avec son deal' },
 
   { nom: '⚠️ chaque deal redemande son commerce',

@@ -73,7 +73,7 @@ export async function GET(request) {
         total, paye_en_ligne, bon_cadeau_montant, fidelite_remise, encaisse_mode, encaisse_montant,
         client_email, client_nom, mode_retrait, rdv_reservation_id,
         lieu_id, lieu_libelle, lieu_adresse,
-        commercant:commercants(nom, adresse, categorie),
+        commercant:commercants(nom, categorie, commercant_lieux(type, libelle, adresse, principal, actif)),
         rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, statut)
       `)
       .eq('statut', 'pret')

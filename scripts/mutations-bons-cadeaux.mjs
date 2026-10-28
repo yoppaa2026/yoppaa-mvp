@@ -802,8 +802,9 @@ const MUTATIONS = [
   // `libelleBon` retombe sur « cadeau », l'email part, et personne ne le sait.
   { nom: '🔴 la route du bon annulé cesse de demander la catégorie en base',
     banc: 'verif:bons', fichier: 'app/api/emails/rdv-annule/route.js',
-    de: 'commercant:commercants(nom, slug, adresse, telephone, email, categorie),',
-    vers: 'commercant:commercants(nom, slug, adresse, telephone, email),' },
+    // Recalée le 28/10 : le siège (`adresse`) a cédé la place aux lieux.
+    de: 'commercant:commercants(nom, slug, telephone, email, categorie, commercant_lieux',
+    vers: 'commercant:commercants(nom, slug, telephone, email, commercant_lieux' },
 
   // ⚠️ ET CELLE-CI ÉTAIT RESTÉE VERTE PARCE QUE MA GARDE COMPTAIT. Retirer un
   // journal sur sept en laissait toujours cinq, donc le seuil tenait. Compter

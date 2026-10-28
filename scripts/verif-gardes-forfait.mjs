@@ -383,7 +383,8 @@ for (const r of ROUTES) {
 {
   const enEssai = commerce('exister', {
     essai_plan: 'vendre', slug: 'essai', bons_cadeaux_actif: true, fidelite_actif: false,
-    statut_publication: 'publie', adresse: 'Rue de Prée 9, 5640 Mettet',
+    // 28/10 : la commune du Good Morning vient du LIEU (`adresse_lieu`), plus du siège.
+    statut_publication: 'publie', adresse_lieu: 'Rue de Prée 9, 5640 Mettet',
   })
 
   // ─── Ce qui s'exécute ─────────────────────────────────────────────────────
@@ -454,7 +455,8 @@ for (const r of ROUTES) {
     { nom: 'le cron du Good Morning', chemin: 'app/api/cron/morning-yoppers/route.js', regles: [
       ['lit le forfait effectif pour les deals', /const planDeal = planEffectif\(c\)/],
       ['et pour les actus', /canDo\(planEffectif\(c\), 'actu_gmy'\)/],
-    ], selects: [/adresse, plan, essai_plan, created_at, statut_publication\)/g, 2] },
+    // ⚠️ REPOINTÉE LE 28/10 : `adresse` (le siège) a quitté ces deux requêtes.
+    ], selects: [/\(id, nom, plan, essai_plan, created_at, statut_publication\)/g, 2] },
     { nom: 'le récap du matin', chemin: 'app/api/cron/recap-jour-8h/route.js', regles: [
       ['charge l’essai', /categorie, plan, essai_plan, created_at, rdv_actif'/],
       ['lit le forfait effectif', /planEffectif\(c\) === 'vendre'/],
@@ -466,7 +468,8 @@ for (const r of ROUTES) {
     // par `rattacherCommerces`, dans la vue publique, avec UNE liste de
     // colonnes. La règle reste la même, elle vise l'endroit où elle vit.
     { nom: 'le commerce du Good Morning', chemin: 'lib/morning-contenu.js', regles: [],
-      selects: [/adresse, plan, essai_plan, created_at, statut_publication,/g, 1] },
+      // ⚠️ REPOINTÉE LE 28/10 : sans `adresse`, le siège quitte la vue.
+      selects: [/type, plan, essai_plan, created_at, statut_publication,/g, 1] },
     // ⚠️ REPOINTÉE LE 15/10 : la lecture vit dans `lib/fiche-seo-server.js`,
     // partagée par la fiche boutique et la fiche rendez-vous.
     { nom: 'le balisage Google de la fiche', chemin: 'lib/fiche-seo-server.js', regles: [

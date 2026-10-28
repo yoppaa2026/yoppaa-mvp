@@ -68,7 +68,7 @@ export async function POST(request) {
       couverts,
       abonnement_id, empreinte_statut, empreinte_montant, empreinte_payment_method_id,
       client_telephone,
-      commercant:commercants(id, nom, slug, adresse, telephone, email, stripe_account_id, rdv_delai_annulation_heures, categorie, notif_mode),
+      commercant:commercants(id, nom, slug, telephone, email, stripe_account_id, rdv_delai_annulation_heures, categorie, notif_mode, commercant_lieux(type, libelle, adresse, principal, actif)),
       prestation:rdv_prestations(nom, par_couverts)
     `
     const query = supabase.from('rdv_reservations').select(selectCols).is('deleted_at', null)

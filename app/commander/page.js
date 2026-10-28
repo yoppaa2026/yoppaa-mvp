@@ -39,7 +39,7 @@ import { statutCreneaux, pastilleCreneaux, jourPlus, pastilleDeCommandePertinent
 import { finApresMinuit } from '@/lib/rdv-slots'
 import { jourLocalISO, jourBruxelles, jourCivilPlus } from '@/lib/timezone'
 import { horaireDuJour, COLONNES_EXCEPTIONS, exceptionsPour } from '@/lib/horaires-du-jour'
-import { lieuxDuJour } from '@/lib/lieux-activite'
+import { lieuxDuJour, lieuPrincipal } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
 import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
@@ -1056,7 +1056,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
   )
 }
 
-function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDuJour, fermetures, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori, onPartager }) {
+function CarteCommerce({ c, adresseLieu = null, favoris, notesParCommerce, statutsCommerce, tablesDuJour, fermetures, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori, onPartager }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
   // ⚠️ Sous 3 avis on ne montre PAS de moyenne : « 5,0 » sur un seul avis se lit
@@ -1200,9 +1200,10 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
   // Où se trouve ce commerce : la distance si le Yopper a partagé sa position,
   // sa commune sinon. Sans ce repli, une liste consultée sans géolocalisation
   // ne disait plus RIEN du lieu. La règle vit dans lib/adresse-localite.js.
+  // ⚠️ `adresseLieu`, JAMAIS `c.adresse` : c'est le siège social (28/10).
   const lieu = lieuDeCarte({
     distance: c.distance,
-    adresse: c.adresse,
+    adresse: adresseLieu,
     libelleLieu: c.lieu_proche?.libelle || null,
     nomCommerce: c.nom,
     formatDistance,
@@ -3238,12 +3239,18 @@ export default function Commander() {
   // jamais seuls, ils ne servent qu'à mesurer. Un état de plus ferait rejouer
   // le calcul des distances à contretemps.
   const lieuxRef = useRef({})
+  // 🔴 L'ADRESSE QUE LA CARTE ET LA RECHERCHE ONT LE DROIT DE LIRE (28/10) :
+  // celle du lieu principal DÉCLARÉ, par commerce. Elles lisaient
+  // `commercants_public.adresse`, c'est-à-dire le SIÈGE SOCIAL, qui ne se
+  // publie jamais (Alex, 15/08) et qui quitte la vue. Un état, cette fois :
+  // la commune s'AFFICHE, contrairement aux lieux qui ne servent qu'à mesurer.
+  const [adressesLieu, setAdressesLieu] = useState({})
 
   async function chargerLieux(ids) {
     if (!ids?.length) return
     const { data } = await supabase
       .from('commercant_lieux')
-      .select('commercant_id, type, jour_semaine, date_jour, libelle, adresse, latitude, longitude, actif')
+      .select('commercant_id, type, jour_semaine, date_jour, libelle, adresse, latitude, longitude, actif, principal')
       .in('commercant_id', ids)
       .eq('actif', true)
     const parCommercant = {}
@@ -3251,6 +3258,12 @@ export default function Commander() {
       (parCommercant[l.commercant_id] ||= []).push(l)
     }
     lieuxRef.current = parCommercant
+    const adresses = {}
+    for (const [id, lieux] of Object.entries(parCommercant)) {
+      const principal = lieuPrincipal({ lieux })
+      if (principal?.adresse) adresses[id] = principal.adresse
+    }
+    setAdressesLieu(adresses)
     // ⚠️ LES LIEUX ARRIVENT APRÈS LES COMMERCES, et souvent après la position.
     // Sans ce recalcul, la distance resterait celle du siège social jusqu'au
     // prochain relevé : la professeure de yoga apparaîtrait à huit kilomètres
@@ -3495,7 +3508,7 @@ export default function Commander() {
     .filter(c => {
       const q = sansAccents(searchQuery.trim())
       if (!q) return true
-      return sansAccents(c.nom).includes(q) || sansAccents(c.type).includes(q) || sansAccents(c.adresse).includes(q)
+      return sansAccents(c.nom).includes(q) || sansAccents(c.type).includes(q) || sansAccents(adressesLieu[c.id]).includes(q)
     })
 
   // Retrait « prêt à retirer » : swipe pour confirmer le retrait au comptoir.
@@ -4253,7 +4266,7 @@ export default function Commander() {
                 </div>
               ) : (
                 <div className="commerces-grid">
-                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} tablesDuJour={tablesDuJour} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
+                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} adresseLieu={adressesLieu[c.id]} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} tablesDuJour={tablesDuJour} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
                 </div>
               )}
 
@@ -5305,7 +5318,7 @@ export default function Commander() {
                       </p>
                     ) : (
                       <div className="commerces-grid" style={{ marginTop: 4 }}>
-                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} tablesDuJour={tablesDuJour} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
+                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} adresseLieu={adressesLieu[c.id]} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} tablesDuJour={tablesDuJour} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
                       </div>
                     )}
                   </div>

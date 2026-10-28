@@ -61,7 +61,7 @@ export async function GET(request) {
       annulation_token, client_email,
       abonnement_id, couverts,
       lieu_id, lieu_libelle, lieu_adresse,
-      commercant:commercants(nom, slug, type, categorie, adresse, rdv_delai_annulation_heures),
+      commercant:commercants(nom, slug, type, categorie, rdv_delai_annulation_heures, commercant_lieux(type, libelle, adresse, principal, actif)),
       prestation:rdv_prestations(nom, duree_minutes, par_couverts),
       praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)
     `)

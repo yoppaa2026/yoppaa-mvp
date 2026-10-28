@@ -60,7 +60,7 @@ export async function POST(request) {
         client_email, client_prenom, client_nom, rappel_push_id, abonnement_id,
         lieu_id, lieu_libelle, lieu_adresse,
         couverts,
-        commercant:commercants(nom, slug, adresse, telephone, email, categorie),
+        commercant:commercants(nom, slug, telephone, email, categorie, commercant_lieux(type, libelle, adresse, principal, actif)),
         prestation:rdv_prestations(nom, par_couverts)
       `)
       .eq('id', rdv_id)

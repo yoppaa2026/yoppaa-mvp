@@ -161,8 +161,9 @@ const MUTATIONS = [
   // précisément ce que la garde doit voir (elle en exige deux).
   { nom: '🔴 une des deux requêtes du cron ne charge plus l’essai',
     fichier: CRON_GMY,
-    de: 'adresse, plan, essai_plan, created_at, statut_publication',
-    vers: 'adresse, plan, statut_publication' },
+    // Recalée le 28/10 : `adresse` (le siège) a quitté les deux requêtes.
+    de: 'nom, plan, essai_plan, created_at, statut_publication',
+    vers: 'nom, plan, statut_publication' },
 
   { nom: '🔴 le récap du matin ne charge plus l’essai',
     fichier: RECAP,

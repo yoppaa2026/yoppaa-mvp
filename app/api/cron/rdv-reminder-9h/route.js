@@ -56,7 +56,7 @@ export async function GET(request) {
         client_email, client_prenom,
         lieu_id, lieu_libelle, lieu_adresse,
         couverts,
-        commercant:commercants(nom, slug, adresse, rdv_delai_annulation_heures, categorie),
+        commercant:commercants(nom, slug, rdv_delai_annulation_heures, categorie, commercant_lieux(type, libelle, adresse, principal, actif)),
         prestation:rdv_prestations(nom, par_couverts)
       `)
       .eq('date_rdv', dateRdv)

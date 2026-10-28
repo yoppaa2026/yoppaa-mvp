@@ -13,6 +13,7 @@ import {
   commercantEligibleDeal,
   commercantEligibleActu,
   codesPostauxDe,
+  adresseDeZone,
 } from '../lib/morning-eligibilite.js'
 import { estSessionPerdue, ERREUR_SESSION } from '../lib/session-perdue.js'
 import { localiteDeAdresse, lieuDeCarte, libelleApporteUnLieu } from '../lib/adresse-localite.js'
@@ -137,20 +138,48 @@ verifier('le cron fidélité tourne en journée (été comme hiver)',
 // 3. LE BADGE « NOUVEAU » DU GOOD MORNING — ne promettre que ce qui existe
 // ═══════════════════════════════════════════════════════════════════════════
 const cp = codesPostauxDe({ codes_postaux: ['5640', '5641'] })
-const PUBLIE_VENDRE = { statut_publication: 'publie', plan: 'vendre', adresse: 'Rue du Moulin 12, 5640 Mettet' }
+// 🔴 28/10 : la commune vient du LIEU déclaré (`adresse_lieu`), jamais du siège
+// (`adresse`). Le siège de la fixture est EXPRÈS dans une autre commune.
+const PUBLIE_VENDRE = { statut_publication: 'publie', plan: 'vendre', adresse: 'Rue Neuve 1, 1000 Bruxelles', adresse_lieu: 'Rue du Moulin 12, 5640 Mettet' }
 
 verifier('un commerçant publié de la commune passe', commercantEligibleDeal(PUBLIE_VENDRE, cp))
 verifier('un commerçant non publié ne passe pas',
   !commercantEligibleDeal({ ...PUBLIE_VENDRE, statut_publication: 'brouillon' }, cp))
 verifier('une autre commune ne passe pas',
-  !commercantEligibleDeal({ ...PUBLIE_VENDRE, adresse: 'Rue Neuve 1, 1000 Bruxelles' }, cp))
+  !commercantEligibleDeal({ ...PUBLIE_VENDRE, adresse_lieu: 'Rue Neuve 1, 1000 Bruxelles' }, cp))
+verifier('🔴 un siège dans la commune ne suffit pas, c’est le lieu qui compte',
+  !commercantEligibleDeal({ ...PUBLIE_VENDRE, adresse: 'Rue du Moulin 12, 5640 Mettet', adresse_lieu: 'Rue Neuve 1, 1000 Bruxelles' }, cp)
+  && !commercantEligibleActu({ ...PUBLIE_VENDRE, adresse: 'Rue du Moulin 12, 5640 Mettet', adresse_lieu: null }, cp))
+// La zone d'un commerce : son lieu principal, à défaut son premier lieu actif.
+egal('la zone est le lieu principal',
+  adresseDeZone([
+    { type: 'permanent', actif: true, adresse: 'Rue A, 5070 Fosses' },
+    { type: 'permanent', actif: true, principal: true, adresse: 'Rue B, 5640 Mettet' },
+  ]), 'Rue B, 5640 Mettet')
+egal('un commerce qui ne fait que des marchés garde une zone',
+  adresseDeZone([{ type: 'hebdo', actif: true, adresse: 'Place, 5640 Mettet' }]), 'Place, 5640 Mettet')
+egal('un lieu éteint ne compte pas', adresseDeZone([{ type: 'permanent', actif: false, adresse: 'Rue C, 5640 Mettet' }]), null)
+egal('sans lieu, pas de zone', adresseDeZone([]), null)
+{
+  const contenu = lire('lib/morning-contenu.js')
+  verifier('🔴 le Morning ne demande plus le siège à la vue',
+    /export const COLONNES_COMMERCE_MORNING =\s*'id, nom, type, plan,/.test(contenu))
+  verifier('le Morning pose la zone sur chaque commerce',
+    /const commerces = await attacherAdresseLieu\(supabase, data \|\| \[\]\)/.test(contenu)
+    && /adresse_lieu: adresseDeZone\(parCommerce\[c\.id\] \|\| \[\]\)/.test(contenu))
+  const cron = lire('app/api/cron/morning-yoppers/route.js')
+  verifier('🔴 le cron de 7h30 range par le lieu, plus par le siège',
+    /const communeDuCommerce = \(c\) => communeDuCp\(extraireCodePostal\(adresseLieuDe\.get\(c\.id\)\)\)/.test(cron)
+    && (cron.match(/const commune = communeDuCommerce\(c\)/g) || []).length === 2
+    && !/c\.adresse\b/.test(cron))
+}
 verifier('le palier gratuit n\'a pas les deals',
   !commercantEligibleDeal({ ...PUBLIE_VENDRE, plan: 'exister' }, cp))
 // Mais il a bien droit à l'actu du Good Morning : c'est ce qui le fait exister.
 verifier('le palier gratuit a l\'actu du Morning',
   commercantEligibleActu({ ...PUBLIE_VENDRE, plan: 'exister' }, cp))
 verifier('une adresse sans code postal ne passe pas',
-  !commercantEligibleActu({ ...PUBLIE_VENDRE, adresse: 'Grand-Place' }, cp))
+  !commercantEligibleActu({ ...PUBLIE_VENDRE, adresse_lieu: 'Grand-Place' }, cp))
 verifier('un commerçant absent ne casse rien', !commercantEligibleDeal(null, cp))
 
 // Les services publics ont été retirés du produit (09/08) : le Good Morning ne
@@ -261,14 +290,18 @@ verifier('« aujourd\'hui » est devenu conditionnel',
       },
     }
   }
-  const MOMO = { id: 'c1', nom: 'Chez Momo', type: 'Snack', ...PUBLIE_VENDRE, essai_plan: null, created_at: '2026-01-01T00:00:00Z' }
+  // 🔴 28/10 : la zone n'est PAS dans la fiche du commerce (la vue ne donne plus
+  // le siège) : elle vient de ses lieux, lus à part. Sans eux, rien n'entre.
+  const MOMO = { id: 'c1', nom: 'Chez Momo', type: 'Snack', ...PUBLIE_VENDRE, adresse_lieu: undefined, essai_plan: null, created_at: '2026-01-01T00:00:00Z' }
+  const LIEUX_MOMO = [{ commercant_id: 'c1', type: 'permanent', principal: true, actif: true, adresse: 'Rue du Moulin 12, 5640 Mettet' }]
 
-  const sb = fauxClient({ commercants_public: [MOMO] })
+  const sb = fauxClient({ commercants_public: [MOMO], commercant_lieux: LIEUX_MOMO })
   const lignes = await rattacherCommerces(sb, [
     { id: 'd1', commercant_id: 'c1' }, { id: 'd2', commercant_id: 'c1' }, { id: 'd3', commercant_id: 'cX' },
   ])
-  egal('🔴 le commerce se lit dans la vue publique, jamais dans la table',
-    sb.journal.map((a) => a.table), ['commercants_public'])
+  egal('🔴 le commerce se lit dans la vue publique, ses lieux à part, jamais dans la table',
+    sb.journal.map((a) => a.table), ['commercants_public', 'commercant_lieux'])
+  egal('🔴 le commerce reçoit sa zone depuis son lieu', lignes[0].commercant?.adresse_lieu, 'Rue du Moulin 12, 5640 Mettet')
   egal('⚠️ une seule lecture, chaque commerce demandé une fois', sb.journal[0].dans, ['id', ['c1', 'cX']])
   egal('le deal reçoit son commerce', lignes[0].commercant?.nom, 'Chez Momo')
   egal('⚠️ un commerce absent de la vue, donc non publié, vaut null', lignes[2].commercant, null)
@@ -280,21 +313,25 @@ verifier('« aujourd\'hui » est devenu conditionnel',
   const commune = { codes_postaux: ['5640'] }
   const deals = [{ id: 'd1', commercant_id: 'c1' }]
   verifier('🔴 un deal d’un commerce publié allume la pastille',
-    await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [MOMO] }), commune))
+    await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [MOMO], commercant_lieux: LIEUX_MOMO }), commune))
   verifier('⚠️ le même deal, commerce absent de la vue : la pastille reste éteinte',
-    !(await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [] }), commune)))
+    !(await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [], commercant_lieux: LIEUX_MOMO }), commune)))
+  verifier('🔴 le même deal, commerce sans lieu dans la commune : la pastille reste éteinte',
+    !(await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [MOMO],
+      commercant_lieux: [{ ...LIEUX_MOMO[0], adresse: 'Rue Neuve 1, 1000 Bruxelles' }] }), commune)))
   verifier('une actu poussée ce matin allume la pastille',
     await morningADuContenu(fauxClient({
       yoppaa_deals: [],
       actualites: [{ id: 'a1', commercant_id: 'c1', push_envoye_at: new Date().toISOString() }],
       commercants_public: [{ ...MOMO, plan: 'exister' }],
+      commercant_lieux: LIEUX_MOMO,
     }), commune))
   // 🔴 L'ESSAI : un commerce resté sur le forfait gratuit mais en essai de
   // Vendre a droit aux deals. La pastille ne demandait ni `essai_plan` ni
   // `created_at`, et le jugeait donc sur son forfait gratuit.
   const enEssai = { ...MOMO, plan: 'exister', essai_plan: 'vendre', created_at: new Date(Date.now() - 5 * 86400000).toISOString() }
   verifier('🔴 un commerce en essai de Vendre allume la pastille avec son deal',
-    await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [enEssai] }), commune))
+    await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [enEssai], commercant_lieux: LIEUX_MOMO }), commune))
 
   // ⚠️ ET PLUS AUCUN ÉCRAN YOPPER NE DEMANDE LA TABLE. On compte, on ne cherche
   // pas : la page, la pastille, et tout ce qui vit sous /commander.

@@ -960,11 +960,17 @@ egal('l’adresse annoncée est celle gravée dans le rendez-vous',
     commercant: { adresse: 'Rue du Domicile 1' },
   }),
   'Salle Saint-Roch, Place, Mettet')
-// ⚠️ Le repli n'est pas un luxe : il vaut pour l'immense majorité des commerces
-// et pour tous les rendez-vous ANTÉRIEURS à la bascule, qui n'ont rien de gravé.
-egal('sans lieu gravé, le siège reste la réponse',
-  adresseRendezVous({ commercant: { adresse: 'Rue de Prée 9G, Mettet' } }),
-  'Rue de Prée 9G, Mettet')
+// 🔴 LE REPLI N'EST PLUS LE SIÈGE (28/10, Alex au tableau) : c'est le LIEU
+// PRINCIPAL ACTUEL. Le siège envoyait le client à l'adresse d'inscription,
+// parfois le domicile du commerçant, et il ne se publie jamais (15/08).
+egal('🔴 sans lieu gravé, le lieu principal actuel, jamais le siège',
+  adresseRendezVous({ commercant: { adresse: 'Rue du Domicile 1', commercant_lieux: [
+    { type: 'hebdo', actif: true, adresse: 'Marché, Fosses' },
+    { type: 'permanent', actif: true, principal: true, libelle: 'Salle Saint-Roch', adresse: 'Place, Mettet' },
+  ] } }),
+  'Salle Saint-Roch, Place, Mettet')
+egal('🔴 sans lieu du tout, rien plutôt que le siège',
+  adresseRendezVous({ commercant: { adresse: 'Rue du Domicile 1', commercant_lieux: [] } }), '')
 egal('un lieu gravé sans nom donne quand même son adresse',
   adresseRendezVous({ lieu_adresse: 'Zoning 2', commercant: { adresse: 'Dépôt' } }),
   'Zoning 2')
@@ -1387,9 +1393,9 @@ egal('deux prestations à la même heure font deux séances',
 // chez une commerçante itinérante envoyait donc le client à son siège, malgré
 // le lieu gravé sur la commande depuis le 13/08.
 //
-// ⚠️ Le repli sur le siège N'A PAS DISPARU de `adresseRendezVous`, et c'est
-// volontaire : un rendez-vous ANTÉRIEUR au module n'a aucun lieu gravé, et le
-// siège reste alors la seule vérité historique. Le retirer réécrirait le passé.
+// 🔴 28/10 (Alex au tableau) : le repli sur le siège A DISPARU de
+// `adresseRendezVous`. Un rendez-vous sans lieu gravé annonce désormais le
+// LIEU PRINCIPAL ACTUEL : chaque canal joint donc les lieux au commerce.
 const CANAUX_LIEU = [
   ['la confirmation de rendez-vous', 'app/api/emails/rdv-confirme/route.js'],
   ['l’email d’annulation', 'app/api/emails/rdv-annule/route.js'],
@@ -1404,6 +1410,9 @@ const CANAUX_LIEU = [
   ['les notifications de commande', 'lib/commande-notifs.js'],
   ['l’annulation d’un rendez-vous', 'app/api/rdv/cancel/route.js'],
   ['les emails du webhook Stripe', 'app/api/stripe/webhook/route.js'],
+  // 28/10 : la reconfirmation appelait déjà `adresseRendezVous`, sans être
+  // gardée ici.
+  ['la reconfirmation d’un rendez-vous', 'app/api/rdv/reconfirmer/route.js'],
 ]
 for (const [nom, chemin] of CANAUX_LIEU) {
   // ⚠️ UN FICHIER DISPARU FAISAIT EXPLOSER LE BANC (vécu le 03/09, en
@@ -1426,6 +1435,11 @@ for (const [nom, chemin] of CANAUX_LIEU) {
   // projet se fait avoir par une colonne absente d'une requête, après la
   // capacité des cours et le lien vers l'abonnement.
   verifier(`${nom} demande bien le lieu gravé`, /lieu_libelle/.test(src))
+  // 🔴 28/10 : et les lieux du commerce, sans quoi le repli rend une chaîne
+  // vide en silence. Et plus le siège dans la jointure.
+  verifier(`${nom} joint les lieux du commerce`,
+    /commercants\([^()]*commercant_lieux\(type, libelle, adresse, principal, actif\)\)/.test(src))
+  verifier(`${nom} ne demande plus le siège`, !/commercants\([^()]*\badresse\b[^()]*commercant_lieux/.test(src))
 }
 
 // ⚠️ LES FICHES PUBLIQUES AUSSI, ET C'EST CE QUI MANQUAIT (Alex, 15/08).
@@ -1564,8 +1578,14 @@ verifier('et remesure quand ils arrivent',
 verifier('la carte confie son lieu à la règle partagée',
   /lieuDeCarte\(\{/.test(srcEcranClient)
   && /libelleLieu: c\.lieu_proche\?\.libelle \|\| null/.test(srcEcranClient))
-verifier('et lui donne de quoi retrouver la commune sans position',
-  /adresse: c\.adresse/.test(srcEcranClient))
+// 🔴 28/10 : de quoi retrouver la commune, c'est l'adresse du LIEU principal
+// (`adressesLieu`), plus `c.adresse`, qui était le SIÈGE et quitte la vue.
+verifier('et lui donne de quoi retrouver la commune sans position, par le lieu déclaré',
+  /adresse: adresseLieu,/.test(srcEcranClient)
+  && /adresseLieu=\{adressesLieu\[c\.id\]\}/.test(srcEcranClient)
+  && !/adresse: c\.adresse/.test(srcEcranClient))
+verifier('🔴 la recherche ne fouille plus le siège',
+  /sansAccents\(adressesLieu\[c\.id\]\)/.test(srcEcranClient) && !/sansAccents\(c\.adresse\)/.test(srcEcranClient))
 // 🔴 ET LE NOM DU COMMERCE, SANS QUOI LA RÈGLE NE PEUT PAS SE TAIRE (17/09).
 // Sans lui, `lieuDeCarte` n'a rien à quoi comparer le libellé et l'affiche
 // toujours : c'est exactement l'état qui répétait « Le Dressing de Sophie » sur

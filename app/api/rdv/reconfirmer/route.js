@@ -57,7 +57,7 @@ export async function POST(request) {
         stripe_refund_amount, commande_id, abonnement_id, fidelite_recompense_id, empreinte_debit_at,
         client_id, client_email, client_prenom,
         heure_fin, client_nom, lieu_libelle, lieu_adresse, prix_estime, couverts,
-        commercant:commercants(nom, slug, categorie, adresse, telephone, email),
+        commercant:commercants(nom, slug, categorie, telephone, email, commercant_lieux(type, libelle, adresse, principal, actif)),
         prestation:rdv_prestations(nom, par_couverts)
       `)
       .eq('id', rdv_id)

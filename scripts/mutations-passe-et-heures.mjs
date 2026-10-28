@@ -202,8 +202,9 @@ const MUTATIONS = [
     de: '      commercant_categorie:    categorie,',
     vers: '' },
   { nom: '🔴 le webhook ne charge plus la catégorie', banc: 'verif:table', fichier: 'app/api/stripe/webhook/route.js',
-    de: 'infos_pratiques, categorie),',
-    vers: 'infos_pratiques),' },
+    // Recalée le 28/10 : les lieux du commerce suivent la catégorie.
+    de: 'infos_pratiques, categorie, commercant_lieux',
+    vers: 'infos_pratiques, commercant_lieux' },
   { nom: '🔴 le webhook promet toujours l’alarme', banc: 'verif:table', fichier: 'app/api/stripe/webhook/route.js',
     de: '      rappel_24h: rappelVeillePossible(rdv.date_rdv, rdv.heure_debut),',
     vers: '      rappel_24h: true,' },

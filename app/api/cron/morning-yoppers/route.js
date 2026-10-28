@@ -26,7 +26,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, planEffectif } from '@/lib/plans'
-import { fusionnerIds } from '@/lib/morning-eligibilite'
+import { fusionnerIds, extraireCodePostal } from '@/lib/morning-eligibilite'
+import { attacherAdresseLieu } from '@/lib/morning-contenu'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { actusGmyRetenues } from '@/lib/actu-gmy'
 import { jourBruxelles } from '@/lib/timezone'
@@ -40,13 +41,6 @@ function getSupabaseAdmin() {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } }
   )
-}
-
-// Codes postaux belges : 4 chiffres. Extrait depuis l'adresse libre du commerçant.
-function extraireCodePostal(adresse) {
-  if (!adresse) return null
-  const m = String(adresse).match(/\b(\d{4})\b/)
-  return m ? m[1] : null
 }
 
 async function handle(req) {
@@ -64,7 +58,7 @@ async function handle(req) {
     .from('yoppaa_deals')
     .select(`
       id, titre, commercant_id,
-      commercant:commercants (id, nom, adresse, plan, essai_plan, created_at, statut_publication)
+      commercant:commercants (id, nom, plan, essai_plan, created_at, statut_publication)
     `)
     .eq('actif', true)
     .eq('inclus_morning', true)
@@ -81,7 +75,7 @@ async function handle(req) {
     .from('actualites')
     .select(`
       id, titre, commercant_id, date_debut, created_at,
-      commercant:commercants (id, nom, adresse, plan, essai_plan, created_at, statut_publication)
+      commercant:commercants (id, nom, plan, essai_plan, created_at, statut_publication)
     `)
     .not('commercant_id', 'is', null)
     .eq('actif', true)
@@ -103,6 +97,13 @@ async function handle(req) {
     .eq('active', true)
   const communes = (communesActives || []).filter(c => Array.isArray(c.codes_postaux) && c.codes_postaux.length > 0)
   const communeDuCp = (cp) => (cp ? communes.find(c => c.codes_postaux.includes(cp)) || null : null)
+  // 🔴 28/10 : la commune d'un commerce est celle de son LIEU déclaré, plus
+  // celle de son siège social (`adresseDeZone`, lib/morning-eligibilite.js).
+  // La même règle que la page Good Morning, qui lit la vue publique.
+  const commercesLus = await attacherAdresseLieu(supabase,
+    [...(dealsPending || []), ...(actusGmy || [])].map(x => x.commercant))
+  const adresseLieuDe = new Map(commercesLus.filter(Boolean).map(c => [c.id, c.adresse_lieu]))
+  const communeDuCommerce = (c) => communeDuCp(extraireCodePostal(adresseLieuDe.get(c.id)))
 
   // 4. Filtrage éligibilité + regroupement PAR COMMUNE. Le contenu retenu ici
   //    EST l'édition du jour ; l'écran client ne montre que ce contenu
@@ -129,7 +130,7 @@ async function handle(req) {
     const planDeal = planEffectif(c)
     if (!canDo(planDeal, 'deals')) continue
     if (!canDo(planDeal, 'morning')) continue
-    const commune = communeDuCp(extraireCodePostal(c.adresse))
+    const commune = communeDuCommerce(c)
     if (!commune) continue
     ajouter(commune, 'dealIds', d.id, c.id)
     tousDealIds.push(d.id)
@@ -162,7 +163,7 @@ async function handle(req) {
     // semaine (`actusGmyRetenues`, lib/actu-gmy.js).
     if (!canDo(planEffectif(c), 'actu_gmy')) continue
     if (!retenues.has(a.id)) continue
-    const commune = communeDuCp(extraireCodePostal(c.adresse))
+    const commune = communeDuCommerce(c)
     if (!commune) continue
     ajouter(commune, 'actuIds', a.id, c.id)
     tousActuIds.push(a.id)

@@ -225,6 +225,8 @@ export async function POST(request) {
     // de ce même tunnel (`dateCommande: date_rdv` plus bas).
     const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {
       client: { email: normaliserEmail(client_email), telephone: client_telephone },
+      // ✅ (28/10, lot 2) La plage horaire d'une promo se juge à l'heure du RDV.
+      heure: String(heure_debut).slice(0, 5),
     })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
 

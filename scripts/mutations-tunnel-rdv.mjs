@@ -704,8 +704,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le module ne charge plus la colonne cible_tout',
     fichier: 'lib/prix-prestation-server.js',
-    de: "    .select('id, titre, deal_type, remise_pct, prix_deal, prestation_id, cible_tout, actif, date_deal, date_debut, date_fin')",
-    vers: "    .select('id, titre, deal_type, remise_pct, prix_deal, prestation_id, actif, date_deal, date_debut, date_fin')" },
+    // Recalée le 28/10 (lot 2) : le select est un gabarit avec la récurrence.
+    de: '    .select(`id, titre, deal_type, remise_pct, prix_deal, prestation_id, cible_tout, actif, date_deal, date_debut, date_fin, ${COLONNES_RECURRENCE}`)',
+    vers: '    .select(`id, titre, deal_type, remise_pct, prix_deal, prestation_id, actif, date_deal, date_debut, date_fin, ${COLONNES_RECURRENCE}`)' },
 
   { nom: '🔴 la lecture cesse d etre bornee au commercant',
     fichier: 'lib/prix-prestation-server.js',

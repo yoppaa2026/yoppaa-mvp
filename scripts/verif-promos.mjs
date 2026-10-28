@@ -113,7 +113,8 @@ egal('rien, rien', economieDesLignesCents(null), 0)
   verifier('🔴 le récapitulatif dit l’économie', /Tu économises \{euros\(economiePanier\(\)\)\}/.test(F))
   const R = lireCode('app/commander/rdv/[slug]/page.js')
   verifier('🔴 la fiche RDV annonce les promos à venir',
-    /const promosAVenirFiche = promosAVenir\(dealsActifs, aujourdhuiPromos\)\.filter\(p => !p\.enCours\)/.test(R)
+    // ⚠️ REPOINTÉE (lot 2) : la liste COMPLÈTE, l'heure choisie ne cache rien ici.
+    /const promosAVenirFiche = promosAVenir\(dealsActifsTous, aujourdhuiPromos\)\.filter\(p => !p\.enCours\)/.test(R)
     && /\{etape === 1 && promosAVenirFiche\.length > 0 && \(/.test(R))
   verifier('🔴 la pastille sur la prestation', /promoAVenirPourPrestation\(p, dealsActifs, jourPrix, aujourdhuiPromos\)/.test(R))
   verifier('🔴 le récapitulatif RDV dit l’économie', /Tu économises \{euros\(Number\(r\.prixBarre\) - Number\(r\.prix\)\)\}/.test(R))
@@ -229,6 +230,52 @@ egal('rien, rien', economieDesLignesCents(null), 0)
     R.refusRecurrence({ recurrence: 'hebdo', jours_semaine: [3], plage_debut: '14:00', plage_fin: '11:00' }),
     R.refusRecurrence({ recurrence: 'hebdo', jours_semaine: [3], plage_debut: '11:00', plage_fin: '14:00' }),
   ], ['Coche au moins un jour de la semaine.', 'Choisis le 1er, 2e, 3e, 4e ou dernier jour du mois.', 'Indique tous les combien de jours (1 à 365).', 'L’heure de fin doit venir après l’heure de début.', null])
+}
+
+// ─── 9. LA RÉCURRENCE BRANCHÉE (lot 2) ──────────────────────────────────
+{
+  const { dealActifCeJour, dealActifA } = await import('../lib/deals.js')
+  const mercredi = { id: 'm', actif: true, deal_type: 'remise_pct', remise_pct: 20, article_id: 'pain', recurrence: 'hebdo', jours_semaine: [3], date_debut: '2026-11-01', plage_debut: '11:00', plage_fin: '14:00' }
+  verifier('🔴 LA règle commune connaît la récurrence', dealActifCeJour(mercredi, '2026-11-04') && !dealActifCeJour(mercredi, '2026-11-05'))
+  verifier('🔴 et la plage horaire, à l’heure du retrait',
+    dealActifA(mercredi, '2026-11-04', '12:00') && !dealActifA(mercredi, '2026-11-04', '15:00') && dealActifA(mercredi, '2026-11-04', null))
+  egal('🔴 la section dit le rythme et la plage', momentDuDeal(mercredi, LUNDI), 'Chaque mercredi · 11 h à 14 h')
+  egal('🔴 la promo récurrente entre dans la section, à sa prochaine fois',
+    promosAVenir([mercredi], LUNDI).map(p => [p.premierJour, p.enCours]), [['2026-11-04', false]])
+  egal('🔴 la pastille la dit sur l’article un lundi', promoAVenirPourArticle({ id: 'pain', prix: 4 }, [mercredi], LUNDI, LUNDI)?.moment, 'Chaque mercredi · 11 h à 14 h')
+  egal('une promo à dates avec une plage la dit aussi', momentDuDeal({ ...ponctuel(1), plage_debut: '11:00', plage_fin: '14:00' }, LUNDI), 'Demain · 11 h à 14 h')
+  const { construireLignesCommande } = await import('../lib/lignes-commande.js')
+  const calc = (heure) => construireLignesCommande({
+    panier: [{ id: 'pain', quantite: 1 }], articlesData: [{ id: 'pain', nom: 'Pain', prix: 4 }], dealsData: [mercredi],
+    commercant: { id: 'c' }, dateCommande: '2026-11-04', heureRetrait: heure,
+  })
+  egal('🔴 le calcul applique la promo dans la plage', calc('12:00').lignes?.[0]?.prix_unitaire, 3.2)
+  egal('🔴 et pas en dehors', calc('15:00').lignes?.[0]?.prix_unitaire, 4)
+  const L = lireCode('lib/lignes-commande.js')
+  verifier('🔴 les deals se lisent AVEC la récurrence', /export const SELECT_DEALS = `[^`]*\$\{COLONNES_RECURRENCE\}`/.test(L))
+  verifier('🔴 le prix des prestations aussi', /\$\{COLONNES_RECURRENCE\}`\)/.test(lireCode('lib/prix-prestation-server.js')))
+  verifier('🔴 et la liste des commerces', /est_bonne_affaire, \$\{COLONNES_RECURRENCE\}`\)/.test(lireCode('app/commander/page.js')))
+  verifier('🔴 la commande passe l’heure du créneau',
+    /heureRetrait: creneau\?\.heure_debut \? String\(creneau\.heure_debut\)\.slice\(0, 5\) : null,/.test(lireCode('app/api/stripe/checkout/create-commande/route.js')))
+  verifier('🔴 le panier aussi', /heureRetrait: heureDuCreneauChoisi\(\),/.test(lireCode('app/commander/[slug]/page.js')))
+  for (const r of ['app/api/rdv/reserver/route.js', 'app/api/stripe/checkout/create-rdv-acompte/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js']) {
+    verifier(`🔴 ${r} juge la plage à l’heure du RDV`, /heure: String\(heure(_debut)?\)\.slice\(0, 5\),/.test(lireCode(r)))
+  }
+  verifier('🔴 la fiche RDV filtre les deals par l’heure choisie',
+    /const dealsActifs = dealsActifsTous\.filter\(d => plageAccepte\(d, heureChoisie \|\| null\)\)/.test(lireCode('app/commander/rdv/[slug]/page.js')))
+}
+
+// ─── 10. LE FORMULAIRE DU COMMERÇANT (lot 2) ────────────────────────────
+{
+  const C = lireCode('app/dashboard/ConfigDashboard.js')
+  verifier('🔴 les heures ne sont plus collées dans les dates',
+    /const dateDebut = `\$\{dDebut\}T00:00:00`/.test(C) && !/T\$\{form\.heure_debut/.test(C))
+  verifier('🔴 elles partent en plage horaire', /plage_debut: avecPlage \? hD : null,/.test(C) && /plage_fin: avecPlage \? hF : null,/.test(C))
+  verifier('🔴 la récurrence part avec la promo, contrôlée avant', /\.\.\.champsRec,/.test(C) && /const refus = refusRecurrence\(/.test(C))
+  verifier('une promo récurrente peut n’avoir pas de fin', /const dateFin\s+= recurrente && form\.sans_fin \? null : `\$\{dFin\}T23:59:59`/.test(C))
+  verifier('le commerçant voit « Répéter » et ce que liront ses clients', />Répéter<\/label>/.test(C) && /Tes clients liront :/.test(C))
+  verifier('🔴 rouvrir une promo relit sa plage et sa récurrence',
+    /const hDebut = d\.plage_debut \?/.test(C) && /recurrence: d\.recurrence \|\| '',/.test(C))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

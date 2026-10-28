@@ -354,6 +354,8 @@ export async function POST(request) {
     // client réserve : « -20 % le mercredi » vaut pour un rendez-vous un mercredi.
     const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(db, prestation, String(date_rdv).slice(0, 10), {
       client: { email, telephone: client_telephone },
+      // ✅ (28/10, lot 2) La plage horaire d'une promo se juge à l'heure du RDV.
+      heure: String(heure).slice(0, 5),
     })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
     const acompteEnLigne = !!(commercant.rdv_acompte_en_ligne_actif && commercant.stripe_account_charges_enabled)

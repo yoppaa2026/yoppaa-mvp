@@ -177,6 +177,8 @@ export async function POST(request) {
     // ✅ AU JOUR DU RENDEZ-VOUS (28/10, Alex au tableau) : voir rdv/reserver.
     const { prix: prixBase, decouverte, remise: remiseRdv } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {
       client: { email: normaliserEmail(client_email), telephone: client_telephone },
+      // ✅ (28/10, lot 2) La plage horaire d'une promo se juge à l'heure du RDV.
+      heure: String(heure_debut).slice(0, 5),
     })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
     if (!prixBase || acomptePct <= 0) {

@@ -3168,6 +3168,15 @@ export default function CommanderSlug() {
     }))
   }
 
+  // L'heure de début du créneau choisi (retrait ou livraison), `null` tant
+  // qu'aucun n'est choisi (ou en boutique) : c'est alors le jour qui décide.
+  function heureDuCreneauChoisi() {
+    const h = modeCommande === 'livraison'
+      ? creneauLivraisonChoisi?.heure_debut
+      : (creneaux || []).find(c => c.id === creneauChoisi)?.heure_debut
+    return h ? String(h).slice(0, 5) : null
+  }
+
   function calculDuServeur() {
     const items = articlesDuPanier()
     if (items.length === 0) return null
@@ -3188,6 +3197,9 @@ export default function CommanderSlug() {
         commercant: commercant || {},
         regime: undefined,
         dateCommande: dateDeLaCommande(),
+        // ✅ (28/10, lot 2) L'heure du créneau choisi, comme le serveur : une
+        // promo « 11 h à 14 h » ne vaut que pour un retrait dans sa plage.
+        heureRetrait: heureDuCreneauChoisi(),
       })
       return r?.ok ? r : null
     } catch {

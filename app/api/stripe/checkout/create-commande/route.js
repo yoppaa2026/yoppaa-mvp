@@ -564,6 +564,9 @@ export async function POST(request) {
       commercant,
       regime: regimeTva,
       dateCommande: date_commande,
+      // ✅ (28/10, lot 2) La plage horaire d'une promo se juge à l'heure du
+      // créneau (retrait ou livraison). Une boutique n'en a pas : le jour décide.
+      heureRetrait: creneau?.heure_debut ? String(creneau.heure_debut).slice(0, 5) : null,
     })
     if (!calcul.ok) {
       return NextResponse.json({ ok: false, error: calcul.error }, { status: calcul.status })

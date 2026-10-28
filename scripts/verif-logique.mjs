@@ -4669,9 +4669,11 @@ verifier('les échecs sont comptés, pas alertés douze fois',
   //
   // ⚠️ ON LISTE LES QUATRE CIBLES, pas seulement la dernière ajoutée : c'est
   // cette ligne qu'il faut relire chaque fois qu'une cible naît.
-  const LIGNES = sansCommentaires(readFileSync(new URL('../lib/lignes-commande.js', import.meta.url), 'utf8'))
-  const selDeals = (LIGNES.match(/export const SELECT_DEALS = '([^']+)'/) || [])[1] || ''
-  for (const col of ['article_id', 'categorie_cible', 'prestation_id', 'cible_tout', 'deal_type', 'remise_pct']) {
+  // ⚠️ REPOINTÉE LE 28/10 (lot 2) : la VALEUR importée, plus le texte entre
+  // apostrophes. La constante est devenue un gabarit (`${COLONNES_RECURRENCE}`)
+  // et la regex ne la lisait plus ; la valeur, elle, est ce que la base reçoit.
+  const { SELECT_DEALS: selDeals } = await import('../lib/lignes-commande.js')
+  for (const col of ['article_id', 'categorie_cible', 'prestation_id', 'cible_tout', 'deal_type', 'remise_pct', 'recurrence', 'jours_semaine', 'plage_debut', 'plage_fin']) {
     verifier(`🔴 SELECT_DEALS charge ${col}`, selDeals.split(/,\s*/).includes(col),
       'le serveur facturerait le prix plein sur une remise que l’écran affiche')
   }

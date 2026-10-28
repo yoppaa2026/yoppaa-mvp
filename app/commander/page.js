@@ -41,6 +41,7 @@ import { jourLocalISO, jourBruxelles, jourCivilPlus } from '@/lib/timezone'
 import { horaireDuJour, COLONNES_EXCEPTIONS, exceptionsPour } from '@/lib/horaires-du-jour'
 import { lieuxDuJour, lieuPrincipal } from '@/lib/lieux-activite'
 import { dealActifCeJour } from '@/lib/deals'
+import { COLONNES_RECURRENCE } from '@/lib/recurrence-promo'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
 import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
@@ -2735,7 +2736,8 @@ export default function Commander() {
       // Deals actifs : date_deal = aujourd'hui, OU intervalle date_debut/date_fin qui englobe.
       // On charge aussi est_bonne_affaire pour piloter le badge dore sur la card.
       supabase.from('yoppaa_deals')
-        .select('commercant_id, date_deal, date_debut, date_fin, actif, est_bonne_affaire')
+        // ⚠️ (28/10, lot 2) + la récurrence : « chaque mercredi » allume la pastille le mercredi.
+        .select(`commercant_id, date_deal, date_debut, date_fin, actif, est_bonne_affaire, ${COLONNES_RECURRENCE}`)
         .in('commercant_id', ids)
         .eq('actif', true),
       supabase.from('actualites')

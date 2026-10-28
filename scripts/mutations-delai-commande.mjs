@@ -429,8 +429,9 @@ const MUTATIONS = [
     fichier: LIGNES,
     // ⚠️ ANCRE REFAITE : `quantite` a rejoint le select le 04/09 au soir, pour
     // le plafond de l'offre. Le harnais l'a dit en « TEXTE INTROUVABLE ».
-    de: 'heure_debut, heure_fin, quantite\'',
-    vers: 'quantite\'' },
+    // Recalée le 28/10 (lot 2) : la récurrence suit `quantite` dans le select.
+    de: 'heure_debut, heure_fin, quantite, ${COLONNES_RECURRENCE}`',
+    vers: 'quantite, ${COLONNES_RECURRENCE}`' },
 
   // ─── LA ROUTE QUI CRÉE LA COMMANDE ──────────────────────────────────────
   // ⚠️ Remplacees le 07/10 : le serveur juge chaque ligne en JOURS.

@@ -2595,7 +2595,11 @@ for (const chemin of [
   // ⚠️ ON DÉCOUPE LA LISTE DE COLONNES ET ON Y CHERCHE. Le défaut « colonne
   // absente d'un select » est le plus fréquent de ce projet, et il ne lève
   // aucune erreur.
-  const colPPS = ((MOD.match(/\.select\('([^']+)'\)/) || [])[1] || '').split(/,\s*/)
+  // ⚠️ REPOINTÉE LE 28/10 (lot 2) : le select est devenu un gabarit qui ajoute
+  // `${COLONNES_RECURRENCE}` ; on découpe ce qui est écrit entre les accents
+  // graves, et la récurrence doit y être.
+  const colPPS = ((MOD.match(/\.select\(`([^`]+)`\)/) || [])[1] || '').split(/,\s*/)
+  verifie('🔴 le module charge aussi la récurrence et la plage', colPPS.includes('${COLONNES_RECURRENCE}'))
   verifie('la liste de colonnes du module se découpe', colPPS.length > 5, colPPS.join('|'))
   for (const c of ['deal_type', 'remise_pct', 'prix_deal', 'prestation_id', 'cible_tout']) {
     verifie(`🔴 le module charge la colonne ${c}`, colPPS.includes(c),

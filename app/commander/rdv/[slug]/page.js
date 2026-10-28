@@ -34,6 +34,7 @@ import { reservationActive, motsReservation, fonctionReservation } from '@/lib/r
 import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
 import { promosAVenir, promoAVenirPourPrestation, accrocheDuDeal } from '@/lib/promos-visibles'
+import { plageAccepte } from '@/lib/recurrence-promo'
 import { actuActiveCeJour } from '@/lib/actus-fiche'
 import { BandeauActus, ModaleActu } from '../../ActusFiche'
 import { lienFiche } from '@/lib/lien-fiche'
@@ -396,7 +397,7 @@ export default function CommanderRdvSlug() {
   // Filtrée sur aujourd'hui, la liste perdait la promo du mercredi pour un
   // rendez-vous pris un lundi. `deals` reste celle du jour, pour la section
   // « deals » de la fiche.
-  const [dealsActifs, setDealsActifs] = useState([])
+  const [dealsActifsTous, setDealsActifs] = useState([])
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [actualites, setActualites] = useState([])          // actus actives du jour (même règle que la fiche boutique)
   const [actuDetailOuverte, setActuDetailOuverte] = useState(null)
@@ -621,8 +622,13 @@ export default function CommanderRdvSlug() {
   // prochains jours qui ne valent pas aujourd'hui (celles d'aujourd'hui ont
   // leur bandeau). Alex : « elles ne sont visibles nulle part ».
   const aujourdhuiPromos = jourBruxelles()
-  const promosAVenirFiche = promosAVenir(dealsActifs, aujourdhuiPromos).filter(p => !p.enCours)
+  const promosAVenirFiche = promosAVenir(dealsActifsTous, aujourdhuiPromos).filter(p => !p.enCours)
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
+  // ✅ (28/10, lot 2) LES DEALS QUI FIXENT LE PRIX : tous les deals allumés,
+  // moins ceux dont la plage horaire (« 11 h à 14 h ») exclut l'heure choisie,
+  // comme le serveur (`prixPrestationServeur(…, { heure })`). Sans heure
+  // choisie, c'est le jour qui décide.
+  const dealsActifs = dealsActifsTous.filter(d => plageAccepte(d, heureChoisie || null))
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
   // La séance complète sur laquelle le Yopper a demandé à être prévenu.
   // 🔴 AVEC SON JOUR ET SA PRESTATION (LA-04, 03/10). Seule l'heure était

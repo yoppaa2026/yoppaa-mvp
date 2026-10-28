@@ -38,6 +38,11 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 // vingt-cinq autres montants formataient à la main. Une seule source.
 import { euros, eurosNus } from '@/lib/montants'
 import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
+import { refusRecurrence, libelleRecurrence } from '@/lib/recurrence-promo'
+
+// ✅ (28/10, lot 2) Le formulaire d'une promo sans récurrence : seulement ses
+// dates, comme avant.
+const RECURRENCE_VIDE = { recurrence: '', jours_semaine: [], rang_mois: '1', jour_semaine_mois: '6', intervalle_jours: '7', sans_fin: false }
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, dernierJourAvant, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
@@ -6239,6 +6244,8 @@ function TabDeals({ commercantId, commercant, toast }) {
     // le jour même, incompréhensible pour le commerçant).
     date_debut: today, date_fin: today,
     heure_debut: '00:00', heure_fin: '23:59',
+    // ✅ (28/10, lot 2) La récurrence : vide = seulement ces dates.
+    ...RECURRENCE_VIDE,
     inclus_morning: false, actif: true, article_id: '',
     cta_appeler_reserver: false,
     photo_url: '', est_bonne_affaire: false,
@@ -6364,6 +6371,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       deal_type: 'lot', remise_pct: '', unites_par_deal: '', article2_id: '',
       date_debut: today, date_fin: today,
       heure_debut: '00:00', heure_fin: '23:59',
+      ...RECURRENCE_VIDE,
       inclus_morning: false, actif: true, article_id: '', categorie_cible: '', prestation_id: '', cible_tout: '',
       cta_appeler_reserver: false,
       photo_url: '', est_bonne_affaire: false })
@@ -6374,8 +6382,10 @@ function TabDeals({ commercantId, commercant, toast }) {
     // Récupère date_debut/date_fin depuis les timestamps ou retombe sur date_deal
     const dDebut = d.date_debut ? d.date_debut.slice(0, 10) : (d.date_deal || today)
     const dFin   = d.date_fin   ? d.date_fin.slice(0, 10)   : (d.date_deal || today)
-    const hDebut = d.date_debut ? d.date_debut.slice(11, 16) : '00:00'
-    const hFin   = d.date_fin   ? d.date_fin.slice(11, 16)   : '23:59'
+    // ✅ (28/10, lot 2) La plage horaire vit dans `plage_debut/fin`. Une promo
+    // d'avant gardait ses heures DANS ses dates : on les relit à défaut.
+    const hDebut = d.plage_debut ? String(d.plage_debut).slice(0, 5) : (d.date_debut ? d.date_debut.slice(11, 16) : '00:00')
+    const hFin   = d.plage_fin   ? String(d.plage_fin).slice(0, 5)   : (d.date_fin ? d.date_fin.slice(11, 16) : '23:59')
     setForm({
       titre: d.titre || '',
       description: d.description || '',
@@ -6390,6 +6400,12 @@ function TabDeals({ commercantId, commercant, toast }) {
       date_fin: dFin,
       heure_debut: hDebut,
       heure_fin: hFin,
+      recurrence: d.recurrence || '',
+      jours_semaine: Array.isArray(d.jours_semaine) ? d.jours_semaine.map(Number) : [],
+      rang_mois: String(d.rang_mois ?? '1'),
+      jour_semaine_mois: String(d.jour_semaine_mois ?? '6'),
+      intervalle_jours: String(d.intervalle_jours ?? '7'),
+      sans_fin: !!d.recurrence && !d.date_fin,
       inclus_morning: !!d.inclus_morning,
       actif: d.actif !== false,
       article_id: d.article_id || '',
@@ -6480,9 +6496,27 @@ function TabDeals({ commercantId, commercant, toast }) {
     const dDebut = form.date_debut
     const dFin = form.date_fin || dDebut
     if (dFin < dDebut) return toast('La date de fin doit être après la date de début', 'error')
+    // ✅ (28/10, lot 2) LES HEURES SONT UNE PLAGE, PLUS UN MORCEAU DES DATES.
+    // Collées dans `date_debut`/`date_fin`, elles n'étaient jamais lues : un
+    // deal « 11 h à 14 h » valait toute la journée. « 00:00 à 23:59 » = pas de
+    // plage. La plage se juge à l'heure du retrait ou du rendez-vous.
+    const hD = (form.heure_debut || '00:00').slice(0, 5)
+    const hF = (form.heure_fin || '23:59').slice(0, 5)
+    const avecPlage = !(hD === '00:00' && hF === '23:59')
+    const recurrente = !!form.recurrence
+    const champsRec = recurrente ? {
+      recurrence: form.recurrence,
+      jours_semaine: form.recurrence === 'hebdo' ? [...new Set(form.jours_semaine.map(Number))].sort() : null,
+      rang_mois: form.recurrence === 'mensuel' ? Number(form.rang_mois) : null,
+      jour_semaine_mois: form.recurrence === 'mensuel' ? Number(form.jour_semaine_mois) : null,
+      intervalle_jours: form.recurrence === 'intervalle' ? Number(form.intervalle_jours) : null,
+    } : { recurrence: null, jours_semaine: null, rang_mois: null, jour_semaine_mois: null, intervalle_jours: null }
+    const refus = refusRecurrence({ ...champsRec, plage_debut: avecPlage ? hD : null, plage_fin: avecPlage ? hF : null })
+    if (refus) return toast(refus, 'error')
     setSaving(true)
-    const dateDebut = `${dDebut}T${form.heure_debut || '00:00'}:00`
-    const dateFin   = `${dFin}T${form.heure_fin || '23:59'}:59`
+    const dateDebut = `${dDebut}T00:00:00`
+    // Une promo récurrente peut n'avoir pas de fin (« chaque mercredi »).
+    const dateFin   = recurrente && form.sans_fin ? null : `${dFin}T23:59:59`
     // Validation par type de deal
     if (form.deal_type === 'remise_pct') {
       const pct = parseInt(form.remise_pct, 10)
@@ -6529,6 +6563,10 @@ function TabDeals({ commercantId, commercant, toast }) {
       date_deal: dDebut,
       date_debut: dateDebut,
       date_fin: dateFin,
+      // ✅ (28/10, lot 2) La récurrence et la plage horaire (lib/recurrence-promo.js).
+      ...champsRec,
+      plage_debut: avecPlage ? hD : null,
+      plage_fin: avecPlage ? hF : null,
       inclus_morning: !!form.inclus_morning,
       actif: !!form.actif,
       article_id: form.article_id || null,
@@ -6864,7 +6902,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                 (largeur intrinsèque, surtout iOS) débordent de la grille à droite. */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div style={{ minWidth: 0 }}>
-                <label style={s.label}>Date début *</label>
+                <label style={s.label}>{form.recurrence ? 'À partir du *' : 'Date début *'}</label>
                 <Input type="date" value={form.date_debut} min={today}
                   style={{ width: '100%', boxSizing: 'border-box' }}
                   onChange={e => {
@@ -6878,16 +6916,81 @@ function TabDeals({ commercantId, commercant, toast }) {
                   }}/>
               </div>
               <div style={{ minWidth: 0 }}>
-                <label style={s.label}>Date fin *</label>
-                <Input type="date" value={form.date_fin} min={form.date_debut || today}
-                  style={{ width: '100%', boxSizing: 'border-box' }}
+                <label style={s.label}>{form.recurrence ? 'Jusqu’au' : 'Date fin *'}</label>
+                <Input type="date" value={form.date_fin} min={form.date_debut || today} disabled={!!form.recurrence && form.sans_fin}
+                  style={{ width: '100%', boxSizing: 'border-box', opacity: form.recurrence && form.sans_fin ? 0.45 : 1 }}
                   onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))}/>
               </div>
             </div>
+
+            {/* ═══ RÉPÉTER (28/10, lot 2 du module promo) ═══════════════════
+                Idée d'Alex : « 1+1 chaque mercredi, telle promo le premier
+                samedi du mois ». La promo se crée UNE fois et revient toute
+                seule. Vide = seulement les dates ci-dessus, comme avant. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, border: `1.5px solid ${form.recurrence ? T.main : T.hairline}`, background: form.recurrence ? T.pale : '#FAFAFA' }}>
+              <label style={s.label}>Répéter</label>
+              <select value={form.recurrence} onChange={e => setForm(p => ({ ...p, recurrence: e.target.value }))}
+                style={{ width: '100%', padding: '9px 10px', borderRadius: 8, border: `1.5px solid ${T.hairline}`, fontFamily: 'inherit', fontSize: 14, background: '#fff' }}>
+                <option value="">Non, seulement ces dates</option>
+                <option value="hebdo">Chaque semaine, certains jours</option>
+                <option value="mensuel">Une fois par mois (le 1er samedi…)</option>
+                <option value="intervalle">Tous les X jours</option>
+              </select>
+              {form.recurrence === 'hebdo' && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[[1, 'Lun'], [2, 'Mar'], [3, 'Mer'], [4, 'Jeu'], [5, 'Ven'], [6, 'Sam'], [0, 'Dim']].map(([j, nom]) => {
+                    const coche = form.jours_semaine.includes(j)
+                    return (
+                      <button key={j} type="button" aria-pressed={coche}
+                        onClick={() => setForm(p => ({ ...p, jours_semaine: coche ? p.jours_semaine.filter(x => x !== j) : [...p.jours_semaine, j] }))}
+                        style={{ padding: '6px 10px', borderRadius: 100, border: `1.5px solid ${coche ? T.main : T.hairline}`, background: coche ? T.main : '#fff', color: coche ? '#fff' : T.ink, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {nom}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {form.recurrence === 'mensuel' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <select value={form.rang_mois} onChange={e => setForm(p => ({ ...p, rang_mois: e.target.value }))}
+                    style={{ padding: '9px 10px', borderRadius: 8, border: `1.5px solid ${T.hairline}`, fontFamily: 'inherit', fontSize: 14, background: '#fff' }}>
+                    <option value="1">Le 1er</option><option value="2">Le 2e</option><option value="3">Le 3e</option><option value="4">Le 4e</option><option value="-1">Le dernier</option>
+                  </select>
+                  <select value={form.jour_semaine_mois} onChange={e => setForm(p => ({ ...p, jour_semaine_mois: e.target.value }))}
+                    style={{ padding: '9px 10px', borderRadius: 8, border: `1.5px solid ${T.hairline}`, fontFamily: 'inherit', fontSize: 14, background: '#fff' }}>
+                    <option value="1">lundi</option><option value="2">mardi</option><option value="3">mercredi</option><option value="4">jeudi</option><option value="5">vendredi</option><option value="6">samedi</option><option value="0">dimanche</option>
+                  </select>
+                </div>
+              )}
+              {form.recurrence === 'intervalle' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: T.ink }}>
+                  Tous les
+                  <Input type="number" min={1} max={365} value={form.intervalle_jours} style={{ width: 80 }}
+                    onChange={e => setForm(p => ({ ...p, intervalle_jours: e.target.value }))}/>
+                  jours, à partir de la date de début
+                </div>
+              )}
+              {form.recurrence && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: T.ink, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.sans_fin} onChange={e => setForm(p => ({ ...p, sans_fin: e.target.checked }))} style={{ width: 16, height: 16 }}/>
+                  Sans date de fin (jusqu’à ce que je l’éteigne)
+                </label>
+              )}
+              {form.recurrence && libelleRecurrence({ ...form, jours_semaine: form.jours_semaine, rang_mois: Number(form.rang_mois), jour_semaine_mois: Number(form.jour_semaine_mois), intervalle_jours: Number(form.intervalle_jours) }) && (
+                <p style={{ fontSize: 12, color: T.main, fontWeight: 800, margin: 0 }}>
+                  Tes clients liront : « {libelleRecurrence({ ...form, rang_mois: Number(form.rang_mois), jour_semaine_mois: Number(form.jour_semaine_mois), intervalle_jours: Number(form.intervalle_jours) })} »
+                </p>
+              )}
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div style={{ minWidth: 0 }}><label style={s.label}>Heure début</label><Input type="time" value={form.heure_debut} style={{ width: '100%', boxSizing: 'border-box' }} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))}/></div>
               <div style={{ minWidth: 0 }}><label style={s.label}>Heure fin</label><Input type="time" value={form.heure_fin} style={{ width: '100%', boxSizing: 'border-box' }} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))}/></div>
             </div>
+            {/* ✅ (28/10) Ce que les heures veulent dire, enfin appliqué. */}
+            <p style={{ fontSize: 11, color: T.muted, margin: 0 }}>
+              Facultatif. La promo ne vaut que pour un retrait ou un rendez-vous dans cette plage. Laisse 00:00 à 23:59 pour toute la journée.
+            </p>
             {form.date_debut && form.date_fin && form.date_debut !== form.date_fin && (
               <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', margin: 0 }}>
                 Période multi-jours : le deal sera affiché sur ta fiche tous les jours entre {form.date_debut} et {form.date_fin} (pastille DEAL). Le Good Morning Yoppers ne le met en avant que le matin du {form.date_debut}.

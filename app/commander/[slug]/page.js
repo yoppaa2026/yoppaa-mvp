@@ -26,6 +26,7 @@ import { plageDeLaLigne, plageCommune, creneauDansPlage, refusDePlageALAjout, ra
 import { delaiEnClair, phraseLimiteFiche, limiteDeLaVeille } from '@/lib/heure-veille'
 import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
+import { promosAVenir, promoAVenirPourArticle, accrocheDuDeal, economieDesLignesCents, nomDuJour, momentDuDeal } from '@/lib/promos-visibles'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
@@ -594,7 +595,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 // `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
 // est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
 // de l'alimentaire et ne concerne pas une boutique.
-function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = null, relais = null, onCommanderAutreJour = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place', coupDeCoeur = false }) {
+function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = null, relais = null, onCommanderAutreJour = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, promoAVenir = null, mentionVitrineTexte = 'Disponible sur place', coupDeCoeur = false }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -700,7 +701,17 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
                 </span>
               </>
             ) : (
-              <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{euros(Number(article.prix))}</p>
+              <>
+                <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{euros(Number(article.prix))}</p>
+                {/* ✅ (28/10, Alex au tableau) UNE PROMO UN AUTRE JOUR SE DIT
+                    ICI : « -20 % mercredi ». Sans elle, le client ne savait
+                    pas quel jour choisir. */}
+                {promoAVenir && (
+                  <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>
+                    {accrocheDuDeal(promoAVenir.deal)} {String(promoAVenir.moment || '').charAt(0).toLowerCase() + String(promoAVenir.moment || '').slice(1)}
+                  </span>
+                )}
+              </>
             )}
             {/* ⚠️ UNE DURÉE NE PÉRIME JAMAIS, UNE HEURE SI. « Commande 48 h à
                 l'avance » reste vrai à 9 h comme à 17 h : la carte peut donc la
@@ -2872,8 +2883,8 @@ export default function CommanderSlug() {
       const jours = joursFournisseurVariante(article, variante)
       if (jours === null && stockDeVariante(article, variante) <= qteDeLaVariante(variante.id)) return
       const prixVar = variante.prix != null
-        ? prixEffectifVariante(variante.prix, article, dealsActifs)
-        : prixEffectif(article, dealsActifs)
+        ? prixEffectifVariante(variante.prix, article, dealsDuJourChoisi, jourDesPromos)
+        : prixEffectif(article, dealsDuJourChoisi, jourDesPromos)
       const label = [variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · ')
       setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: options || null, variante: { id: variante.id, label, stock: variante.stock, sansLimite: stockDeVariante(article, variante) === Infinity, fournisseurJours: jours }, quantite: (prev[key]?.quantite || 0) + 1 } }))
       return
@@ -2887,7 +2898,7 @@ export default function CommanderSlug() {
     // article ou sa catégorie. Un lot ou un duo, lui, reste une offre séparée
     // ajoutée par sa propre carte (ajouterDealAuPanier) : l'unité ne disparaît
     // jamais. Le serveur recalcule tout, cet affichage n'engage rien.
-    const remise = remiseSurArticle(article, dealsActifs)
+    const remise = remiseSurArticle(article, dealsDuJourChoisi, jourDesPromos)
     setPanier(prev => ({ ...prev, [key]: {
       ...article,
       prix: remise ? remise.prix : Number(article.prix),
@@ -2974,6 +2985,10 @@ export default function CommanderSlug() {
   // accepte les commandes.
   function dealAchetable(deal) {
     if (!deal || !peutCommander) return false
+    // ✅ (28/10) Seulement au jour choisi : une promo de mercredi ouverte un
+    // lundi se choisit d'abord (« Commander pour ce jour »), sinon le serveur
+    // la refuserait au paiement.
+    if (!dealActifCeJour(deal, jourDesPromos)) return false
     if (deal.article_id) return !!articleDuDeal(deal)
     return !!deal.categorie_cible
   }
@@ -3057,7 +3072,7 @@ export default function CommanderSlug() {
       const stockMax = getStockMax(article.id)
       const qte = stockMax === Infinity ? l.quantite : Math.min(l.quantite, stockMax)
       if (qte <= 0) continue
-      const remise = remiseSurArticle(article, dealsActifs)
+      const remise = remiseSurArticle(article, dealsDuJourChoisi, jourDesPromos)
       ajouts[String(article.id)] = {
         ...article,
         prix: remise ? remise.prix : Number(article.prix),
@@ -3201,6 +3216,18 @@ export default function CommanderSlug() {
     if (ligne) return Math.round(Number(ligne.prix_unitaire) * 100) * item.quantite / 100
     const supplement = item.options ? supplementDeSelection(item.options) : 0
     return Math.round((Number(item.prix) + supplement) * 100) * item.quantite / 100
+  }
+
+  // ✅ (28/10, lot 1 du module promo) Le prix PLEIN d'une ligne remisée, pour
+  // le barrer à côté du prix payé, et ce que le panier fait économiser. Tous
+  // deux viennent du MÊME calcul que le prix (`tracePromo`), au jour choisi.
+  function prixPleinLigne(index) {
+    const ligne = calculDuServeur()?.lignes?.[index]
+    if (!ligne || ligne.prix_plein == null) return null
+    return Math.round(Number(ligne.prix_plein) * 100) * Number(ligne.quantite) / 100
+  }
+  function economiePanier() {
+    return economieDesLignesCents(calculDuServeur()?.lignes) / 100
   }
 
   // 🔴 LE MINIMUM DE LIVRAISON, DIT AVANT LE PAIEMENT (audit, 06/10). Il
@@ -3854,7 +3881,7 @@ export default function CommanderSlug() {
     const article = articles.find(a => a.id === ligne?.id) || ligne
     let circuits = circuitsDeLArticle(article, commercant)
     let indispo = joursIndisponibles(stocksJour?.[ligne?.id])
-    const deal = ligne?.deal_id ? (dealsActifs || []).find(d => d.id === ligne.deal_id) : null
+    const deal = ligne?.deal_id ? (dealsTous || []).find(d => d.id === ligne.deal_id) : null
     // ⚠️ Le second article ne compte que pour un DUO, comme au serveur
     // (`deal_article2_id`) et comme `delaiDuDeal`.
     const second = deal?.deal_type === 'bundle' && deal.article2_id ? articles.find(a => a.id === deal.article2_id) : null
@@ -3898,6 +3925,54 @@ export default function CommanderSlug() {
   }
   // Le circuit du jour affiché : les cartes comptent A aujourd'hui, B ensuite.
   const circuitAffiche = circuitDuJour({ commercant, jour: jourDuPanier(), aujourdhui: aujourdhuiISO() })
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 LA PROMO SE VOIT AU JOUR CHOISI (28/10, lot 1 du module promo)
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // Alex, 28/10 : « les promos passent, mais elles ne sont visibles nulle
+  // part ». Le PANIER se calculait au jour choisi (`calculDuServeur`, avec
+  // `dealsTous` et `dateDeLaCommande()`), mais les CARTES, le bandeau et les
+  // offres lisaient `dealsActifs`, la liste d'AUJOURD'HUI : une promo de demain
+  // n'existait pas à l'écran, même en choisissant demain, et le client payait
+  // moins que ce qui était affiché.
+  //
+  // ✅ Une seule règle désormais : l'écran montre les deals DU JOUR CHOISI, le
+  // même jour que le calcul. ⚠️ Et les fonctions de `lib/deals.js` rejugent le
+  // jour elles-mêmes (aujourd'hui par défaut) : on leur passe TOUJOURS
+  // `jourDesPromos`, sinon elles refiltrent sur aujourd'hui.
+  // ⚠️ ICI ET PAS PLUS HAUT : `dateDeLaCommande()` lit `modeBoutiqueEff`.
+  const aujourdhuiPromos = jourLocalISO(new Date())
+  const jourDesPromos = dateDeLaCommande()
+  const dealsDuJourChoisi = (dealsTous || []).filter(d => dealActifCeJour(d, jourDesPromos))
+  // Le bandeau : le premier deal général du jour choisi, jamais un invendu.
+  const dealsVedettes = dealsDuJourChoisi.filter(d => !porteUneFenetre(d))
+  const dealVedette = dealsVedettes.find(d => !d.article_id && !d.categorie_cible) || dealsVedettes[0] || null
+  // ✅ La section « Promos » (Alex au tableau) : toutes les promos en cours et
+  // à venir sur 14 jours, avec leur MOMENT, sauf celle du bandeau. Pas les
+  // prestations : elles vivent sur la fiche rendez-vous.
+  const promosDeLaFiche = commercant && canDo(planEffectif(commercant), 'deals')
+    ? promosAVenir(dealsTous, aujourdhuiPromos, { garder: d => !d.prestation_id && d.cible_tout !== 'prestations' })
+        .filter(p => p.deal.id !== dealVedette?.id)
+    : []
+  // Choisir le jour d'une promo depuis la section, quand ce jour est proposé
+  // au retrait. Rend `false` sinon (livraison, expédition, jour non proposé) :
+  // le bouton ne s'affiche pas.
+  function indexDuJourDePromo(iso) {
+    if (estDetail) {
+      if (modeBoutiqueEff !== 'retrait') return -1
+      return joursBoutique.findIndex(j => j.jour === iso)
+    }
+    if (modeCommande === 'livraison') return -1
+    return joursDispos.findIndex(j => j?.date && jourLocalISO(new Date(j.date)) === iso)
+  }
+  function choisirJourDePromo(iso) {
+    const i = indexDuJourDePromo(iso)
+    if (i < 0) return
+    if (estDetail) setJourBoutiqueChoisi(i)
+    else setJourSelectionne(i)
+  }
+
   // Le jour de retrait du panier. `null` en expédition : pas de jour, donc
   // rien à refuser (le délai y dit quand le colis part).
   function jourDuPanier() {
@@ -3920,7 +3995,7 @@ export default function CommanderSlug() {
   // 🔴 RIEN ICI N'EST UNE PROTECTION : `create-commande` refait le compte.
   function plageLigne(ligne) {
     const article = articles.find(a => a.id === ligne?.id) || ligne
-    const deal = ligne?.deal_id ? (dealsActifs || []).find(d => d.id === ligne.deal_id) : null
+    const deal = ligne?.deal_id ? (dealsTous || []).find(d => d.id === ligne.deal_id) : null
     const second = deal?.deal_type === 'bundle' && deal.article2_id ? articles.find(a => a.id === deal.article2_id) : null
     return plageDeLaLigne(ligne, article, second)
   }
@@ -4472,7 +4547,7 @@ export default function CommanderSlug() {
           onPartager={partagerArticle}
           partageEtat={partageEtat}
           onClose={() => setArticleDetail(null)}
-          remise={remiseSurArticle(articleDetail, dealsActifs)}
+          remise={remiseSurArticle(articleDetail, dealsDuJourChoisi, jourDesPromos)}
           onAjouter={peutCommander ? (a, opts = null) => ajouterAuPanier(a, opts) : null}
           onAjouterVariante={peutCommander ? (a, v, opts = null) => ajouterAuPanier(a, opts, v) : null}/>
       )}
@@ -4562,11 +4637,24 @@ export default function CommanderSlug() {
                   {dealDetailOuvert.description_longue}
                 </div>
               )}
-              {dealDetailOuvert.date_deal && (
+              {/* ✅ (28/10) QUAND, pour les deux formats (un jour ou une
+                  période), dit comme dans la section « Promos ». */}
+              {momentDuDeal(dealDetailOuvert, aujourdhuiPromos) && (
                 <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, margin: '0 0 6px' }}>
-                  <Calendar size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Valable le {new Date(dealDetailOuvert.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  <Calendar size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {momentDuDeal(dealDetailOuvert, aujourdhuiPromos)}
                 </p>
               )}
+              {!dealActifCeJour(dealDetailOuvert, jourDesPromos) && peutCommander && (() => {
+                const premier = promosAVenir([dealDetailOuvert], aujourdhuiPromos)[0]?.premierJour
+                if (!premier || indexDuJourDePromo(premier) < 0) return null
+                return (
+                  <button type="button" onClick={() => { choisirJourDePromo(premier); setDealDetailOuvert(null) }}
+                    style={{ width: '100%', marginTop: 14, padding: '0.95rem', border: 'none', borderRadius: 100, background: 'linear-gradient(135deg, #DC2626, #F97316)', color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Calendar size={16} strokeWidth={2.4}/>
+                    Commander pour ce jour
+                  </button>
+                )
+              })()}
               {dealDetailOuvert.article_id && (
                 <p style={{ fontSize: '0.78rem', color: T.main, fontWeight: 700, margin: '0 0 6px' }}>
                   <Check size={13} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Appliqué automatiquement à l&rsquo;article concerné
@@ -5251,14 +5339,16 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Bandeau deal du jour - cliquable pour ouvrir le détail */}
-                {canDo(planEffectif(commercant), 'deals') && dealActif && (
+                {/* Bandeau deal du jour - cliquable pour ouvrir le détail.
+                    ✅ (28/10) Celui du JOUR CHOISI (`dealVedette`), plus celui
+                    d'aujourd'hui : c'est ce jour-là que le panier se calcule. */}
+                {canDo(planEffectif(commercant), 'deals') && dealVedette && (() => { const dealActif = dealVedette; return (
                   <div style={{ margin: '0 12px 12px' }}>
                     <button onClick={() => setDealDetailOuvert(dealActif)}
                       style={{ width: '100%', background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
                       <Flame size={20} strokeWidth={2} color={T.light} style={{ flexShrink: 0 }}/>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Deal du jour</p>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>{jourDesPromos === aujourdhuiPromos ? 'Deal du jour' : `Deal de ${nomDuJour(jourDesPromos)}`}</p>
                         <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{dealActif.titre}</p>
                       </div>
                       {/* Une remise % n'a pas de prix propre : c'est le taux qui
@@ -5275,6 +5365,42 @@ export default function CommanderSlug() {
                       ) : null}
                       <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
                     </button>
+                  </div>
+                ) })()}
+
+                {/* ═══ LES PROMOS, AVEC LEUR MOMENT (28/10, Alex au tableau) ═══
+                    Toutes les promos en cours et à venir (14 jours), sauf celle
+                    du bandeau. Le client voit QUAND venir ; s'il peut choisir
+                    ce jour-là, un bouton le fait pour lui. */}
+                {promosDeLaFiche.length > 0 && (
+                  <div style={{ margin: '0 12px 12px', padding: '12px 14px', borderRadius: 14, background: '#fff', border: `1.5px solid ${T.pale}` }}>
+                    <p style={{ fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 8px' }}>Promos</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {promosDeLaFiche.slice(0, 4).map(p => {
+                        const leJourChoisi = dealActifCeJour(p.deal, jourDesPromos)
+                        const peutChoisir = !leJourChoisi && peutCommander && indexDuJourDePromo(p.premierJour) >= 0
+                        return (
+                          <div key={p.deal.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <button type="button" onClick={() => setDealDetailOuvert(p.deal)}
+                              style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                              <span style={{ flexShrink: 0, fontSize: '0.68rem', fontWeight: 800, color: leJourChoisi ? '#fff' : T.deep, background: leJourChoisi ? '#DC2626' : T.pale, padding: '3px 9px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+                                {p.moment}
+                              </span>
+                              <span style={{ minWidth: 0, fontSize: '0.85rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {p.deal.titre}
+                              </span>
+                              <span style={{ flexShrink: 0, fontSize: '0.75rem', fontWeight: 900, color: '#DC2626' }}>{accrocheDuDeal(p.deal)}</span>
+                            </button>
+                            {peutChoisir && (
+                              <button type="button" onClick={() => choisirJourDePromo(p.premierJour)}
+                                style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                                Commander pour ce jour
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -5519,7 +5645,7 @@ export default function CommanderSlug() {
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
-                            remise={remiseSurArticle(a, dealsActifs)}
+                            remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
                             onOpenDetail={() => setArticleDetail(a)}
                             mentionVitrineTexte={mentionVitrine(commercant)}
                             coupDeCoeur={badgesCoeur.has(String(a.id))}/>
@@ -5561,12 +5687,12 @@ export default function CommanderSlug() {
                               getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
-                              remise={remiseSurArticle(a, dealsActifs)}
+                              remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
                               onOpenDetail={() => setArticleDetail(a)}
                               mentionVitrineTexte={mentionVitrine(commercant)}
                               coupDeCoeur={badgesCoeur.has(String(a.id))}/>
                             {/* Lots et duos seulement : une remise vit sur la carte de l'article */}
-                            {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
+                            {peutCommander && offresSepareesPourArticle(a, dealsDuJourChoisi, jourDesPromos).filter(dl => dl.prix_deal != null).map(dl => (
                               <DealOfferCard key={dl.id} deal={dl}
                                 reste={resteDeLOffre(dl)}
                                 ancre={el => viserOffre(dl.id, el)}
@@ -5596,11 +5722,11 @@ export default function CommanderSlug() {
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
-                            remise={remiseSurArticle(a, dealsActifs)}
+                            remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
                             onOpenDetail={() => setArticleDetail(a)}
                               mentionVitrineTexte={mentionVitrine(commercant)}
                               coupDeCoeur={badgesCoeur.has(String(a.id))}/>
-                          {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
+                          {peutCommander && offresSepareesPourArticle(a, dealsDuJourChoisi, jourDesPromos).filter(dl => dl.prix_deal != null).map(dl => (
                             <DealOfferCard key={dl.id} deal={dl}
                               reste={resteDeLOffre(dl)}
                               ancre={el => viserOffre(dl.id, el)}
@@ -5791,9 +5917,23 @@ export default function CommanderSlug() {
                   {Object.values(panier).map((item, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 3 }}>
                       <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
-                      <span style={{ color: T.main, fontWeight: 800 }}>{euros(prixLigne(item, i))}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
+                        {prixPleinLigne(i) != null && (
+                          <span style={{ color: T.muted, fontWeight: 600, fontSize: '0.75rem', textDecoration: 'line-through' }}>{euros(prixPleinLigne(i))}</span>
+                        )}
+                        <span style={{ color: prixPleinLigne(i) != null ? '#DC2626' : T.main, fontWeight: 800 }}>{euros(prixLigne(item, i))}</span>
+                      </span>
                     </div>
                   ))}
+                  {/* ✅ (28/10, Alex au tableau) CE QUE LA PROMO FAIT GAGNER,
+                      dit avant de payer : sans cette ligne, un client payait
+                      moins sans savoir pourquoi. */}
+                  {economiePanier() > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginTop: 6, color: '#059669' }}>
+                      <span style={{ fontWeight: 700 }}>Promo appliquée</span>
+                      <span style={{ fontWeight: 800 }}>Tu économises {euros(economiePanier())}</span>
+                    </div>
+                  )}
                   {(modeCommande === 'livraison' || (estDetail && modeBoutiqueEff === 'expedition')) && (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>

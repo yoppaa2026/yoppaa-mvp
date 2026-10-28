@@ -33,6 +33,7 @@ import { isVitrine, isAlimentaire, canDo, planEffectif } from '@/lib/plans'
 import { reservationActive, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
+import { promosAVenir, promoAVenirPourPrestation, accrocheDuDeal } from '@/lib/promos-visibles'
 import { actuActiveCeJour } from '@/lib/actus-fiche'
 import { BandeauActus, ModaleActu } from '../../ActusFiche'
 import { lienFiche } from '@/lib/lien-fiche'
@@ -616,6 +617,11 @@ export default function CommanderRdvSlug() {
   // comme le serveur (`prixPrestationServeur(..., date_rdv)`). Sans jour
   // choisi, aujourd'hui.
   const jourPrix = dateChoisie ? isoDate(dateChoisie) : jourBruxelles()
+  // ✅ LES PROMOS À VENIR (28/10, lot 1 du module promo) : toutes celles des 14
+  // prochains jours qui ne valent pas aujourd'hui (celles d'aujourd'hui ont
+  // leur bandeau). Alex : « elles ne sont visibles nulle part ».
+  const aujourdhuiPromos = jourBruxelles()
+  const promosAVenirFiche = promosAVenir(dealsActifs, aujourdhuiPromos).filter(p => !p.enCours)
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
   // La séance complète sur laquelle le Yopper a demandé à être prévenu.
@@ -3233,6 +3239,26 @@ export default function CommanderRdvSlug() {
                   </div>
                 )}
 
+                {/* ═══ LES PROMOS À VENIR, AVEC LEUR MOMENT (28/10, Alex) ═══
+                    Celles du jour ont leur bandeau juste au-dessus. Ici, les
+                    autres, sur 14 jours : « Demain », « Mercredi »… Le prix,
+                    lui, suit le jour du rendez-vous choisi (`jourPrix`). */}
+                {etape === 1 && promosAVenirFiche.length > 0 && (
+                  <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 14, background: '#fff', border: `1.5px solid ${T.pale}` }}>
+                    <p style={{ fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 8px' }}>Promos à venir</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {promosAVenirFiche.slice(0, 4).map(p => (
+                        <button key={p.deal.id} type="button" onClick={() => setDealDetailOuvert(p.deal)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                          <span style={{ flexShrink: 0, fontSize: '0.68rem', fontWeight: 800, color: T.deep, background: T.pale, padding: '3px 9px', borderRadius: 100, whiteSpace: 'nowrap' }}>{p.moment}</span>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: '0.85rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.deal.titre}</span>
+                          <span style={{ flexShrink: 0, fontSize: '0.75rem', fontWeight: 900, color: '#DC2626' }}>{accrocheDuDeal(p.deal)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Horaires complets (collapsible) - meme widget que la fiche alimentaire
                     ⚠️ SAUF POUR QUI BOUGE (décision d'Alex, 16/08). Chez un
                     commerce itinérant, ce sont les EMPLACEMENTS qui portent les
@@ -3407,6 +3433,19 @@ export default function CommanderRdvSlug() {
                                     {euros(p.prix)}
                                   </span>
                                 )}
+                                {/* ✅ (28/10, Alex au tableau) UNE PROMO UN AUTRE JOUR
+                                    SE DIT ICI : « -20 % mercredi ». Le client sait
+                                    quel jour choisir à l'étape suivante. */}
+                                {!remiseSurPrestation(p, dealsActifs, jourPrix) && (() => {
+                                  const venir = promoAVenirPourPrestation(p, dealsActifs, jourPrix, aujourdhuiPromos)
+                                  if (!venir) return null
+                                  const quand = String(venir.moment || '')
+                                  return (
+                                    <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', padding: '2px 7px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+                                      {accrocheDuDeal(venir.deal)} {quand.charAt(0).toLowerCase() + quand.slice(1)}
+                                    </span>
+                                  )
+                                })()}
                                 {/* La pastille doit dire ce qui se passe VRAIMENT.
                                     Elle annonçait « Acompte 25 % » même quand le
                                     commerçant n'encaisse pas en ligne : le client
@@ -4704,9 +4743,27 @@ export default function CommanderRdvSlug() {
                               </p>
                             </div>
                             <span style={{ fontSize: seanceSurAbo ? '0.72rem' : '0.85rem', fontWeight: seanceSurAbo ? 800 : 900, color: seanceSurAbo ? T.main : T.ink, textAlign: 'right', flexShrink: 0 }}>
+                              {/* ✅ (28/10) Le prix plein barré quand une promo vaut
+                                  CE jour-là : sans lui, le client payait moins
+                                  sans savoir pourquoi. */}
+                              {!seanceSurAbo && remiseSurPrestation(prestationChoisie, dealsActifs, jourPrix) && (
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textDecoration: 'line-through', marginRight: 6 }}>
+                                  {euros(prestationChoisie.prix)}
+                                </span>
+                              )}
                               {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, dealsActifs, jourPrix)}
                             </span>
                           </div>
+                          {!seanceSurAbo && (() => {
+                            const r = remiseSurPrestation(prestationChoisie, dealsActifs, jourPrix)
+                            if (!r) return null
+                            return (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 14px', borderBottom: `1px solid ${T.pale}`, fontSize: '0.75rem', color: '#059669' }}>
+                                <span style={{ fontWeight: 700 }}>Promo appliquée{r.deal?.titre ? ` · ${r.deal.titre}` : ''}</span>
+                                <span style={{ fontWeight: 800, flexShrink: 0 }}>Tu économises {euros(Number(r.prixBarre) - Number(r.prix))}</span>
+                              </div>
+                            )
+                          })()}
                           {lignesPanier.map(l => (
                             <div key={l.article.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
                               <div style={{ flex: 1, minWidth: 0 }}>

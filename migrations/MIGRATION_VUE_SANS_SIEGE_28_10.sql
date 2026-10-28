@@ -87,7 +87,24 @@ GRANT SELECT ON public.commercants_public TO anon, authenticated;
 -- ceci tient même si quelqu'un ouvre un jour la table aux visiteurs.
 -- `authenticated` garde le sien : le commerçant lit SA ligne (son siège) dans
 -- son tableau de bord, et les règles ne lui montrent que la sienne.
-REVOKE SELECT (adresse, latitude, longitude) ON public.commercants FROM anon;
+-- 🔴 VÉCU SUR TEST LE 28/10 : un REVOKE de colonnes NE SUFFIT PAS. anon tient
+-- un droit de lecture sur TOUTE la table (droits par défaut de Supabase), qui
+-- l'emporte sur le retrait colonne par colonne. On retire donc le droit
+-- global, puis on rend chaque colonne SAUF les trois du siège : pour anon,
+-- rien d'autre ne change (et les règles de lecture qui consultent la table
+-- depuis d'autres tables gardent leurs colonnes).
+DO $$
+DECLARE
+  cols text;
+BEGIN
+  SELECT string_agg(quote_ident(column_name::text), ', ' ORDER BY ordinal_position) INTO cols
+    FROM information_schema.columns
+   WHERE table_schema = 'public' AND table_name = 'commercants'
+     AND column_name NOT IN ('adresse', 'latitude', 'longitude');
+  REVOKE SELECT ON public.commercants FROM anon;
+  EXECUTE format('GRANT SELECT (%s) ON public.commercants TO anon', cols);
+END
+$$;
 
 NOTIFY pgrst, 'reload schema';
 
@@ -129,6 +146,9 @@ SELECT * FROM (
     (has_column_privilege('anon', 'public.commercants', 'adresse', 'SELECT')
      OR has_column_privilege('anon', 'public.commercants', 'latitude', 'SELECT')
      OR has_column_privilege('anon', 'public.commercants', 'longitude', 'SELECT'))::text, 'false'
+  UNION ALL
+  SELECT 11, 'S11. anon lit toujours les autres colonnes (statut_publication)',
+    has_column_privilege('anon', 'public.commercants', 'statut_publication', 'SELECT')::text, 'true'
   UNION ALL
   SELECT 9, 'S9. le commerçant connecté lit toujours SON siège',
     has_column_privilege('authenticated', 'public.commercants', 'adresse', 'SELECT')::text, 'true'

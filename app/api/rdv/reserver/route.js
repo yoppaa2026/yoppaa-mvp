@@ -350,7 +350,9 @@ export async function POST(request) {
     // Un acompte assis sur le prix plein d'une prestation remisée ferait avancer
     // au client plus que sa part.
     // ✅ 18/10 : ET LE TARIF DÉCOUVERTE, si ce client n'a jamais suivi ce cours.
-    const { prix: prixBase, decouverte } = await prixPrestationServeur(db, prestation, undefined, {
+    // ✅ AU JOUR DU RENDEZ-VOUS (28/10, Alex au tableau), plus au jour où le
+    // client réserve : « -20 % le mercredi » vaut pour un rendez-vous un mercredi.
+    const { prix: prixBase, decouverte } = await prixPrestationServeur(db, prestation, String(date_rdv).slice(0, 10), {
       client: { email, telephone: client_telephone },
     })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0

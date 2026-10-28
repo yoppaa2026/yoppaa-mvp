@@ -268,7 +268,8 @@ const MUTATIONS = [
   { nom: '🔴 l ecran compte le pot par circuit',
     fichier: LIB, de: "  if (modeStockDe(article) === 'magasin') {", vers: '  if (false) {' },
   { nom: '🔴 serveur : les ventes d avant la saisie comptent encore',
-    fichier: 'lib/lignes-commande.js', de: '      if (vendu === null || vendu < saisie) return', vers: '' },
+    // Recalée le 28/10 : la date de saisie se juge par article touché (lot, duo).
+    fichier: 'lib/lignes-commande.js', de: '        if (vendu < saisie) continue', vers: '' },
   { nom: '🔴 serveur : un article a variantes bloque sur son stock d article',
     fichier: 'lib/lignes-commande.js', de: '      if (art?.gere_variantes === true) continue', vers: '' },
   { nom: '🔴 serveur : le pot se compte de nouveau jour par jour',
@@ -377,6 +378,16 @@ const MUTATIONS = [
     de: '      fournisseur_jours: avecFournisseur ? Number(String(form.fournisseur_jours).trim()) : null,', vers: '      fournisseur_jours: Number(String(form.fournisseur_jours).trim()) || null,' },
   { nom: '🔴 rouvrir l article efface sa case', fichier: BORD,
     de: "fournisseur_actif: a.fournisseur_jours != null, fournisseur_jours: a.fournisseur_jours != null ? String(a.fournisseur_jours) : ''", vers: "fournisseur_actif: false, fournisseur_jours: ''" },
+
+  // ── 28/10 : un lot vendu retire ses unités, le duo son second article ──
+  { nom: '🔴 serveur : un lot vendu ne compte de nouveau qu une piece',
+    fichier: 'lib/lignes-commande.js',
+    de: '  const paires = [[r.article_id, Number(r.quantite_stock ?? r.quantite ?? 0)]]',
+    vers: '  const paires = [[r.article_id, Number(r.quantite ?? 0)]]' },
+  { nom: '🔴 serveur : le second article d un duo vendu ne compte plus',
+    fichier: 'lib/lignes-commande.js',
+    de: '  if (r.duo_article_id) paires.push([r.duo_article_id, Number(r.quantite ?? 0)])',
+    vers: '' },
 ]
 
 const lancer = (banc) => {

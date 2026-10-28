@@ -455,7 +455,8 @@ const code = (f) => sansProse(lire(f))
   const fausseBase = (tables, panne = null) => ({
     from(t) {
       const res = { data: tables[t] ?? [], error: panne === t ? { message: 'panne' } : null }
-      const q = { select: () => q, in: () => q, eq: () => q, not: () => q, gt: () => q, gte: () => q, then: (ok, ko) => Promise.resolve(res).then(ok, ko) }
+      // `or` (28/10) : les ventes se lisent par article principal OU second article de duo.
+      const q = { select: () => q, in: () => q, or: () => q, eq: () => q, not: () => q, gt: () => q, gte: () => q, then: (ok, ko) => Promise.resolve(res).then(ok, ko) }
       return q
     },
   })
@@ -479,6 +480,16 @@ const code = (f) => sansProse(lire(f))
   const bTrop = await verif(croissant, [ligne(croissant, 3)], SAMEDI, samedi38)
   v('🔴 serveur, B : 40 - 38 = 2, 3 est refusé', bTrop.ok === false && bTrop.stock_disponible === 2 && bTrop.status === 409, JSON.stringify(bTrop))
   v('serveur, B : 2 passe', (await verif(croissant, [ligne(croissant, 2)], SAMEDI, samedi38)).ok === true)
+  // 🔴 (28/10) UN LOT VENDU RETIRE SES UNITÉS, ET LE SECOND ARTICLE D'UN DUO
+  // RETIRE LE SIEN, comme la vue `consommation_stock` de la base. Le
+  // pré-contrôle comptait 1 pour un lot « 3+1 » et 0 pour le second article.
+  const lotEtDuo = [
+    { article_id: croissant.id, quantite: 1, quantite_stock: 4, commande: { created_at: '2026-10-05T09:00:00' } },
+    { article_id: 'cafe', duo_article_id: croissant.id, quantite: 2, quantite_stock: 2, commande: { created_at: '2026-10-05T09:00:00' } },
+  ]
+  const lots = await verif(croissant, [ligne(croissant, 35)], SAMEDI, lotEtDuo)
+  v('🔴 serveur : un lot vendu compte ses 4 pièces et le duo sa pièce (40 - 6 = 34)',
+    lots.ok === false && lots.stock_disponible === 34, JSON.stringify(lots))
   const sB = await verif(sandwich, [ligne(sandwich, 1)], SAMEDI)
   v('🔴 serveur : le sandwich pour samedi est refusé, avec la phrase', sB.ok === false && sB.error === messageCircuit('ARTICLE_PAS_SUR_COMMANDE', 'Sandwich'), JSON.stringify(sB))
   const tA = await verif(tarteSpeciale, [ligne(tarteSpeciale, 1)], AUJ)
@@ -594,7 +605,10 @@ const code = (f) => sansProse(lire(f))
     && /supabase\.rpc\('ventes_stock_magasin', \{ p_commercant_id: commercantId \}\)/.test(code('app/dashboard/ConfigDashboard.js')))
   v('🔴 le serveur lit le stock qui baisse sur tous les jours, depuis la saisie',
     /const dispoM = Math\.max\(0, Number\(art\.stock_jour\) \|\| 0\) - \(venduMagasin\[artId\] \|\| 0\) - \(reserveMagasin\[artId\] \|\| 0\)/.test(lc)
-    && /if \(vendu === null \|\| vendu < saisie\) return/.test(lc))
+    // ⚠️ REPOINTÉE LE 28/10 : la date de saisie se juge par article touché
+    // par la ligne (lot, second article d'un duo), `consommationDUneLigneVendue`.
+    && /if \(vendu === null\) return/.test(lc) && /if \(vendu < saisie\) continue/.test(lc)
+    && /for \(const \[id, q\] of consommationDUneLigneVendue\(r\)\)/.test(lc))
 
   // ─── LE TABLEAU DE BORD : LES DEUX SECTIONS, EXÉCUTÉES PUIS VISÉES ───
   v('🔴 ni le jour même ni sur commande : refusé', refusCircuits({ vente_jour: false, commande_active: false }) !== null)

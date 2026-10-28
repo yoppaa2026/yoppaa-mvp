@@ -242,7 +242,8 @@ const code = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 
   for (const f of ['app/api/rdv/reserver/route.js', 'app/api/stripe/checkout/create-rdv-acompte/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js']) {
     const c = code(f)
     verifier(`${f} charge prix_decouverte`, /select\([^)]*prix_decouverte/.test(c))
-    verifier(`${f} passe le client au calcul du prix`, /prixPrestationServeur\([^)]*\{\s*client:/.test(c))
+    // ⚠️ REPOINTÉE LE 28/10 : le jour du rendez-vous est passé avant le client.
+    verifier(`${f} passe le client au calcul du prix`, /prixPrestationServeur\(\w+, prestation, String\(date_rdv\)\.slice\(0, 10\), \{\s*client:/.test(c))
   }
   verifier('le rendez-vous gratuit ou sur place porte le drapeau', code('app/api/rdv/reserver/route.js').includes('tarif_decouverte: decouverte === true'))
   verifier('le rendez-vous avec produits porte le drapeau', code('app/api/stripe/checkout/create-rdv-commande/route.js').includes('tarif_decouverte: decouverte === true'))
@@ -250,12 +251,13 @@ const code = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 
   verifier('le drapeau voyage par Stripe (avec produits)', code('app/api/stripe/checkout/create-rdv-commande/route.js').includes("tarif_decouverte: '1'"))
   verifier('le webhook le relit', code('app/api/stripe/webhook/route.js').includes("tarif_decouverte: meta.tarif_decouverte === '1'"))
   verifier('l’agenda montre la mention', code('app/dashboard/page.js').includes('rdv.tarif_decouverte === true'))
-  verifier('la fiche l’annonce', code('app/commander/rdv/[slug]/page.js').includes('tarifDecouverteAffiche(p, deals) != null'))
+  // ⚠️ REPOINTÉES LE 28/10 (les trois) : le prix se juge au jour du rendez-vous.
+  verifier('la fiche l’annonce', code('app/commander/rdv/[slug]/page.js').includes('tarifDecouverteAffiche(p, dealsActifs, jourPrix) != null'))
   // ✅ 19/10 (Alex : « pas d'indication de la réduc sauf dans le mail »).
   const ficheD = code('app/commander/rdv/[slug]/page.js')
-  verifier('la pastille dit « Séance découverte »', ficheD.includes('Séance découverte : {euros(tarifDecouverteAffiche(p, deals))}'))
+  verifier('la pastille dit « Séance découverte »', ficheD.includes('Séance découverte : {euros(tarifDecouverteAffiche(p, dealsActifs, jourPrix))}'))
   verifier('le récapitulatif annonce la séance découverte avant de confirmer',
-    ficheD.includes('{!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, deals) != null && ('))
+    ficheD.includes('{!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, dealsActifs, jourPrix) != null && ('))
   // ✅ 19/10 (tableau : « annoncer les deux montants ») : avec un acompte, le
   // montant découverte vient du MÊME calcul, et le bouton ne promet aucun montant.
   verifier('les montants découverte viennent du même calcul que l’acompte',

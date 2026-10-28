@@ -221,7 +221,9 @@ export async function POST(request) {
     // Un acompte assis sur le prix plein d'une prestation remisée ferait avancer
     // au client plus que sa part.
     // ✅ 18/10 : ET LE TARIF DÉCOUVERTE, si ce client n'a jamais suivi ce cours.
-    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, undefined, {
+    // ✅ AU JOUR DU RENDEZ-VOUS (28/10, Alex au tableau), comme les produits
+    // de ce même tunnel (`dateCommande: date_rdv` plus bas).
+    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {
       client: { email: normaliserEmail(client_email), telephone: client_telephone },
     })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
@@ -588,6 +590,9 @@ export async function POST(request) {
         prix_unitaire: l.prix_unitaire,
         options: l.options,
         tva_taux: l.tva_taux,
+        // ✅ (28/10) La trace de la promo (`tracePromo`, lib/lignes-commande.js).
+        prix_plein: l.prix_plein ?? null,
+        promo_deal_id: l.promo_deal_id ?? null,
       })))
     if (errLignes) {
       await supabase.from('commandes').delete().eq('id', commande.id)

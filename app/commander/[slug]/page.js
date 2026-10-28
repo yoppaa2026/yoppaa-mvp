@@ -3218,7 +3218,10 @@ export default function CommanderSlug() {
   function fraisLivraison() {
     // Boutique détail en expédition : frais de port (offerts dès le seuil).
     // Estimation client ; le serveur recalcule et reste la source de vérité.
-    if (commercant?.categorie === 'detail') {
+    // 🔴 `estDetail`, pas `categorie === 'detail'` (28/10) : un SERVICE qui
+    // expédie ses produits voyait 0 € de port ici, et le serveur les lui
+    // facturait au paiement (create-commande, `estExpedition`).
+    if (estDetail) {
       if (modeBoutiqueEff !== 'expedition') return 0
       const seuil = Number(commercant?.boutique_gratuit_des)
       if (seuil > 0 && totalPanier() >= seuil) return 0

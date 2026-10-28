@@ -40,6 +40,7 @@ import { finApresMinuit } from '@/lib/rdv-slots'
 import { jourLocalISO, jourBruxelles, jourCivilPlus } from '@/lib/timezone'
 import { horaireDuJour, COLONNES_EXCEPTIONS, exceptionsPour } from '@/lib/horaires-du-jour'
 import { lieuxDuJour, lieuPrincipal } from '@/lib/lieux-activite'
+import { dealActifCeJour } from '@/lib/deals'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
 import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
@@ -2791,12 +2792,9 @@ export default function Commander() {
     const dealSet = new Set()
     const bonneAffaireSet = new Set()
     ;(deals || []).forEach(d => {
-      const dateDeal = d.date_deal || null
-      const dStart = d.date_debut ? d.date_debut.slice(0,10) : null
-      const dEnd   = d.date_fin   ? d.date_fin.slice(0,10)   : null
-      const dans = dateDeal === aujourdhui
-        || (dStart && dEnd && dStart <= aujourdhui && aujourdhui <= dEnd)
-      if (dans) {
+      // ✅ LA RÈGLE PARTAGÉE (28/10), plus une copie : la récurrence des promos
+      // (lot 1) vivra dans `dealActifCeJour`, et une copie l'aurait ignorée.
+      if (dealActifCeJour(d, aujourdhui)) {
         dealSet.add(d.commercant_id)
         if (d.est_bonne_affaire) bonneAffaireSet.add(d.commercant_id)
       }

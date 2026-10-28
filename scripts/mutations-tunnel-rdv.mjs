@@ -625,17 +625,18 @@ const MUTATIONS = [
     fichier: 'app/api/rdv/reserver/route.js',
     // REPOINTÉES LE 18/10 (les trois) : l'appel rend aussi `decouverte` et
     // passe le client sur les lignes suivantes, que le mutant garde lisibles.
-    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(db, prestation, undefined, {',
+    // Recalées le 28/10 (les trois) : le jour du rendez-vous remplace `undefined`.
+    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(db, prestation, String(date_rdv).slice(0, 10), {',
     vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   { nom: '🔴 l acompte est calcule sur le prix PLEIN',
     fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
-    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, undefined, {',
+    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {',
     vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   { nom: '🔴 le tunnel complet repart du prix PLEIN',
     fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, undefined, {',
+    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, String(date_rdv).slice(0, 10), {',
     vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   // 🔴 UNE LECTURE EN ECHEC NE DOIT RIEN BRADER : mieux vaut ne pas appliquer
@@ -650,17 +651,17 @@ const MUTATIONS = [
   // ─── L ECRAN ANNONCE CE QUE LE SERVEUR DEBITE ───────────────────────────
   { nom: '🔴 la fiche RDV reaffiche le prix plein',
     fichier: 'app/commander/rdv/[slug]/page.js',
-    de: 'function formatPrix(prestation, deals = []) {',
-    vers: 'function formatPrix(prestation, deals = []) { if (prestation) return prestation.prix != null ? `${Number(prestation.prix).toFixed(2)} €` : "Sur demande";' },
+    de: 'function formatPrix(prestation, deals = [], jourISO) {',
+    vers: 'function formatPrix(prestation, deals = [], jourISO) { if (prestation) return prestation.prix != null ? `${Number(prestation.prix).toFixed(2)} €` : "Sur demande";' },
 
   { nom: '🔴 le prix fige sur le rendez-vous redevient le prix plein',
     fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '      const prixEstime = prixEffectifPrestation(prestationChoisie, deals)',
+    de: '      const prixEstime = prixEffectifPrestation(prestationChoisie, dealsActifs, jourPrix)',
     vers: '      const prixEstime = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : null' },
 
   { nom: '🔴 le prix barre disparait : la remise ne se voit plus',
     fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '                                {remiseSurPrestation(p, deals) && (',
+    de: '                                {remiseSurPrestation(p, dealsActifs, jourPrix) && (',
     vers: '                                {false && (' },
 
   // ─── LE FORMULAIRE DE DEAL ──────────────────────────────────────────────
@@ -827,6 +828,20 @@ const MUTATIONS = [
     fichier: 'app/api/rdv/annuler-commercant/route.js',
     de: '        id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id, stripe_refund_amount,',
     vers: '        id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id,' },
+
+  // ── 28/10 : la promo d'une prestation se juge AU JOUR DU RENDEZ-VOUS ──
+  { nom: '🔴 reserver juge de nouveau la promo au jour ou l on reserve',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: 'prixPrestationServeur(db, prestation, String(date_rdv).slice(0, 10), {',
+    vers: 'prixPrestationServeur(db, prestation, undefined, {' },
+  { nom: '🔴 la fiche juge de nouveau le prix sur aujourd hui',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '  const jourPrix = dateChoisie ? isoDate(dateChoisie) : jourBruxelles()',
+    vers: '  const jourPrix = jourBruxelles()' },
+  { nom: '🔴 la fiche relit la liste filtree sur aujourd hui pour le prix fige',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '      const prixEstime = prixEffectifPrestation(prestationChoisie, dealsActifs, jourPrix)',
+    vers: '      const prixEstime = prixEffectifPrestation(prestationChoisie, deals)' },
 ]
 
 function lancer() {

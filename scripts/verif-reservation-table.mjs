@@ -2218,11 +2218,13 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const corpsPrix = (() => { const i = FICHE_P.indexOf('function formatPrix('); return i === -1 ? '' : FICHE_P.slice(i, FICHE_P.indexOf('\n}', i)) })()
   verifier('🔴 elle n’affiche ni prix ni « Sur demande » pour une table',
     /if \(estParCouverts\(prestation\)\) return null/.test(corpsPrix))
+  // ⚠️ REPOINTÉES LE 28/10 : le prix se juge au jour du rendez-vous
+  // (`dealsActifs, jourPrix`), la règle d'affichage ne change pas.
   verifier('⚠️ ni un point de séparation seul après la durée',
-    /\{formatPrix\(prestationChoisie, deals\) && \(/.test(FICHE_P)
-    && /\{\(seanceSurAbo \|\| formatPrix\(prestationChoisie, deals\)\) && \(/.test(FICHE_P))
+    /\{formatPrix\(prestationChoisie, dealsActifs, jourPrix\) && \(/.test(FICHE_P)
+    && /\{\(seanceSurAbo \|\| formatPrix\(prestationChoisie, dealsActifs, jourPrix\)\) && \(/.test(FICHE_P))
   verifier('⚠️ ni une ligne « Prix » vide après la réservation',
-    /\{\(libellePrixSeance\(rdvCree\) \|\| formatPrix\(prestationChoisie, deals\)\) && \(/.test(FICHE_P))
+    /\{\(libellePrixSeance\(rdvCree\) \|\| formatPrix\(prestationChoisie, dealsActifs, jourPrix\)\) && \(/.test(FICHE_P))
 
   const BORD_P = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
   verifier('🔴 le tableau de bord reçoit ses tables sans prix (saisie et déplacement)',

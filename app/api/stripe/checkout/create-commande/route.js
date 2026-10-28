@@ -1336,6 +1336,10 @@ export async function POST(request) {
         tva_taux: l.tva_taux,
         // ✅ (24/10, Caprice) Les pièces à commander chez le fournisseur.
         quantite_fournisseur: l.quantite_fournisseur || 0,
+        // ✅ (28/10) La trace de la promo : prix plein et promo appliquée
+        // (`tracePromo`, lib/lignes-commande.js). Nuls au prix plein.
+        prix_plein: l.prix_plein ?? null,
+        promo_deal_id: l.promo_deal_id ?? null,
       })))
     if (errLignes) {
       // Rollback commande pour ne pas laisser de fantôme

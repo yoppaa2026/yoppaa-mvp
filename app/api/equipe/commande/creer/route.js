@@ -367,6 +367,10 @@ export async function POST(request) {
       tva_taux: l.tva_taux,
       // ✅ (24/10, Caprice) Les pièces à commander chez le fournisseur.
       quantite_fournisseur: l.quantite_fournisseur || 0,
+      // ✅ (28/10) La trace de la promo (`tracePromo`, lib/lignes-commande.js) :
+      // une remise du jour vaut aussi pour une commande encodée.
+      prix_plein: l.prix_plein ?? null,
+      promo_deal_id: l.promo_deal_id ?? null,
     })))
     if (errLignes) {
       await admin.from('commandes').delete().eq('id', commande.id)

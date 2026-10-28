@@ -17,7 +17,7 @@ import {
   dealVisePrestation, remiseSurPrestation, prixEffectifPrestation, montantsPrestation,
   libelleCibleDeal, porteeGlobale, TOUT_PRODUITS, TOUT_PRESTATIONS,
 } from '../lib/deals.js'
-import { construireLignesCommande, verifierStockDisponible } from '../lib/lignes-commande.js'
+import { construireLignesCommande, verifierStockDisponible, tracePromo } from '../lib/lignes-commande.js'
 import { libelleRetrait, estRetraitBoutique } from '../lib/libelle-retrait.js'
 // ⚠️ ON COMPARE AVEC `euros()`, PAS AVEC UNE CHAÎNE ÉCRITE À LA MAIN. Une
 // garde qui recopie « 15,00 € » teste sa propre copie du format, et rougit dès
@@ -205,7 +205,8 @@ egal('supplément ajouté après remise', r.lignes[0].prix_unitaire, 21.71)
 function supabaseFactice({ stocks = [], articles = [], commandes = [], reservations = [] } = {}) {
   const table = (rows) => {
     const q = {
-      select: () => q, in: () => q, eq: () => q, not: () => q, gt: () => q,
+      // `or` (28/10) : les ventes se lisent par article principal OU second article de duo.
+      select: () => q, in: () => q, or: () => q, eq: () => q, not: () => q, gt: () => q,
       then: (res) => res({ data: rows }),
     }
     return q
@@ -947,6 +948,55 @@ egal('un rendez-vous garde le lieu figé à la réservation',
 egal('un rendez-vous d’avant se résout à sa date et à son heure',
   lieuDeLaReservation({ date_rdv: MERCREDI, heure_debut: '19:30' }, { commercant: truck, lieux: deuxServices })?.libelle,
   'Zoning')
+
+// ─── LA TRACE DE LA PROMO SUR LA LIGNE (28/10, lot 0 du module promo) ─────
+// Une ligne remisée ne gardait que son prix remisé : le coût d'une promo était
+// invisible partout. On EXÉCUTE la règle, puis on vérifie que les trois
+// enregistrements de lignes la recopient.
+{
+  const PAIN = { id: 'p', nom: 'Pain', prix: 4, categorie: 'Pains' }
+  const CAFE = { id: 'c', nom: 'Café', prix: 2 }
+  const PCT = { id: 'd1', deal_type: 'remise_pct', remise_pct: 25, article_id: 'p', actif: true, date_debut: '2026-08-01', date_fin: '2026-08-31' }
+  const JOUR_T = '2026-08-10'
+  egal('une remise % : prix plein et promo gardés',
+    tracePromo({ article: PAIN, prixUnitaire: 3, dealsDuJour: [PCT], dateCommande: JOUR_T }),
+    { prix_plein: 4, promo_deal_id: 'd1' })
+  egal('les suppléments entrent dans le prix plein',
+    tracePromo({ article: PAIN, supplement: 0.5, prixUnitaire: 3.5, dealsDuJour: [PCT], dateCommande: JOUR_T }),
+    { prix_plein: 4.5, promo_deal_id: 'd1' })
+  egal('🔴 au prix plein, rien n’est écrit',
+    tracePromo({ article: PAIN, prixUnitaire: 4, dealsDuJour: [], dateCommande: JOUR_T }),
+    { prix_plein: null, promo_deal_id: null })
+  egal('un lot « 3+1 » : 4 fois l’article',
+    tracePromo({ deal: { id: 'l', deal_type: 'lot', unites_par_deal: 4, prix_deal: 12 }, article: PAIN, prixUnitaire: 12 }),
+    { prix_plein: 16, promo_deal_id: 'l' })
+  egal('un duo : ses deux articles',
+    tracePromo({ deal: { id: 'b', deal_type: 'bundle', article2_id: 'c', prix_deal: 5 }, article: PAIN, prixUnitaire: 5, articleParId: { c: CAFE } }),
+    { prix_plein: 6, promo_deal_id: 'b' })
+  egal('une offre plus chère que ses articles n’est pas une promo',
+    tracePromo({ deal: { id: 'l', deal_type: 'lot', unites_par_deal: 2, prix_deal: 9 }, article: PAIN, prixUnitaire: 9 }),
+    { prix_plein: null, promo_deal_id: null })
+  const r = construireLignesCommande({
+    panier: [{ id: 'p', quantite: 2 }], articlesData: [PAIN], dealsData: [PCT],
+    commercant: { id: 'm' }, dateCommande: JOUR_T,
+  })
+  egal('🔴 la ligne construite porte sa trace', r.ok && [r.lignes[0].prix_unitaire, r.lignes[0].prix_plein, r.lignes[0].promo_deal_id], [3, 4, 'd1'])
+  for (const chemin of ['app/api/stripe/checkout/create-commande/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js', 'app/api/equipe/commande/creer/route.js']) {
+    const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+    verifier(`🔴 ${chemin} enregistre la trace de la promo`,
+      /prix_plein: l\.prix_plein \?\? null,/.test(src) && /promo_deal_id: l\.promo_deal_id \?\? null,/.test(src))
+  }
+  // 🔴 (28/10) La liste juge les deals par LA règle partagée, plus une copie
+  // que la récurrence (lot 1) aurait laissée derrière.
+  verifier('🔴 la liste des commerces juge ses deals par la règle partagée',
+    /if \(dealActifCeJour\(d, aujourdhui\)\) \{/.test(srcEcranClient) && !/const dans = dateDeal === aujourdhui/.test(srcEcranClient))
+  // 🔴 (28/10) Un service qui expédie voit ses frais de port à l'écran, comme
+  // le serveur les facture.
+  const ficheBoutique = sansCommentaires(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  const iFrais = ficheBoutique.indexOf('function fraisLivraison()')
+  verifier('🔴 les frais de port d’un service qui expédie s’affichent',
+    iFrais > -1 && /^\s*if \(estDetail\) \{/m.test(ficheBoutique.slice(iFrais, iFrais + 400)))
+}
 
 // ─── CE QUE LE CLIENT LIT, PARTOUT PAREIL ─────────────────────────────────
 // ⚠️ LE PARCOURS RENDEZ-VOUS ENVOYAIT LES CLIENTS AU SIÈGE SOCIAL. L'email de

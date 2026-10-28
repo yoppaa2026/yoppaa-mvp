@@ -133,11 +133,14 @@ function formatDuree(min) {
 // le client découvrirait la différence sur son ticket. Le paramètre a une
 // valeur par défaut pour que les appelants qui n'ont pas de deals sous la main
 // continuent de rendre le prix plein, sans branchement.
-function formatPrix(prestation, deals = []) {
+// ✅ `jourISO` (28/10, Alex au tableau) : une promo sur une prestation vaut
+// pour les rendez-vous qui tombent pendant la promo. Sans jour choisi, c'est
+// aujourd'hui.
+function formatPrix(prestation, deals = [], jourISO) {
   // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : ni montant, ni « Sur
   // demande », qui laisserait croire qu'un tarif se discute. Rien ne s'affiche.
   if (estParCouverts(prestation)) return null
-  const prix = prixEffectifPrestation(prestation, deals)
+  const prix = prixEffectifPrestation(prestation, deals, jourISO)
   if (prix != null) return `${euros(prix)}`
   // ✅ PLUS DE « SUR DEMANDE » (Alex, 30/09 : « le prix est toujours un prix
   // ferme ») : le tableau de bord exige désormais un prix, et aucune
@@ -149,10 +152,10 @@ function formatPrix(prestation, deals = []) {
 // ✅ 18/10 : le tarif découverte annoncé sur la fiche, s'il fait mieux que le
 // prix du jour (deal compris). Même règle que `tarifDecouverte` côté serveur,
 // qui seul décide si CE client y a droit (une première fois à ce cours).
-function tarifDecouverteAffiche(prestation, deals = []) {
+function tarifDecouverteAffiche(prestation, deals = [], jourISO) {
   if (estParCouverts(prestation) || prestation?.prix_decouverte == null) return null
   const decouverte = Number(prestation.prix_decouverte)
-  const prix = prixEffectifPrestation(prestation, deals)
+  const prix = prixEffectifPrestation(prestation, deals, jourISO)
   if (!(decouverte > 0) || prix == null || !(decouverte < prix)) return null
   return decouverte
 }
@@ -387,6 +390,12 @@ export default function CommanderRdvSlug() {
     }
   }
   const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
+  // 🔴 TOUS les deals allumés, sans filtre de jour (28/10) : le PRIX d'un
+  // rendez-vous se juge au jour du rendez-vous (`jourPrix`), pas à aujourd'hui.
+  // Filtrée sur aujourd'hui, la liste perdait la promo du mercredi pour un
+  // rendez-vous pris un lundi. `deals` reste celle du jour, pour la section
+  // « deals » de la fiche.
+  const [dealsActifs, setDealsActifs] = useState([])
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [actualites, setActualites] = useState([])          // actus actives du jour (même règle que la fiche boutique)
   const [actuDetailOuverte, setActuDetailOuverte] = useState(null)
@@ -603,6 +612,10 @@ export default function CommanderRdvSlug() {
   // d'être prise » serait faux : il reste peut-être dix tables.
   const phraseTablePrise = 'Une autre réservation vient d’arriver à la même heure. Choisis à nouveau ton horaire : la grille vient de se mettre à jour.'
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
+  // ✅ LE JOUR QUI FIXE LE PRIX (28/10, Alex au tableau) : celui du rendez-vous,
+  // comme le serveur (`prixPrestationServeur(..., date_rdv)`). Sans jour
+  // choisi, aujourd'hui.
+  const jourPrix = dateChoisie ? isoDate(dateChoisie) : jourBruxelles()
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
   // La séance complète sur laquelle le Yopper a demandé à être prévenu.
@@ -658,7 +671,7 @@ export default function CommanderRdvSlug() {
   // recalcule tout dans create-rdv-commande, cet affichage sert à ce que le
   // client sache ce qu'il va payer avant d'arriver sur Stripe.
   function prixProduit(article) {
-    const remise = remiseSurArticle(article, deals)
+    const remise = remiseSurArticle(article, dealsActifs, jourPrix)
     return remise ? remise.prix : Number(article.prix)
   }
 
@@ -1361,6 +1374,7 @@ export default function CommanderRdvSlug() {
         if (annule) return
         // Même règle de fenêtre que partout ailleurs, tenue dans lib/deals.js
         setDeals((dealsData || []).filter(d => dealActifCeJour(d, auj)))
+        setDealsActifs(dealsData || [])
       }
 
       // 🔴 LES ACTUALITÉS N'ÉTAIENT JAMAIS CHARGÉES ICI (26/10). L'actu de
@@ -2082,7 +2096,7 @@ export default function CommanderRdvSlug() {
       // 🔴 LE PRIX REMISÉ, FIGÉ SUR LE RENDEZ-VOUS. Le serveur le recalcule
       // de son côté ; cet écran ne doit pas enregistrer un montant différent de
       // celui qu'il vient d'afficher.
-      const prixEstime = prixEffectifPrestation(prestationChoisie, deals)
+      const prixEstime = prixEffectifPrestation(prestationChoisie, dealsActifs, jourPrix)
 
       // ─── Acompte (figé) ────────────────────────────────────────────────
       //
@@ -2709,7 +2723,7 @@ export default function CommanderRdvSlug() {
             // Un produit remisé affiche son prix promo ici aussi :
             // sinon l'aperçu du salon et sa boutique annoncent deux
             // prix différents pour le même article.
-            const remise = remiseSurArticle(p, deals)
+            const remise = remiseSurArticle(p, dealsActifs, jourPrix)
             const qte = panierProduits[p.id]?.quantite || 0
             // Un produit en vitrine s'affiche à son prix FERME, sans achat en
             // ligne (Alex, 30/09) : la mention du métier le dit.
@@ -3377,18 +3391,18 @@ export default function CommanderRdvSlug() {
                                 serveur l'applique seul à une première fois ; sans
                                 cette ligne, la cliente paierait moins que la fiche
                                 annonce sans savoir pourquoi. */}
-                            {tarifDecouverteAffiche(p, deals) != null && (
+                            {tarifDecouverteAffiche(p, dealsActifs, jourPrix) != null && (
                               <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '5px 9px', margin: '0 0 8px', display: 'inline-block' }}>
-                                Séance découverte : {euros(tarifDecouverteAffiche(p, deals))}
+                                Séance découverte : {euros(tarifDecouverteAffiche(p, dealsActifs, jourPrix))}
                               </p>
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{formatPrix(p, deals)}</span>
+                                <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{formatPrix(p, dealsActifs, jourPrix)}</span>
                                 {/* ⚠️ LE PRIX BARRÉ N'EST PAS UN ORNEMENT : sans lui, une
                                     prestation remisée affiche un prix plus bas sans dire
                                     pourquoi, et le client ne voit pas qu'il fait une affaire. */}
-                                {remiseSurPrestation(p, deals) && (
+                                {remiseSurPrestation(p, dealsActifs, jourPrix) && (
                                   <span style={{ fontSize: '0.82rem', fontWeight: 700, color: T.muted, textDecoration: 'line-through', marginLeft: 6 }}>
                                     {euros(p.prix)}
                                   </span>
@@ -3554,10 +3568,10 @@ export default function CommanderRdvSlug() {
                           <span>{formatDuree(dureeRetenue)}</span>
                           {/* ✅ UNE TABLE N'A PAS DE PRIX : ni montant, ni point
                               de séparation qui resterait seul après la durée. */}
-                          {formatPrix(prestationChoisie, deals) && (
+                          {formatPrix(prestationChoisie, dealsActifs, jourPrix) && (
                             <>
                               <span style={{ opacity: 0.5 }}>·</span>
-                              <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie, deals)}</span>
+                              <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie, dealsActifs, jourPrix)}</span>
                             </>
                           )}
                         </div>
@@ -4022,11 +4036,11 @@ export default function CommanderRdvSlug() {
                                   « Mes rendez-vous ».
                                   ✅ ET UNE TABLE N'A PAS DE PRIX (10/09) : la
                                   durée reste seule, sans point qui traîne. */}
-                              {(seanceSurAbo || formatPrix(prestationChoisie, deals)) && (
+                              {(seanceSurAbo || formatPrix(prestationChoisie, dealsActifs, jourPrix)) && (
                                 <>
                                   {' · '}
                                   <span style={{ color: T.main, fontWeight: 800 }}>
-                                    {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, deals)}
+                                    {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, dealsActifs, jourPrix)}
                                   </span>
                                 </>
                               )}
@@ -4052,7 +4066,7 @@ export default function CommanderRdvSlug() {
                           {(() => {
                             // ⚠️ L'ACOMPTE SUIT LE PRIX REMISÉ : sur un soin à 50 €
                             // remisé à 40 € avec 50 % d'acompte, c'est 20 € et non 25.
-                            const base = prixEffectifPrestation(prestationChoisie, deals)
+                            const base = prixEffectifPrestation(prestationChoisie, dealsActifs, jourPrix)
                             return base != null ? ` · ${euros(Math.round(base * prestationChoisie.acompte_pourcent) / 100)}` : ''
                           })()}
                         </p>
@@ -4269,7 +4283,7 @@ export default function CommanderRdvSlug() {
                     // bouton aurait annoncé « Payer 12,50 € et confirmer »
                     // devant une séance qui ne coûte rien.
                     const acompteEnLigne = !seanceSurAbo && !!(commercant?.rdv_acompte_en_ligne_actif && commercant?.stripe_account_charges_enabled && prestationChoisie?.acompte_pourcent > 0)
-                    const prixBase = prixEffectifPrestation(prestationChoisie, deals)
+                    const prixBase = prixEffectifPrestation(prestationChoisie, dealsActifs, jourPrix)
                     // ⚠️ LA RÉCOMPENSE BAISSE LE TOTAL, ET L'ACOMPTE SE CALCULE
                     // SUR CE TOTAL RÉDUIT (arbitrage d'Alex, 24/08). Sinon le
                     // Yopper avancerait un acompte calculé sur un prix qu'il ne
@@ -4315,7 +4329,7 @@ export default function CommanderRdvSlug() {
                     // Les montants SI c'est une séance découverte, par le MÊME
                     // calcul. L'écran ne sait pas si c'est la première fois :
                     // il annonce, et la page de paiement dit le montant exact.
-                    const prixDecouverte = seanceSurAbo ? null : tarifDecouverteAffiche(prestationChoisie, deals)
+                    const prixDecouverte = seanceSurAbo ? null : tarifDecouverteAffiche(prestationChoisie, dealsActifs, jourPrix)
                     const ventDeco = prixDecouverte != null ? ventilerTunnelRdv({
                       prixPrestation: prixDecouverte,
                       acomptePourcent: prestationChoisie?.acompte_pourcent || 0,
@@ -4690,7 +4704,7 @@ export default function CommanderRdvSlug() {
                               </p>
                             </div>
                             <span style={{ fontSize: seanceSurAbo ? '0.72rem' : '0.85rem', fontWeight: seanceSurAbo ? 800 : 900, color: seanceSurAbo ? T.main : T.ink, textAlign: 'right', flexShrink: 0 }}>
-                              {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, deals)}
+                              {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, dealsActifs, jourPrix)}
                             </span>
                           </div>
                           {lignesPanier.map(l => (
@@ -4815,12 +4829,12 @@ export default function CommanderRdvSlug() {
                               le lui demande pas (ce serait dire à n'importe qui
                               si une adresse fréquente ce centre). On annonce
                               donc la règle, et la confirmation dit le prix retenu. */}
-                          {!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, deals) != null && (
+                          {!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, dealsActifs, jourPrix) != null && (
                             <div style={{ padding: '9px 14px', background: '#ECFDF5', borderTop: '1px solid #10B98122' }}>
                               <span style={{ fontSize: '0.78rem', color: '#065F46', fontWeight: 700, lineHeight: 1.45 }}>
                                 {decoChangeLePaiement
-                                  ? `Première fois à ce cours ? Séance découverte à ${euros(prixDecouverte)} au lieu de ${euros(prixEffectifPrestation(prestationChoisie, deals))} : tu paies ${euros(ventDeco.aPayerMaintenant)} maintenant${ventDeco.soldeSurPlace > 0 ? ` et ${euros(ventDeco.soldeSurPlace)} sur place` : ''}. Le montant exact s’affiche sur la page de paiement.`
-                                  : `Première fois à ce cours ? C’est une séance découverte : tu paies ${euros(tarifDecouverteAffiche(prestationChoisie, deals))} au lieu de ${euros(prixEffectifPrestation(prestationChoisie, deals))}, appliqué automatiquement à la confirmation.`}
+                                  ? `Première fois à ce cours ? Séance découverte à ${euros(prixDecouverte)} au lieu de ${euros(prixEffectifPrestation(prestationChoisie, dealsActifs, jourPrix))} : tu paies ${euros(ventDeco.aPayerMaintenant)} maintenant${ventDeco.soldeSurPlace > 0 ? ` et ${euros(ventDeco.soldeSurPlace)} sur place` : ''}. Le montant exact s’affiche sur la page de paiement.`
+                                  : `Première fois à ce cours ? C’est une séance découverte : tu paies ${euros(tarifDecouverteAffiche(prestationChoisie, dealsActifs, jourPrix))} au lieu de ${euros(prixEffectifPrestation(prestationChoisie, dealsActifs, jourPrix))}, appliqué automatiquement à la confirmation.`}
                               </span>
                             </div>
                           )}
@@ -5097,7 +5111,7 @@ export default function CommanderRdvSlug() {
                     </div>
                     {/* ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : la
                         ligne « Prix » disparaît, plutôt que de s'afficher vide. */}
-                    {(libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals)) && (
+                    {(libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, dealsActifs, jourPrix)) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: rdvCree.acompte_montant ? 8 : 0, paddingBottom: rdvCree.acompte_montant ? 8 : 0, borderBottom: rdvCree.acompte_montant ? `1px solid ${T.pale}` : 'none' }}>
                       {/* ⚠️ « PRIX ESTIMÉ : 45 € » SUR UNE SÉANCE DÉJÀ PAYÉE
                           ferait croire à un second paiement, et « 0 € » ferait
@@ -5111,7 +5125,7 @@ export default function CommanderRdvSlug() {
                             séance découverte, pas celui de la carte. */}
                         {rdvCree.tarif_decouverte === true && rdvCree.prix_estime != null
                           ? `Séance découverte · ${euros(rdvCree.prix_estime)}`
-                          : (libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals))}
+                          : (libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, dealsActifs, jourPrix))}
                       </span>
                     </div>
                     )}

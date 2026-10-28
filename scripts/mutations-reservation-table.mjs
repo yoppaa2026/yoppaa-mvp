@@ -765,7 +765,8 @@ const MUTATIONS = [
 
   { nom: '⚠️ la ligne « Prix » vide revient apres la reservation',
     fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '{(libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals)) && (',
+    // Recalée le 28/10 : le prix se juge au jour du rendez-vous (`jourPrix`).
+    de: '{(libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, dealsActifs, jourPrix)) && (',
     vers: '{true && (' },
 
   { nom: '🔴 le tableau de bord recoit ses tables avec leur prix',

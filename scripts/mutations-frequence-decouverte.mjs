@@ -134,10 +134,11 @@ const MUTATIONS = [
     de: "      tarif_decouverte: meta.tarif_decouverte === '1',",
     vers: '' },
   { nom: '🔴 la fiche n annonce plus la découverte', fichier: FICHE,
-    de: '                            {tarifDecouverteAffiche(p, deals) != null && (',
+    // Recalée le 28/10 : le prix se juge au jour du rendez-vous (`jourPrix`).
+    de: '                            {tarifDecouverteAffiche(p, dealsActifs, jourPrix) != null && (',
     vers: '                            {false && (' },
   { nom: '🔴 le récapitulatif se tait sur la séance découverte', fichier: FICHE,
-    de: '                          {!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, deals) != null && (',
+    de: '                          {!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, dealsActifs, jourPrix) != null && (',
     vers: '                          {false && (' },
   { nom: '🔴 avec un acompte, l écran promet de nouveau le prix plein', fichier: FICHE,
     de: '                    const decoChangeLePaiement = !!ventDeco && aPayerMaintenant > 0 && ventDeco.aPayerMaintenant !== aPayerMaintenant',

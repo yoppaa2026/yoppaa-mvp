@@ -2659,19 +2659,35 @@ for (const chemin of [
   const finFmt = FICHE.indexOf('\n}', iFmt)
   const corpsFmt = iFmt === -1 ? '' : FICHE.slice(iFmt, finFmt === -1 ? undefined : finFmt)
   verifie('le corps de formatPrix se découpe', corpsFmt.length > 40, String(corpsFmt.length))
-  verifie('🔴 la fiche CALCULE le prix remisé de la prestation',
-    /prixEffectifPrestation\(prestation, deals\)/.test(corpsFmt),
+  // ⚠️ REPOINTÉES LE 28/10 (Alex au tableau) : le prix se juge AU JOUR DU
+  // RENDEZ-VOUS (`jourPrix`), sur TOUS les deals allumés (`dealsActifs`), plus
+  // sur la liste filtrée sur aujourd'hui.
+  verifie('🔴 la fiche CALCULE le prix remisé de la prestation, au jour donné',
+    /prixEffectifPrestation\(prestation, deals, jourISO\)/.test(corpsFmt),
     'la fiche annoncerait le tarif plein sur une prestation en promotion')
   verifie('🔴 et elle ne relit plus le prix plein au passage',
     corpsFmt.length > 40 && !/prestation\.prix/.test(corpsFmt),
     'une sortie anticipée suffirait à rendre le calcul décoratif')
-  verifie('🔴 et le prix figé sur le rendez-vous est le prix remisé',
-    /const prixEstime = prixEffectifPrestation\(prestationChoisie, deals\)/.test(FICHE))
+  verifie('🔴 et le prix figé sur le rendez-vous est le prix remisé du jour du rendez-vous',
+    /const prixEstime = prixEffectifPrestation\(prestationChoisie, dealsActifs, jourPrix\)/.test(FICHE))
   verifie('🔴 l’acompte annoncé suit le prix remisé',
-    (FICHE.match(/prixEffectifPrestation\(prestationChoisie, deals\)/g) || []).length >= 3,
+    (FICHE.match(/prixEffectifPrestation\(prestationChoisie, dealsActifs, jourPrix\)/g) || []).length >= 3,
     'un acompte assis sur le prix plein ferait avancer plus que sa part')
   verifie('et le prix barré se montre',
-    /remiseSurPrestation\(p, deals\) && \(/.test(FICHE))
+    /remiseSurPrestation\(p, dealsActifs, jourPrix\) && \(/.test(FICHE))
+  // 🔴 28/10 : le jour du prix est celui du rendez-vous choisi, et plus aucun
+  // calcul de prix ne lit la liste filtrée sur aujourd'hui.
+  verifie('🔴 le jour du prix est celui du rendez-vous choisi',
+    /const jourPrix = dateChoisie \? isoDate\(dateChoisie\) : jourBruxelles\(\)/.test(FICHE))
+  verifie('🔴 aucun calcul de prix ne lit la liste du jour',
+    !/(formatPrix|tarifDecouverteAffiche|prixEffectifPrestation|remiseSurPrestation|remiseSurArticle)\([^()]*, deals\)/.test(FICHE))
+  {
+    const routesRdv = ['app/api/rdv/reserver/route.js', 'app/api/stripe/checkout/create-rdv-acompte/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js']
+    for (const r of routesRdv) {
+      verifie(`🔴 ${r} juge la promo au jour du rendez-vous`,
+        /prixPrestationServeur\(\w+, prestation, String\(date_rdv\)\.slice\(0, 10\), \{/.test(lireCode(r)))
+    }
+  }
 
   // ── LE FORMULAIRE DE DEAL ───────────────────────────────────────────────
   const CFG = lireCode('app/dashboard/ConfigDashboard.js')

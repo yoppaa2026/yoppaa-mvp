@@ -278,6 +278,26 @@ const MUTATIONS = [
   { nom: '🔴 la recherche fouille de nouveau le siège', banc: 'verif:logique', fichier: 'app/commander/page.js',
     de: 'sansAccents(adressesLieu[c.id]).includes(q)',
     vers: 'sansAccents(c.adresse).includes(q)' },
+
+  // ── 28/10 : lot 0 du module promo ──
+  { nom: '🔴 la ligne perd la promo qui l a baissee', banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: '    promoId = remiseSurArticle(article, dealsDuJour, dateCommande)?.deal?.id || null',
+    vers: '    promoId = null' },
+  { nom: '🔴 les supplements sortent du prix plein', banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: '  const pleinLigne = Math.round((plein + Number(supplement || 0)) * 100) / 100',
+    vers: '  const pleinLigne = Math.round(plein * 100) / 100' },
+  { nom: '🔴 un duo ne compte plus son second article dans le prix plein', banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: '      plein = Number.isFinite(prixArticle) && Number.isFinite(second) ? prixArticle + second : Number(deal.prix_original)',
+    vers: '      plein = prixArticle' },
+  { nom: '🔴 la commande en ligne oublie la trace de la promo', banc: 'verif:logique', fichier: 'app/api/stripe/checkout/create-commande/route.js',
+    de: '        promo_deal_id: l.promo_deal_id ?? null,',
+    vers: '' },
+  { nom: '🔴 la liste rejuge les deals par une copie', banc: 'verif:logique', fichier: 'app/commander/page.js',
+    de: '      if (dealActifCeJour(d, aujourdhui)) {',
+    vers: '      if (d.date_deal === aujourdhui) {' },
+  { nom: '🔴 un service qui expedie revoit 0 € de port', banc: 'verif:logique', fichier: 'app/commander/[slug]/page.js',
+    de: '    if (estDetail) {\n      if (modeBoutiqueEff !== \'expedition\') return 0',
+    vers: '    if (commercant?.categorie === \'detail\') {\n      if (modeBoutiqueEff !== \'expedition\') return 0' },
 ]
 
 const lancer = (banc) => {

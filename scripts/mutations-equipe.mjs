@@ -221,7 +221,8 @@ const MUTATIONS = [
   { nom: '🔴 le serveur ne revérifie plus le créneau',
     fichier: 'app/api/equipe/rdv/creer/route.js', de: '    if (!verdict.ok) return NextResponse.json({ ok: false, error: verdict.message }, { status: 409 })', vers: '' },
   { nom: '🔴 le prix vient de l écran',
-    fichier: 'app/api/equipe/rdv/creer/route.js', de: '        prix_estime: prix,', vers: '        prix_estime: Number(corps.prix) || prix,' },
+    // REPOINTÉE LE 03/11 : le prix vient de `prixRdv` (serveur, promo comprise).
+    fichier: 'app/api/equipe/rdv/creer/route.js', de: '        ...prixRdv,', vers: '        ...prixRdv, prix_estime: Number(corps.prix) || prixRdv.prix_estime,' },
   { nom: '🔴 créer s ouvre avec la case Comptoir',
     fichier: 'app/api/equipe/rdv/creer/route.js', de: "const garde = await gardeEquipe(request, admin, commercant_id, 'agenda')", vers: "const garde = await gardeEquipe(request, admin, commercant_id, 'comptoir')" },
   { nom: '🔴 le créneau se juge sur les réservations de tous les commerces',

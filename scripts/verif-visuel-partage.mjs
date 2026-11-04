@@ -655,7 +655,9 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   // offres du jour même quand leur heure est passée.
   verifier('🔴 l’invendu exige sa fenêtre OUVERTE', /\{fenetreOuverte\(d\) && \(/.test(CFG))
   // ⚠️ ET LES DEUX AUTRES PASSENT PAR LA MÊME RÈGLE, avec le jour courant.
-  verifier('🔴 le deal passe par `partageable`', /partageable\(d\.actif, d\.date_deal, today\)/.test(CFG))
+  // REPOINTÉE LE 03/11 : jusqu'à la FIN de la promo (`finDuDeal`), plus son
+  // premier jour (« chaque mercredi », « du 2 au 5 »).
+  verifier('🔴 le deal passe par `partageable`', /partageable\(d\.actif, finDuDeal\(d\), today\)/.test(CFG))
   verifier('🔴 l’actualité aussi', /partageable\(a\.actif, a\.date_fin, today\)/.test(CFG))
 
   // 🔴 UNE ALERTE N'EST PAS UNE NOUVEAUTÉ. Sans ce mot, une fermeture

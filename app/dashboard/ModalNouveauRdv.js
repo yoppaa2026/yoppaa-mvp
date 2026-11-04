@@ -37,6 +37,7 @@ import { confirmationSimple } from '@/lib/confirmations'
 import { fermetureQuiBloque } from '@/lib/fermetures-rdv'
 import { horsHoraireAdapte } from '@/lib/horaires-du-jour'
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
+import { phraseReduction } from '@/lib/prix-rdv-commercant'
 
 const T = {
   main:    '#6B35C4',
@@ -570,6 +571,35 @@ export default function ModalNouveauRdv({
     aboChoisi ? true : (prenom.trim() && nom.trim() && tel.trim())
   ))
 
+  // ✅ (03/11, Alex au tableau) LA PROMO ET LE TARIF DÉCOUVERTE, PROPOSÉS AU
+  // TÉLÉPHONE. Le serveur dit ce qu'il appliquerait à CE jour et CETTE heure
+  // (`/api/rdv/prix-commercant`, la règle de la réservation en ligne) ; la
+  // fenêtre ne fait que montrer, et laisser retirer. Rien sur une séance
+  // d'abonnement (prix zéro) ni sur une table (pas de prix).
+  const [apercuPrix, setApercuPrix] = useState(null)
+  const [garderPromo, setGarderPromo] = useState(true)
+  const prixAApercevoir = !!(commercant?.id && presta && !estParCouverts(presta) && dateValide && heureValide && !surAbonnement && prixEstime != null)
+  const telApercu = (contratAbo?.client_telephone || tel.trim() || '').trim()
+  useEffect(() => {
+    if (!prixAApercevoir) { setApercuPrix(null); return }
+    let vivant = true
+    const minuteur = setTimeout(async () => {
+      const r = await postPro('/api/rdv/prix-commercant', {
+        action: 'apercu', commercant_id: commercant.id, prestation_id: presta.id, date, heure: String(heure).slice(0, 5),
+        client_email: emailRetenu || null, client_telephone: telApercu || null,
+      })
+      const j = typeof r?.json === 'function' ? await r.json().catch(() => null) : null
+      if (vivant) setApercuPrix(j?.ok ? j : null)
+    }, 400)
+    return () => { vivant = false; clearTimeout(minuteur) }
+  }, [prixAApercevoir, commercant?.id, presta?.id, date, heure, emailRetenu, telApercu])
+  const reductionProposee = prixAApercevoir ? (apercuPrix?.reduction || null) : null
+  // Une autre promo (autre jour, autre prestation) se propose de nouveau.
+  const cleReduction = reductionProposee ? `${reductionProposee.type}:${reductionProposee.dealId || ''}` : ''
+  useEffect(() => { setGarderPromo(true) }, [cleReduction])
+  // Le prix que la fenêtre annonce (acompte, « hors abonnement »).
+  const prixAnnonce = reductionProposee && garderPromo ? reductionProposee.prix : prixEstime
+
   async function valider() {
     if (!formValide || submitting) return
     // ✅ (Alex, 23/10, tableau) UN ABONNÉ REFUSÉ SE CONFIRME : la séance part
@@ -579,7 +609,7 @@ export default function ModalNouveauRdv({
     if (aboChoisi && !verdictAbo?.ok) {
       const ok = await confirme(confirmationSimple({
         titre: 'Séance hors abonnement',
-        message: `${expliquerRefusCommercant(verdictAbo?.raison, aboChoisi.contrat, { plafond: verdictAbo?.plafond ?? null, prenom: aboChoisi.contrat.client_prenom || '' })} Si tu confirmes, elle est posée hors abonnement${prixEstime != null ? `, au tarif de ${euros(prixEstime)}` : ''}, et son solde ne bouge pas.`,
+        message: `${expliquerRefusCommercant(verdictAbo?.raison, aboChoisi.contrat, { plafond: verdictAbo?.plafond ?? null, prenom: aboChoisi.contrat.client_prenom || '' })} Si tu confirmes, elle est posée hors abonnement${prixAnnonce != null ? `, au tarif de ${euros(prixAnnonce)}` : ''}, et son solde ne bouge pas.`,
         action: 'Poser hors abonnement',
         ton: 'principal',
       }))
@@ -712,6 +742,9 @@ export default function ModalNouveauRdv({
         const r = await serveur.creer({
           prestation_id: presta.id, date: dateStr, heure, couverts: couvertsRetenus,
           praticien_id: praticienRetenu,
+          // ✅ (03/11) La promo proposée : le serveur la recalcule, la fenêtre
+          // ne dit que si on la garde.
+          garder_promo: garderPromo,
           client_prenom: prenom.trim(), client_nom: nom.trim(), client_telephone: tel.trim(),
           client_email: email.trim() || null, notes_client: notes.trim() || null,
         })
@@ -951,6 +984,24 @@ export default function ModalNouveauRdv({
         postPro('/api/rdv/place-prise', { rdv_ids: idsPoses }).catch(e => console.warn('[ModalNouveauRdv] liste d’attente non mise à jour', e))
       }
 
+      // ✅ (03/11, Alex au tableau) LA PROMO GARDÉE, POSÉE PAR LE SERVEUR. Le
+      // navigateur écrit le prix plein ; seul le serveur pose le prix barré et
+      // la promo (la base refuse qu'un navigateur les écrive). AVANT l'email :
+      // la confirmation doit dire le bon prix.
+      // ⚠️ UN ÉCHEC SE DIT, et le rendez-vous reste posé, au prix normal.
+      if (rdvId && !surAbonnement && reductionProposee && garderPromo) {
+        const r = await postPro('/api/rdv/prix-commercant', { action: 'appliquer', rdv_id: rdvId })
+        const j = typeof r?.json === 'function' ? await r.json().catch(() => null) : null
+        if (!j?.ok) {
+          await confirme(confirmationSimple({
+            titre: 'Promo non appliquée',
+            message: `Le rendez-vous est bien posé, mais au prix normal${prixEstime != null ? ` (${euros(prixEstime)})` : ''} : la promo n’a pas pu être appliquée${j?.error ? ` (${j.error})` : ''}.`,
+            action: 'Compris',
+            ton: 'principal',
+          }))
+        }
+      }
+
       // 4) Email de confirmation au Yopper (non-bloquant, fire-and-forget).
       //    Pas d'email commercant (c'est lui qui cree le RDV, il sait deja).
       //
@@ -1056,8 +1107,24 @@ export default function ModalNouveauRdv({
               </select>
               {!enTable && presta && heureFin && (
                 <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, marginTop: 5 }}>
-                  {mots.numeroLabel} de {dureeMin}min : {heure} → {heureFin}{prixEstime != null ? ` · ${prixEstime.toFixed(0)}€` : ''}
+                  {mots.numeroLabel} de {dureeMin}min : {heure} → {heureFin}{prixAnnonce != null ? ` · ${euros(prixAnnonce)}` : ''}
                 </p>
+              )}
+              {/* ✅ (03/11, Alex au tableau) La promo ou le tarif découverte de
+                  ce jour-là, proposés, et retirables d'un geste. */}
+              {!enTable && reductionProposee && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 6, padding: '0.5rem 0.75rem', borderRadius: 10, background: garderPromo ? '#FEF2F2' : '#F9FAFB', border: `1.5px solid ${garderPromo ? '#FCA5A5' : '#E5E7EB'}` }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: garderPromo ? '#B91C1C' : T.muted }}>
+                    {garderPromo
+                      ? phraseReduction(reductionProposee, euros)
+                      : `${reductionProposee.type === 'decouverte' ? 'Tarif découverte retiré' : 'Promo retirée'} : ${euros(prixEstime)}`}
+                  </span>
+                  <button type="button" style={lienSt} onClick={() => setGarderPromo(v => !v)}>
+                    {garderPromo
+                      ? (reductionProposee.type === 'decouverte' ? 'Retirer le tarif découverte' : 'Retirer la promo')
+                      : (reductionProposee.type === 'decouverte' ? 'Remettre le tarif découverte' : 'Remettre la promo')}
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -1332,7 +1399,7 @@ export default function ModalNouveauRdv({
               {aboChoisi && !verdictAbo?.ok && (
                 <p style={{ fontSize: '0.72rem', color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
                   Tu peux quand même poser cette séance : elle sera enregistrée <strong>hors abonnement</strong>, au tarif normal
-                  {prixEstime != null ? ` de ${euros(prixEstime)}` : ''}, et le solde ne bougera pas.
+                  {prixAnnonce != null ? ` de ${euros(prixAnnonce)}` : ''}, et le solde ne bougera pas.
                 </p>
               )}
 

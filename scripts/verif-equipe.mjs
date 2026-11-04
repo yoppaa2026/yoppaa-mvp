@@ -385,9 +385,15 @@ const membre = (o = {}) => ({
   const absentesCmd = colonnes(P.COLONNES_COMMANDE_EQUIPE).filter(c => !cmd.includes(c) && !APRES_RELEVE_CMD[c])
   v('🔴 chaque colonne lue sur `commandes` existe', cmd.length > 30 && absentesCmd.length === 0, absentesCmd.join(', '))
   // Les colonnes arrivées APRÈS le relevé du 28/08 se prouvent par leur migration.
-  const APRES_RELEVE = { couverts: 'MIGRATION_COUVERTS_TABLE.sql' }
+  // ✅ 03/11 : la promo et le tarif découverte, lus par la fenêtre de déplacement.
+  const APRES_RELEVE = {
+    couverts: 'MIGRATION_COUVERTS_TABLE.sql',
+    prix_plein: 'MIGRATION_TRACE_PROMO_RDV_28_10.sql',
+    promo_deal_id: 'MIGRATION_TRACE_PROMO_RDV_28_10.sql',
+    tarif_decouverte: 'MIGRATION_DECOUVERTE_FREQUENCE_FORMULES_18_10.sql',
+  }
   const rdv = tableDuSchema('rdv_reservations')
-  const absentesRdv = colonnes(P.COLONNES_RDV_EQUIPE).filter(c => !rdv.includes(c) && !(APRES_RELEVE[c] && /ADD COLUMN IF NOT EXISTS couverts/.test(lire(`migrations/${APRES_RELEVE[c]}`))))
+  const absentesRdv = colonnes(P.COLONNES_RDV_EQUIPE).filter(c => !rdv.includes(c) && !(APRES_RELEVE[c] && new RegExp(`ADD COLUMN IF NOT EXISTS ${c}\\b`).test(lire(`migrations/${APRES_RELEVE[c]}`))))
   v('🔴 chaque colonne lue sur `rdv_reservations` existe', rdv.length > 30 && absentesRdv.length === 0, absentesRdv.join(', '))
   for (const c of ['client_prenom', 'updated_at', 'note', 'date_retrait']) {
     v(`🔴 « ${c} » n'est pas demandée sur commandes (elle n'y existe pas)`, !colonnes(P.COLONNES_COMMANDE_EQUIPE).includes(c))
@@ -635,11 +641,17 @@ const membre = (o = {}) => ({
   v('🔴 créer grave le lieu de la plage qui accueille l’heure',
     /const plage = plageQuiAccueille\(creneauxDuJour\(creneaux\.data \|\| \[\], \{ dateStr: date, jour \}\), \{/.test(creer)
     && /lieuId: plage\?\.lieu_id \|\| null,/.test(creer))
-  v('🔴 la prestation doit appartenir au commerce', /\.from\('rdv_prestations'\)\.select\(`\$\{COLONNES_PRESTATION_SANS_COUVERTS\}, \$\{COLONNES_COUVERTS\}`\)\s*\.eq\('commercant_id', commercant_id\)/.test(creer) && /const presta = formats\.find\(/.test(creer))
+  // REPOINTÉE LE 03/11 : `prix_decouverte` suit les couverts (tarif découverte au téléphone).
+  v('🔴 la prestation doit appartenir au commerce', /\.from\('rdv_prestations'\)\.select\(`\$\{COLONNES_PRESTATION_SANS_COUVERTS\}, \$\{COLONNES_COUVERTS\}, prix_decouverte`\)\s*\.eq\('commercant_id', commercant_id\)/.test(creer) && /const presta = formats\.find\(/.test(creer))
   // Les deux listes du module disent la même chose, l'une avec la règle au milieu.
   v('la liste de la route et celle du Poste portent les mêmes colonnes',
     [...P.COLONNES_PRESTATION_SANS_COUVERTS.split(', '), ...(await import('../lib/cours-collectifs.js')).COLONNES_COUVERTS.split(', ')].sort().join() === P.COLONNES_PRESTATION_SAISIE.split(', ').sort().join())
-  v('🔴 le prix vient de la prestation, jamais de l’écran', /const prix = presta\.prix != null \? Number\(presta\.prix\) : null/.test(creer) && /prix_estime: prix,/.test(creer) && !/corps\.prix/.test(creer))
+  // REPOINTÉE LE 03/11 : le prix vient du serveur (`prixPourLeCommerce`, la
+  // règle de la réservation en ligne, promo comprise) ; l'écran ne dit que
+  // « garder la promo » ou non.
+  v('🔴 le prix vient de la prestation, jamais de l’écran',
+    /const \{ plein, reduction \} = await prixPourLeCommerce\(admin, \{ \.\.\.presta, commercant_id \}, \{/.test(creer)
+    && /\.\.\.prixRdv,/.test(creer) && !/corps\.prix\b/.test(creer))
   v('🔴 les couverts sont bornés par la règle', /couvertsValides\(presta,/.test(creer) && /if \(couverts === null\)/.test(creer))
   v('🔴 la création passe par la fonction de TOUTES les créations', /const res = await creerReservationRdv\(admin, \{/.test(creer))
   v('elle se déclare « commerçant », comme la saisie du patron', /source: 'commercant',/.test(creer))

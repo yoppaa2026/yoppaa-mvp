@@ -41,6 +41,10 @@ import {
   heuresLibresDuJour, premiereMinuteOuverte,
 } from '@/lib/deplacement-rdv'
 import { enModeInventaire, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour, etatCadence, phraseCadence } from '@/lib/inventaire-salle'
+import { reductionDuRdv } from '@/lib/prix-rdv-commercant'
+import { euros } from '@/lib/montants'
+import { confirme } from './PosteConfirmation'
+import { confirmationSimple } from '@/lib/confirmations'
 
 const T = {
   main:  '#6B35C4',
@@ -83,6 +87,11 @@ export default function ModalDeplacerRdv({
   })
   const [heure, setHeure] = useState(String(rdv?.heure_debut || '').slice(0, 5))
   const [prevenir, setPrevenir] = useState(true)
+  // ✅ (03/11, Alex au tableau) UN RENDEZ-VOUS DÉPLACÉ GARDE SA PROMO (ou son
+  // tarif découverte) : un déplacement ne renégocie rien. Le commerçant peut
+  // la retirer ici ; c'est le serveur qui remet le prix plein.
+  const reductionGardee = reductionDuRdv(rdv)
+  const [retirerReduction, setRetirerReduction] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [mounted, setMounted] = useState(false)
@@ -454,6 +463,9 @@ export default function ModalDeplacerRdv({
         .then(r => { if (!r.ok) console.warn('[ModalDeplacerRdv] rappel push non replanifié', r.statut, r.erreur) })
         .catch(e => console.warn('[ModalDeplacerRdv] rappel push non replanifié', e?.message))
 
+      // ✅ (03/11) La promo retirée, AVANT l'email : il dit le bon prix.
+      await retirerSiDemande()
+
       // 🔴 LA LISTE D'ATTENTE DE LA NOUVELLE SÉANCE L'APPREND (LA-02, 04/10) :
       // une place reprise par un déplacement laissait partir les notifications
       // d'une place libre. AU MIEUX : le déplacement est fait.
@@ -493,6 +505,22 @@ export default function ModalDeplacerRdv({
     }
   }
 
+  // ✅ (03/11) Retirer la promo gardée, si le commerçant l'a demandé. Le
+  // rendez-vous est déjà déplacé : un échec ne le défait pas, il se DIT.
+  async function retirerSiDemande() {
+    if (!retirerReduction || !reductionGardee) return
+    const r = await postPro('/api/rdv/prix-commercant', { action: 'retirer', rdv_id: rdv.id })
+    const j = typeof r?.json === 'function' ? await r.json().catch(() => null) : null
+    if (!j?.ok) {
+      await confirme(confirmationSimple({
+        titre: 'Promo toujours appliquée',
+        message: `Le rendez-vous est bien déplacé, mais la ${reductionGardee.type === 'decouverte' ? 'réduction découverte' : 'promo'} n’a pas pu être retirée${j?.error ? ` (${j.error})` : ''}. Il garde son prix de ${euros(reductionGardee.prix)}.`,
+        action: 'Compris',
+        ton: 'principal',
+      }))
+    }
+  }
+
   // ─── LE DÉPLACEMENT DU POSTE ÉQUIPE (30/09) ────────────────────────────────
   //
   // Le serveur (`/api/equipe/rdv/deplacer` → `deplacerReservationRdv`) relit
@@ -522,6 +550,8 @@ export default function ModalDeplacerRdv({
     rappel
       .then(x => { if (!x.ok) console.warn('[ModalDeplacerRdv] rappel push non replanifié', x.statut, x.erreur) })
       .catch(e => console.warn('[ModalDeplacerRdv] rappel push non replanifié', e?.message))
+    // ✅ (03/11) La promo retirée, AVANT l'email : il dit le bon prix.
+    await retirerSiDemande()
     // ✅ (23/10, I3) « parti » veut dire PARTI : la réponse de l'envoi, lue.
     let emailParti = false
     if (prevenir && r.client_a_email === true) {
@@ -680,6 +710,23 @@ export default function ModalDeplacerRdv({
             <div style={{ borderRadius: 10, padding: '0.625rem 0.875rem', marginBottom: 12, background: '#FFFBEB', border: '1.5px solid #FCD34D' }}>
               <p style={{ fontSize: '0.82rem', fontWeight: 800, lineHeight: 1.45, margin: 0, color: '#92400E' }}>{messageCadence.titre}</p>
               <p style={{ fontSize: '0.75rem', color: T.deep, margin: '4px 0 0', lineHeight: 1.5 }}>{messageCadence.detail}</p>
+            </div>
+          )}
+
+          {/* ✅ (03/11, Alex au tableau) La promo gardée, et retirable. */}
+          {reductionGardee && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 12, padding: '0.5rem 0.75rem', borderRadius: 10, background: retirerReduction ? '#F9FAFB' : '#FEF2F2', border: `1.5px solid ${retirerReduction ? '#E5E7EB' : '#FCA5A5'}` }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: retirerReduction ? T.muted : '#B91C1C', lineHeight: 1.45 }}>
+                {retirerReduction
+                  ? `${reductionGardee.type === 'decouverte' ? 'Tarif découverte retiré' : 'Promo retirée'} : il repassera au prix normal${reductionGardee.prixPlein != null ? ` de ${euros(reductionGardee.prixPlein)}` : ''}.`
+                  : reductionGardee.type === 'decouverte'
+                  ? `Garde son tarif découverte : ${euros(reductionGardee.prix)}.`
+                  : `Garde sa promo : ${euros(reductionGardee.prix)} au lieu de ${euros(reductionGardee.prixPlein)} (prise pour le ${new Date(`${String(rdv.date_rdv).slice(0, 10)}T12:00:00`).toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}).`}
+              </span>
+              <button type="button" onClick={() => setRetirerReduction(v => !v)}
+                style={{ background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }}>
+                {retirerReduction ? 'La garder' : (reductionGardee.type === 'decouverte' ? 'Retirer le tarif découverte' : 'Retirer la promo')}
+              </button>
             </div>
           )}
 

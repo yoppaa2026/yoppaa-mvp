@@ -13,7 +13,8 @@
 //     référence en inventaire, comme la fenêtre) ;
 //   • le créneau accepte la réservation (`creneauAcceptable` : ouverture,
 //     pause, chevauchement), sur les réservations RELUES en base ;
-//   • le prix et l'acompte viennent de la prestation, jamais de l'écran ;
+//   • le prix et l'acompte viennent de la prestation, jamais de l'écran,
+//     promo et tarif découverte compris (03/11) ;
 //   • puis `creerReservationRdv`, la fonction de TOUTES les créations : place,
 //     table, salle, lieu, numéro.
 //
@@ -33,6 +34,8 @@ import { enModeInventaire, formatPourAffichage, dureeDuGroupe } from '@/lib/inve
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { COLONNES_PRESTATION_SANS_COUVERTS, COLONNES_CRENEAU_RDV_EQUIPE } from '@/lib/equipe-poste'
 import { COLONNES_EXCEPTIONS, horaireDuJour, exceptionsPour } from '@/lib/horaires-du-jour'
+import { prixPourLeCommerce } from '@/lib/prix-rdv-commercant-server'
+import { champsPrixRdv } from '@/lib/prix-rdv-commercant'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,7 +84,8 @@ export async function POST(request) {
       // ⚠️ `categorie`, `plan`, `essai_plan`, `created_at` : la garde de
       // formule juste en dessous en dépend (17/10).
       admin.from('commercants').select('id, horaires_detail, rdv_acompte_global, categorie, plan, essai_plan, created_at').eq('id', commercant_id).maybeSingle(),
-      admin.from('rdv_prestations').select(`${COLONNES_PRESTATION_SANS_COUVERTS}, ${COLONNES_COUVERTS}`)
+      // ⚠️ `prix_decouverte` : le tarif découverte proposé au téléphone (03/11).
+      admin.from('rdv_prestations').select(`${COLONNES_PRESTATION_SANS_COUVERTS}, ${COLONNES_COUVERTS}, prix_decouverte`)
         .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null),
       admin.from('rdv_creneaux').select(COLONNES_CRENEAU_RDV_EQUIPE)
         .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null),
@@ -151,9 +155,15 @@ export async function POST(request) {
     if (!verdict.ok) return NextResponse.json({ ok: false, error: verdict.message }, { status: 409 })
 
     // ── Le prix et l'acompte : la prestation, comme la fenêtre du patron ───
-    const prix = presta.prix != null ? Number(presta.prix) : null
+    // ✅ (03/11, Alex au tableau) LA PROMO ET LE TARIF DÉCOUVERTE SONT
+    // PROPOSÉS au téléphone, comme en ligne : le serveur les calcule au jour et
+    // à l'heure du rendez-vous, la fenêtre ne dit que « garder » (par défaut)
+    // ou « retirer » (`garder_promo: false`).
     const acomptePct = presta.acompte_pourcent || commerce.data?.rdv_acompte_global || 0
-    const acompte = prix != null && acomptePct > 0 ? Math.round(prix * acomptePct) / 100 : null
+    const { plein, reduction } = await prixPourLeCommerce(admin, { ...presta, commercant_id }, {
+      date, heure, email: client.client_email, telephone: client.client_telephone,
+    })
+    const prixRdv = champsPrixRdv({ plein, reduction, garder: corps.garder_promo !== false, acomptePct })
 
     // 🔴 LE LIEU DE LA PLAGE QUI ACCUEILLE L'HEURE, pas celui que l'heure seule
     // désigne (03/10) : voir `plageQuiAccueille`. Sans lui, un cours donné dans
@@ -171,9 +181,7 @@ export async function POST(request) {
       champs: {
         ...client,
         client_id: null,
-        prix_estime: prix,
-        acompte_montant: acompte,
-        acompte_du: acompte,
+        ...prixRdv,
         acompte_paye: false,
         statut: 'confirme',
         notes_client: texte(corps.notes_client, 1000) || null,

@@ -375,6 +375,68 @@ egal('rien, rien', economieDesLignesCents(null), 0)
     && N.includes('const contents = `${c.nom} : ${deal.titre}${prixStr}${rythme}`'))
 }
 
+// ─── LE RENDEZ-VOUS ENCODÉ PAR LE COMMERCE (03/11, Alex au tableau) ───────
+{
+  const { reductionProposee, champsPrixRdv, reductionDuRdv, phraseReduction, acompteDuPrix } = await import('../lib/prix-rdv-commercant.js')
+  const DEAL = { id: 'd20', titre: '-20 % le mercredi', deal_type: 'remise_pct', remise_pct: 20 }
+  const promo = reductionProposee(30, { prix: 24, remise: { deal: DEAL, prix: 24, prixBarre: 30 }, decouverte: false })
+  egal('🔴 la promo du jour est proposée', promo, { type: 'promo', prix: 24, prixPlein: 30, titre: '-20 % le mercredi', accroche: '-20 %', dealId: 'd20' })
+  egal('le tarif découverte est proposé', reductionProposee(30, { prix: 15, remise: null, decouverte: true })?.type, 'decouverte')
+  egal('rien à proposer au prix plein', [
+    reductionProposee(30, { prix: 30, remise: null, decouverte: false }),
+    reductionProposee(30, { prix: 30, remise: { deal: DEAL, prix: 30, prixBarre: 30 }, decouverte: false }),
+    reductionProposee(30, { prix: 32, remise: { deal: DEAL, prix: 32, prixBarre: 30 }, decouverte: false }),
+  ], [null, null, null])
+  egal('une table (pas de prix) : rien', reductionProposee(null, { prix: null, remise: null, decouverte: false }), null)
+  egal('🔴 gardée : prix remisé, prix plein, promo et acompte sur le prix remisé',
+    champsPrixRdv({ plein: 30, reduction: promo, garder: true, acomptePct: 50 }),
+    { prix_estime: 24, prix_plein: 30, promo_deal_id: 'd20', tarif_decouverte: false, acompte_montant: 12, acompte_du: 12 })
+  egal('🔴 retirée : prix plein, aucune trace',
+    champsPrixRdv({ plein: 30, reduction: promo, garder: false, acomptePct: 50 }),
+    { prix_estime: 30, prix_plein: null, promo_deal_id: null, tarif_decouverte: false, acompte_montant: 15, acompte_du: 15 })
+  egal('la découverte ne porte ni prix plein ni promo (comme en ligne)',
+    champsPrixRdv({ plein: 30, reduction: reductionProposee(30, { prix: 15, decouverte: true }), garder: true, acomptePct: 0 }),
+    { prix_estime: 15, prix_plein: null, promo_deal_id: null, tarif_decouverte: true, acompte_montant: null, acompte_du: null })
+  verifier('🔴 un acompte déjà payé ne se réécrit pas', !('acompte_montant' in champsPrixRdv({ plein: 30, reduction: null, garder: false, acomptePct: 50, acomptePaye: true })))
+  egal('l’acompte du prix', [acompteDuPrix(24, 50), acompteDuPrix(24, 0), acompteDuPrix(null, 50)], [12, null, null])
+  egal('le rendez-vous dit sa réduction', [
+    reductionDuRdv({ prix_estime: 24, prix_plein: 30, promo_deal_id: 'd20' })?.type,
+    reductionDuRdv({ prix_estime: 15, tarif_decouverte: true })?.type,
+    reductionDuRdv({ prix_estime: 30 }),
+    reductionDuRdv({ prix_estime: 0, prix_plein: 30, promo_deal_id: 'd20', abonnement_id: 'a1' }),
+  ], ['promo', 'decouverte', null, null])
+  egal('la phrase de la fenêtre', phraseReduction(promo, (n) => `${n} €`), 'Promo -20 % : 24 € au lieu de 30 €')
+
+  const ROUTE = lireCode('app/api/rdv/prix-commercant/route.js')
+  verifier('🔴 la route déduit le commerce du rendez-vous', ROUTE.includes("gardeLigneEquipe(request, admin, 'rdv_reservations', corps.rdv_id, 'agenda')"))
+  verifier('🔴 « appliquer » ne vise qu’un rendez-vous encodé, au prix plein',
+    ROUTE.includes("if (rdv.source !== 'commercant') return refus(409") && ROUTE.includes('if (reductionDuRdv(rdv)) return NextResponse.json({ ok: true, inchange: true })'))
+  verifier('le serveur calcule au jour et à l’heure du rendez-vous', ROUTE.includes('date: rdv.date_rdv, heure: rdv.heure_debut, email: rdv.client_email, telephone: rdv.client_telephone,'))
+  const SRV = lireCode('lib/prix-rdv-commercant-server.js')
+  verifier('🔴 la règle est celle de la réservation en ligne', SRV.includes('const resultat = await prixPrestationServeur(db, prestation, String(date).slice(0, 10), {')
+    && /COLONNES_PRESTATION_PRIX = `id, nom, prix, prix_decouverte, acompte_pourcent, commercant_id, \$\{COLONNES_COUVERTS\}`/.test(SRV))
+  const EQ = lireCode('app/api/equipe/rdv/creer/route.js')
+  verifier('🔴 l’équipe : promo proposée, retirable', EQ.includes('const prixRdv = champsPrixRdv({ plein, reduction, garder: corps.garder_promo !== false, acomptePct })')
+    && EQ.includes('...prixRdv,') && EQ.includes('${COLONNES_COUVERTS}, prix_decouverte`)') && !EQ.includes('prix_estime: prix,'))
+  const M = lireCode('app/dashboard/ModalNouveauRdv.js')
+  verifier('🔴 le patron : le serveur pose la promo AVANT l’email',
+    /if \(rdvId && !surAbonnement && reductionProposee && garderPromo\) \{\s*const r = await postPro\('\/api\/rdv\/prix-commercant', \{ action: 'appliquer', rdv_id: rdvId \}\)[\s\S]*postPro\('\/api\/emails\/rdv-confirme', \{ rdv_id: rdvId \}\)/.test(M))
+  verifier('la fenêtre montre et laisse retirer', M.includes("action: 'apercu', commercant_id: commercant.id, prestation_id: presta.id")
+    && M.includes('garder_promo: garderPromo,') && M.includes('onClick={() => setGarderPromo(v => !v)}'))
+  verifier('🔴 le navigateur n’écrit jamais la trace', !/prix_plein|promo_deal_id/.test(M))
+  const D = lireCode('app/dashboard/ModalDeplacerRdv.js')
+  verifier('🔴 le déplacement garde la promo et laisse la retirer, avant l’email',
+    D.includes("{ action: 'retirer', rdv_id: rdv.id }") && (D.match(/await retirerSiDemande\(\)/g) || []).length === 2
+    && D.includes('    if (!retirerReduction || !reductionGardee) return\n    const r = await postPro(')
+    && D.includes('const reductionGardee = reductionDuRdv(rdv)'))
+  verifier('le Poste équipe lit la promo de ses rendez-vous', lireCode('lib/equipe-poste.js').includes("'prix_plein', 'promo_deal_id', 'tarif_decouverte',"))
+  const SQL = readFileSync(new URL('../migrations/MIGRATION_PROMO_RDV_COMMERCANT_04_11.sql', import.meta.url), 'utf8')
+  verifier('🔴 la base refuse la trace écrite par un navigateur', SQL.includes('BEFORE INSERT ON public.rdv_reservations')
+    && SQL.includes("IF NEW.prix_plein IS NOT NULL OR NEW.promo_deal_id IS NOT NULL THEN")
+    && SQL.includes("def := replace(def, '''stripe_refund_id''', '''stripe_refund_id'', ''prix_plein'', ''promo_deal_id''');")
+    && SQL.includes('IF auth.uid() IS NULL THEN RETURN NEW; END IF;'))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

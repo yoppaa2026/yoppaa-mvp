@@ -24,6 +24,27 @@ const FICHE = 'app/commander/[slug]/page.js'
 const FICHE_RDV = 'app/commander/rdv/[slug]/page.js'
 
 const MUTATIONS = [
+  // ── 03/11 : la fin d'une promo, pas son premier jour ──
+  { nom: '🔴 une récurrente sans fin devient passée (fin = premier jour)', fichier: LIB,
+    de: '  if (estRecurrente(deal)) return deal.date_fin ? String(deal.date_fin).slice(0, 10) : null',
+    vers: '  if (estRecurrente(deal)) return fenetreDuDeal(deal)?.fin || null',
+    garde: 'une récurrente sans fin n’est jamais « passée »' },
+  { nom: '🔴 date_deal repasse avant l’intervalle (promo de 4 jours lue comme 1 jour)', fichier: LIB,
+    de: '  if (deal.date_debut && deal.date_fin) {\n    const debut',
+    vers: '  if (dd) return { debut: dd, fin: dd }\n  if (deal.date_debut && deal.date_fin) {\n    const debut',
+    garde: 'une période enregistrée par le formulaire garde ses quatre jours' },
+  { nom: 'une promo passée reste « actuelle »', fichier: LIB,
+    de: '  return !!fin && !!aujourdhui && fin < aujourdhui',
+    vers: '  return !!fin && !!aujourdhui && fin < aujourdhui && false',
+    garde: 'une récurrente finie hier est passée' },
+  { nom: '🔴 le tableau de bord range de nouveau par date_deal', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: 'const dealsActuels = deals.filter(d => !dealTermine(d, today))',
+    vers: 'const dealsActuels = deals.filter(d => !d.date_deal || d.date_deal >= today)',
+    garde: 'le tableau de bord range par la fin de la promo' },
+  { nom: '🔴 le partage s’arrête au premier jour', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '{partageable(d.actif, finDuDeal(d), today) && (',
+    vers: '{partageable(d.actif, d.date_deal, today) && (',
+    garde: 'le partage vit jusqu’à la fin de la promo' },
   { nom: '🔴 demain ne se dit plus « Demain »', fichier: LIB,
     de: "    if (avant === 1) return 'Demain'", vers: "    if (avant === 1) return 'Bientôt'",
     garde: 'demain' },

@@ -33,7 +33,7 @@ import { isVitrine, isAlimentaire, canDo, planEffectif } from '@/lib/plans'
 import { reservationActive, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
-import { promosAVenir, promoAVenirPourPrestation, accrocheDuDeal } from '@/lib/promos-visibles'
+import { promosAVenir, promoAVenirPourPrestation, accrocheDuDeal, momentDuDeal } from '@/lib/promos-visibles'
 import { plageAccepte, libellePlage } from '@/lib/recurrence-promo'
 import { actuActiveCeJour } from '@/lib/actus-fiche'
 import { BandeauActus, ModaleActu } from '../../ActusFiche'
@@ -5441,9 +5441,12 @@ export default function CommanderRdvSlug() {
                   {dealDetailOuvert.description_longue}
                 </div>
               )}
-              {dealDetailOuvert.date_deal && (
+              {/* ✅ (03/11) QUAND, dit comme sur la fiche boutique et dans la
+                  section « Promos » : « Valable le » + la première date mentait
+                  pour une promo « chaque mercredi » ou « du 2 au 5 ». */}
+              {momentDuDeal(dealDetailOuvert, aujourdhuiPromos) && (
                 <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, margin: '0 0 6px' }}>
-                  <Calendar size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Valable le {new Date(dealDetailOuvert.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  <Calendar size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {momentDuDeal(dealDetailOuvert, aujourdhuiPromos)}
                 </p>
               )}
 

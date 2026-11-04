@@ -32,7 +32,8 @@ import {
 import { jourBruxelles } from '@/lib/timezone'
 // La MÊME règle que celle du badge : l'édition et la pastille ne peuvent pas
 // se contredire sur ce qui est nouveau ce matin.
-import { actuNouvelleCeMatin, rattacherCommerces } from '@/lib/morning-contenu'
+import { actuNouvelleCeMatin, rattacherCommerces, COLONNES_DEAL_MORNING, filtreDealsMorning, dealDeLEdition } from '@/lib/morning-contenu'
+import { estRecurrente, libelleRecurrence, libellePlage } from '@/lib/recurrence-promo'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
 const T = {
@@ -111,12 +112,14 @@ async function fetchMorningData(commune) {
       .from('yoppaa_deals')
       .select(`
         id, titre, description, prix_deal, prix_original, date_deal, article_id, cta_appeler_reserver, photo_url,
-        deal_type, remise_pct, commercant_id
+        deal_type, remise_pct, commercant_id, ${COLONNES_DEAL_MORNING}
       `)
       .eq('actif', true)
       .eq('inclus_morning', true)
-      .eq('date_deal', today)
-      .eq('statut_morning', 'envoye'),
+      .eq('statut_morning', 'envoye')
+      // ✅ (03/11) Et les promos récurrentes qui reviennent ce jour-là : le jour
+      // se juge par leur règle (`dealDeLEdition`), jamais par `date_deal`.
+      .or(filtreDealsMorning(today)),
 
     // 2) Actus de l'ÉDITION : marquées « inclure dans le GMY » ET déjà retenues
     //    par un cron (push_envoye_at non nul), tant que leur fenêtre est en cours.
@@ -138,7 +141,7 @@ async function fetchMorningData(commune) {
   // pas le droit de lire la table, et l'édition restait vide pour tous (voir
   // `rattacherCommerces`, partagée avec la pastille « Nouveau »).
   const [dealsRaw, actusCommercantRaw] = await Promise.all([
-    rattacherCommerces(supabase, dealsBruts),
+    rattacherCommerces(supabase, (dealsBruts || []).filter(d => dealDeLEdition(d, today))),
     rattacherCommerces(supabase, actusBruts),
   ])
 
@@ -190,6 +193,9 @@ async function fetchMorningData(commune) {
         prix,
         prixNormal,
         stock: d.article_id ? (stockParArticle[d.article_id] ?? null) : null,
+        // ✅ (03/11) Quand : « Chaque mercredi · 11 h à 14 h » pour une promo
+        // récurrente, « aujourd'hui · 11 h à 14 h » pour une promo à heures.
+        quand: [estRecurrente(d) ? libelleRecurrence(d) : 'aujourd’hui', libellePlage(d) || null].filter(Boolean).join(' · '),
         // CTA « Appeler pour réserver » : promesse du TabDeals enfin tenue ici
         telephone: d.cta_appeler_reserver ? (d.commercant.telephone || null) : null,
       }
@@ -492,7 +498,7 @@ function DealCard({ d, shown, delay, onOpen }) {
             <div style={{ fontSize: 13, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {d.commerce}
             </div>
-            <div style={{ fontSize: 10, color: T.main, fontWeight: 600 }}>{d.categorie} · aujourd&rsquo;hui</div>
+            <div style={{ fontSize: 10, color: T.main, fontWeight: 600 }}>{d.categorie} · {d.quand || <>aujourd&rsquo;hui</>}</div>
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 100, background: T.pale, color: T.deep, fontSize: 9, fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase', flexShrink: 0 }}>
             <IconFire size={10} color={T.main}/> Deal

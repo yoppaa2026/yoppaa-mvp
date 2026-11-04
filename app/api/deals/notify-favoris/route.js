@@ -22,6 +22,7 @@ import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, planEffectif } from '@/lib/plans'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { euros } from '@/lib/montants'
+import { COLONNES_RECURRENCE, estRecurrente, libelleRecurrence } from '@/lib/recurrence-promo'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -53,7 +54,7 @@ export async function POST(req) {
   const { data: deal, error: dealErr } = await supabase
     .from('yoppaa_deals')
     .select(`
-      id, titre, prix_deal, prix_original, actif, est_bonne_affaire,
+      id, titre, prix_deal, prix_original, actif, est_bonne_affaire, ${COLONNES_RECURRENCE},
       commercant:commercants(id, nom, slug, plan, essai_plan, created_at, statut_publication)
     `)
     .eq('id', deal_id)
@@ -80,7 +81,9 @@ export async function POST(req) {
   // Message push : distingue bonne affaire (accroche forte) vs deal classique
   const prixStr = deal.prix_deal ? ` · ${euros(deal.prix_deal)}` : ''
   const headings = deal.est_bonne_affaire ? 'Bonne affaire' : 'Nouveau deal'
-  const contents = `${c.nom} : ${deal.titre}${prixStr}`
+  // ✅ (03/11) Une promo récurrente dit son rythme : « · Chaque mercredi ».
+  const rythme = estRecurrente(deal) && libelleRecurrence(deal) ? ` · ${libelleRecurrence(deal)}` : ''
+  const contents = `${c.nom} : ${deal.titre}${prixStr}${rythme}`
 
   // Route de destination : fiche commerçant. Le tri vitrine/RDV se fait
   // côté [slug]/page.js (vitrine = redirect vers /commander/rdv/[slug])

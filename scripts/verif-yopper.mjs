@@ -275,7 +275,7 @@ verifier('« aujourd\'hui » est devenu conditionnel',
         journal.push(appel)
         const chaine = {
           select(c) { appel.colonnes = c; return chaine },
-          eq() { return chaine }, not() { return chaine }, lte() { return chaine }, gte() { return chaine },
+          eq() { return chaine }, not() { return chaine }, lte() { return chaine }, gte() { return chaine }, or() { return chaine },
           in(col, valeurs) { appel.dans = [col, valeurs]; return chaine },
           then(ok, ko) {
             const lignes = tables[table]
@@ -310,8 +310,13 @@ verifier('« aujourd\'hui » est devenu conditionnel',
   egal('⚠️ une liste absente ne casse rien', (await rattacherCommerces(vide, null)).length, 0)
 
   // La pastille « Nouveau », de bout en bout.
+  // ⚠️ (03/11) Le faux client ne filtre pas les `eq` : c'est la règle
+  // `dealDeLEdition` qui doit écarter ce qui n'est pas de ce jour.
+  const { jourBruxelles } = await import('../lib/timezone.js')
+  const AUJ = jourBruxelles()
+  const jourSemaine = new Date(`${AUJ}T12:00:00Z`).getUTCDay()
   const commune = { codes_postaux: ['5640'] }
-  const deals = [{ id: 'd1', commercant_id: 'c1' }]
+  const deals = [{ id: 'd1', commercant_id: 'c1', actif: true, date_deal: AUJ, statut_morning: 'envoye' }]
   verifier('🔴 un deal d’un commerce publié allume la pastille',
     await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [MOMO], commercant_lieux: LIEUX_MOMO }), commune))
   verifier('⚠️ le même deal, commerce absent de la vue : la pastille reste éteinte',
@@ -332,6 +337,41 @@ verifier('« aujourd\'hui » est devenu conditionnel',
   const enEssai = { ...MOMO, plan: 'exister', essai_plan: 'vendre', created_at: new Date(Date.now() - 5 * 86400000).toISOString() }
   verifier('🔴 un commerce en essai de Vendre allume la pastille avec son deal',
     await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [enEssai], commercant_lieux: LIEUX_MOMO }), commune))
+
+  // ✅ (03/11, Alex) LES PROMOS RÉCURRENTES REVIENNENT DANS L'ÉDITION.
+  const { dealAAnnoncer, dealDeLEdition } = await import('../lib/morning-contenu.js')
+  const RECURRENTE = { id: 'd9', commercant_id: 'c1', actif: true, recurrence: 'hebdo', jours_semaine: [jourSemaine],
+    date_debut: '2026-01-01', date_fin: null, date_deal: '2026-01-01', statut_morning: 'envoye' }
+  const AUTRE_JOUR = { ...RECURRENTE, id: 'd8', jours_semaine: [(jourSemaine + 1) % 7] }
+  verifier('🔴 une récurrente de ce jour allume la pastille',
+    await morningADuContenu(fauxClient({ yoppaa_deals: [RECURRENTE], actualites: [], commercants_public: [MOMO], commercant_lieux: LIEUX_MOMO }), commune))
+  verifier('🔴 la récurrente d’un autre jour n’allume rien',
+    !(await morningADuContenu(fauxClient({ yoppaa_deals: [AUTRE_JOUR], actualites: [], commercants_public: [MOMO], commercant_lieux: LIEUX_MOMO }), commune)))
+  verifier('un deal daté d’un autre jour n’allume rien',
+    !(await morningADuContenu(fauxClient({ yoppaa_deals: [{ ...deals[0], date_deal: '2026-01-01' }], actualites: [], commercants_public: [MOMO], commercant_lieux: LIEUX_MOMO }), commune)))
+  {
+    // Un mercredi, et le mardi qui le précède.
+    const MERC = '2026-11-04', MARDI = '2026-11-03'
+    const chaqueMercredi = { actif: true, recurrence: 'hebdo', jours_semaine: [3], date_debut: MARDI, date_deal: MARDI, statut_morning: 'pending' }
+    verifier('🔴 la récurrente est annoncée chaque mercredi', dealAAnnoncer(chaqueMercredi, MERC)
+      && dealAAnnoncer({ ...chaqueMercredi, statut_morning: 'envoye' }, '2026-11-11'))
+    verifier('🔴 partie un mardi, elle n’est pas annoncée ce mardi-là', !dealAAnnoncer(chaqueMercredi, MARDI))
+    const aDates = { actif: true, date_deal: MERC, statut_morning: 'pending' }
+    verifier('une promo à dates est annoncée son premier jour', dealAAnnoncer(aDates, MERC) && !dealAAnnoncer(aDates, '2026-11-05'))
+    verifier('🔴 une promo à dates déjà annoncée ne repart pas', !dealAAnnoncer({ ...aDates, statut_morning: 'envoye' }, MERC))
+    verifier('une promo éteinte n’est jamais annoncée', !dealAAnnoncer({ ...chaqueMercredi, actif: false }, MERC))
+    verifier('l’édition ne montre que ce que le cron a retenu', !dealDeLEdition(chaqueMercredi, MERC) && dealDeLEdition({ ...chaqueMercredi, statut_morning: 'envoye' }, MERC))
+  }
+  {
+    const CRON = lire('app/api/cron/morning-yoppers/route.js')
+    const PAGE_M = lire('app/commander/morning/page.js')
+    verifier('la page et le cron lisent les récurrentes',
+      CRON.includes('id, titre, commercant_id, ${COLONNES_DEAL_MORNING},') && CRON.includes('.or(filtreDealsMorning(today))')
+      && CRON.includes('const dealsPending = (dealsCandidats || []).filter(d => dealAAnnoncer(d, today))')
+      && !/\.eq\('date_deal', today\)/.test(CRON)
+      && PAGE_M.includes('deal_type, remise_pct, commercant_id, ${COLONNES_DEAL_MORNING}') && PAGE_M.includes('.or(filtreDealsMorning(today)),')
+      && PAGE_M.includes('rattacherCommerces(supabase, (dealsBruts || []).filter(d => dealDeLEdition(d, today))),'))
+  }
 
   // ⚠️ ET PLUS AUCUN ÉCRAN YOPPER NE DEMANDE LA TABLE. On compte, on ne cherche
   // pas : la page, la pastille, et tout ce qui vit sous /commander.

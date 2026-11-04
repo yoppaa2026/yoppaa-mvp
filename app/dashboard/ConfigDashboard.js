@@ -37,8 +37,9 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 // format vivaient d'ailleurs ici même, justes toutes les deux, pendant que
 // vingt-cinq autres montants formataient à la main. Une seule source.
 import { euros, eurosNus } from '@/lib/montants'
-import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
-import { refusRecurrence, libelleRecurrence } from '@/lib/recurrence-promo'
+import { estRemiseSurProduit, libelleCibleDeal, dealActifCeJour, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
+import { refusRecurrence, libelleRecurrence, estRecurrente } from '@/lib/recurrence-promo'
+import { finDuDeal, dealTermine, fenetreDuDeal, momentDuDeal } from '@/lib/promos-visibles'
 
 // ✅ (28/10, lot 2) Le formulaire d'une promo sans récurrence : seulement ses
 // dates, comme avant.
@@ -6638,9 +6639,12 @@ function TabDeals({ commercantId, commercant, toast }) {
     fetchDeals()
   }
 
-  // Filtre : actuels/futurs vs passés
-  const dealsActuels = deals.filter(d => !d.date_deal || d.date_deal >= today)
-  const dealsPasses  = deals.filter(d => d.date_deal && d.date_deal < today)
+  // Filtre : actuels/futurs vs passés.
+  // 🔴 (03/11) Sur le DERNIER jour de la promo (`dealTermine`), plus sur sa
+  // `date_deal` : « chaque mercredi » ou « du 2 au 5 » passaient dans les
+  // passés dès le lendemain de leur premier jour.
+  const dealsActuels = deals.filter(d => !dealTermine(d, today))
+  const dealsPasses  = deals.filter(d => dealTermine(d, today))
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
 
@@ -7063,10 +7067,14 @@ function TabDeals({ commercantId, commercant, toast }) {
 }
 
 function DealRow({ d, today, onEdit, onToggle, onDelete, commercant = null, toast = null, passe = false }) {
-  const dateAffichee = d.date_deal
+  // ✅ (03/11) Une promo récurrente ou sur plusieurs jours se dit par son
+  // moment (« Chaque mercredi · 11 h à 14 h », « Du 2 au 5 nov. »), comme sur
+  // la fiche ; une promo d'un jour garde sa date.
+  const surPlusieursJours = estRecurrente(d) || (fenetreDuDeal(d) && fenetreDuDeal(d).debut !== fenetreDuDeal(d).fin)
+  const dateAffichee = (surPlusieursJours && (momentDuDeal(d, today) || libelleRecurrence(d))) || (d.date_deal
     ? new Date(d.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: '2-digit', month: 'short' })
-    : '—'
-  const isToday = d.date_deal === today
+    : '—')
+  const isToday = dealActifCeJour(d, today)
   return (
     <div style={{ ...s.card, opacity: passe || !d.actif ? 0.55 : 1, borderLeft: `4px solid ${d.inclus_morning ? '#EA580C' : (d.actif ? T.main : '#E5E7EB')}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -7126,7 +7134,7 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, commercant = null, toas
           ⚠️ ET C'EST LA MÊME RÈGLE QUE `dealsActuels` juste au-dessus, écrite
           une seule fois : deux versions auraient fini par afficher la carte
           d'un côté et cacher le bouton de l'autre. */}
-      {partageable(d.actif, d.date_deal, today) && (
+      {partageable(d.actif, finDuDeal(d), today) && (
         <BlocPartage
           annonce={{
             type: TYPE_DEAL,

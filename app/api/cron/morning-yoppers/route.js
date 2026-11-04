@@ -3,6 +3,7 @@
 // Cron Vercel quotidien à 05:30 UTC = 07:30 Brussels (été). Modèle 23/07 :
 //   1. SÉLECTION ÉDITORIALE : retient les deals du jour (inclus_morning=true,
 //      actif, date_deal=today, plan Communiquer/Vendre → statut_morning='envoye')
+//      et, depuis le 03/11, les promos récurrentes qui reviennent ce jour-là
 //      et les actus GMY (inclus_gmy=true, actif, fenêtre en cours →
 //      push_envoye_at). Ce contenu retenu EST l'édition du jour : l'écran
 //      /commander/morning n'affiche que lui. Deadline de facto : ce qui existe
@@ -27,7 +28,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, planEffectif } from '@/lib/plans'
 import { fusionnerIds, extraireCodePostal } from '@/lib/morning-eligibilite'
-import { attacherAdresseLieu } from '@/lib/morning-contenu'
+import { attacherAdresseLieu, COLONNES_DEAL_MORNING, filtreDealsMorning, dealAAnnoncer } from '@/lib/morning-contenu'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { actusGmyRetenues } from '@/lib/actu-gmy'
 import { jourBruxelles } from '@/lib/timezone'
@@ -53,22 +54,27 @@ async function handle(req) {
   const supabase = getSupabaseAdmin()
   const today = jourBruxelles()
 
-  // 1. Deals du jour pending
-  const { data: dealsPending, error: dealsErr } = await supabase
+  // 1. Deals du jour pending, et les promos récurrentes qui reviennent ce
+  //    matin. ✅ (03/11, Alex) Une récurrente est annoncée CHAQUE jour où elle
+  //    vaut, et compte dans la notification à chaque fois ; une promo à dates,
+  //    son premier jour, une fois (`dealAAnnoncer`, lib/morning-contenu.js).
+  //    ⚠️ Le jour d'une récurrente se juge par sa règle, jamais par
+  //    `date_deal` : partie un mardi, « chaque mercredi » était annoncée le mardi.
+  const { data: dealsCandidats, error: dealsErr } = await supabase
     .from('yoppaa_deals')
     .select(`
-      id, titre, commercant_id,
+      id, titre, commercant_id, ${COLONNES_DEAL_MORNING},
       commercant:commercants (id, nom, plan, essai_plan, created_at, statut_publication)
     `)
     .eq('actif', true)
     .eq('inclus_morning', true)
-    .eq('date_deal', today)
-    .eq('statut_morning', 'pending')
+    .or(filtreDealsMorning(today))
 
   if (dealsErr) {
     console.error('[cron/morning-yoppers] fetch deals échoué', dealsErr)
     return NextResponse.json({ error: dealsErr.message }, { status: 500 })
   }
+  const dealsPending = (dealsCandidats || []).filter(d => dealAAnnoncer(d, today))
 
   // 2. Actus GMY actives dans la fenêtre du jour
   const { data: actusGmy, error: actusErr } = await supabase

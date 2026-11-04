@@ -349,6 +349,32 @@ egal('rien, rien', economieDesLignesCents(null), 0)
   egal('rien à dire tant qu’aucun article ne participe', phraseEncore(PIZZAS, calculerOffrePanier(PIZZAS, [])), null)
 }
 
+// ─── LA FIN D'UNE PROMO, PAS SON PREMIER JOUR (03/11) ─────────────────────
+{
+  const { finDuDeal, dealTermine } = await import('../lib/promos-visibles.js')
+  const chaqueMercredi = { actif: true, recurrence: 'hebdo', jours_semaine: [3], date_debut: jour(-14), date_deal: jour(-14), date_fin: null }
+  verifier('🔴 une récurrente sans fin n’est jamais « passée »', finDuDeal(chaqueMercredi) === null && !dealTermine(chaqueMercredi, LUNDI))
+  verifier('une récurrente finie hier est passée', dealTermine({ ...chaqueMercredi, date_fin: jour(-1) }, LUNDI) && !dealTermine({ ...chaqueMercredi, date_fin: LUNDI }, LUNDI))
+  // 🔴 Comme le formulaire l'écrit : `date_deal` = premier jour ET l'intervalle.
+  const commeEnBase = { ...periode(-1, 2), date_deal: jour(-1) }
+  egal('🔴 une période enregistrée par le formulaire garde ses quatre jours', fenetreDuDeal(commeEnBase), { debut: jour(-1), fin: jour(2) })
+  egal('🔴 elle reste dans la section « Promos » au deuxième jour', promosAVenir([commeEnBase], LUNDI).map(p => p.moment), ["Jusqu'à mercredi"])
+  verifier('🔴 une période en cours n’est pas passée',!dealTermine({ ...periode(-3, 2), date_deal: jour(-3) }, LUNDI) && finDuDeal(periode(-3, 2)) === jour(2))
+  verifier('une promo d’un jour est passée le lendemain', dealTermine(ponctuel(-1), LUNDI) && !dealTermine(ponctuel(0), LUNDI))
+  verifier('un deal sans date ne passe jamais', !dealTermine({ actif: true }, LUNDI))
+
+  const C = lireCode('app/dashboard/ConfigDashboard.js')
+  verifier('🔴 le tableau de bord range par la fin de la promo',
+    C.includes('const dealsActuels = deals.filter(d => !dealTermine(d, today))') && C.includes('const dealsPasses  = deals.filter(d => dealTermine(d, today))'))
+  verifier('🔴 le partage vit jusqu’à la fin de la promo', C.includes('{partageable(d.actif, finDuDeal(d), today) && ('))
+  verifier('« Aujourd’hui » suit la règle du jour', C.includes('const isToday = dealActifCeJour(d, today)'))
+  const R = lireCode('app/commander/rdv/[slug]/page.js')
+  verifier('🔴 la fiche rendez-vous dit le moment, plus « Valable le »', !R.includes('Valable le') && R.includes('{momentDuDeal(dealDetailOuvert, aujourdhuiPromos) && ('))
+  const N = lireCode('app/api/deals/notify-favoris/route.js')
+  verifier('la notification aux favoris dit le rythme', N.includes('id, titre, prix_deal, prix_original, actif, est_bonne_affaire, ${COLONNES_RECURRENCE},')
+    && N.includes('const contents = `${c.nom} : ${deal.titre}${prixStr}${rythme}`'))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

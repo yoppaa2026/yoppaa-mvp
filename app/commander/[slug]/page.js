@@ -25,8 +25,8 @@ import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleF
 import { plageDeLaLigne, plageCommune, creneauDansPlage, refusDePlageALAjout, raisonDeLaPlage, libellePlage, plageDeLArticle } from '@/lib/plage-retrait'
 import { delaiEnClair, phraseLimiteFiche, limiteDeLaVeille } from '@/lib/heure-veille'
 import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
-import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
-import { promosAVenir, promoAVenirPourArticle, accrocheDuDeal, economieDesLignesCents, nomDuJour, momentDuDeal, pourQuelJour } from '@/lib/promos-visibles'
+import { dealActifCeJour, dealViseArticle, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
+import { promosAVenir, promoAVenirPourArticle, accrocheDuDeal, economieDesLignesCents, nomDuJour, momentDuDeal, pourQuelJour, ajouterJoursISO } from '@/lib/promos-visibles'
 // ⚠️ RENOMMÉ : `libellePlage` est déjà celui de la plage de retrait d'un
 // article (`lib/plage-retrait`). Celui-ci dit les heures d'une PROMO.
 import { libellePlage as heuresDeLaPromo } from '@/lib/recurrence-promo'
@@ -3987,18 +3987,29 @@ export default function CommanderSlug() {
   // ✅ L'HEURE LIMITE DE LA VEILLE (20/10, 7 Abbayes) : la phrase du
   // calendrier, lue sur TOUT le catalogue (comme sa longueur), jamais sur le
   // panier. `null` sans heure réglée ou sans article sur commande.
+  // 🔴 (03/11, Alex) ET AU JOUR CHOISI : « trop tard pour demain » s'affichait
+  // sous « Demain » choisi même quand les sandwichs s'y prenaient encore, et
+  // sous après-demain. On compte, pour le jour choisi, les articles que l'heure
+  // limite refuse (`refus.limite`) et ceux qui se prennent encore.
   function phraseHeureLimite() {
     if (!limiteDeLaVeille(commercant)) return null
-    let limite = null, apresLimite = false, demain = false
+    const jour = jourDuPanier()
+    const auj = aujourdhuiISO()
+    let limite = null, apresLimite = false, demain = false, touches = 0, autres = 0
     for (const a of articles) {
       if (!a || a.actif === false || a.est_vitrine) continue
-      const c = circuitsDeLArticle(a, commercant)
+      const r = regleArticle(a)
+      const refus = jour ? refusDuJour({ ...r, jour, aujourdhui: auj }) : null
+      if (jour && !refus) autres++
+      const c = r.circuits
       if (!c?.surCommande || !c.limite) continue
       limite = c.limite
       apresLimite = c.apresLimite
       if (delaiSurCommande(delaiEnJours(a)) === 1) demain = true
+      if (jour > auj && refus?.limite) touches++
     }
-    return phraseLimiteFiche({ limite, apresLimite, surCommande: !!limite, demain })
+    const jourChoisi = !jour ? null : jour <= auj ? 'aujourdhui' : jour === ajouterJoursISO(auj, 1) ? 'demain' : 'plus_tard'
+    return phraseLimiteFiche({ limite, apresLimite, surCommande: !!limite, demain, jourChoisi, touches, autres })
   }
   // Le circuit du jour affiché : les cartes comptent A aujourd'hui, B ensuite.
   const circuitAffiche = circuitDuJour({ commercant, jour: jourDuPanier(), aujourdhui: aujourdhuiISO() })
@@ -4051,11 +4062,31 @@ export default function CommanderSlug() {
     if (modeCommande === 'livraison') return -1
     return joursDispos.findIndex(j => j?.date && jourLocalISO(new Date(j.date)) === iso)
   }
+  // 🔴 (03/11, Alex) LE BOUTON NE PROMET QUE CE QUI SE COMMANDE. « Commander
+  // pour demain » s'affichait après l'heure limite de la veille, et la page
+  // répondait aussitôt « trop tard pour demain ». Le jour du bouton est le
+  // premier jour de la promo, proposé au retrait, où au moins UN article visé
+  // se prend encore (même règle que les cartes : `refusDuJour`). Une promo qui
+  // ne vise aucun article (un deal général) garde le jour proposé.
+  function promoSeCommandeCeJour(deal, iso) {
+    const vises = articles.filter(a => a && a.actif !== false && !a.est_vitrine && dealViseArticle(deal, a))
+    if (vises.length === 0) return true
+    const auj = aujourdhuiISO()
+    return vises.some(a => !refusDuJour({ ...regleArticle(a), jour: iso, aujourdhui: auj }))
+  }
+  function jourPourLaPromo(deal, premierJour) {
+    if (!deal || !premierJour) return null
+    return joursDuCalendrier().find(j => j >= premierJour && dealActifCeJour(deal, j)
+      && indexDuJourDePromo(j) >= 0 && promoSeCommandeCeJour(deal, j)) || null
+  }
+  // ⚠️ (03/11) Par `changerJour`, comme les boutons du calendrier : le
+  // créneau de l'autre jour ne reste pas choisi, et un panier rempli demande
+  // confirmation avant de changer de jour.
   function choisirJourDePromo(iso) {
     const i = indexDuJourDePromo(iso)
     if (i < 0) return
     if (estDetail) setJourBoutiqueChoisi(i)
-    else setJourSelectionne(i)
+    else changerJour(i)
   }
   // ✅ (28/10, Alex au test) Les bandeaux de la fiche, tous au modèle du deal
   // du jour : celui du jour choisi d'abord (« Deal de jeudi · 11 h à 14 h »),
@@ -4072,13 +4103,13 @@ export default function CommanderSlug() {
       ...promosDeLaFiche,
     ].slice(0, 4).map(p => {
       const leJourChoisi = dealActifCeJour(p.deal, jourDesPromos)
-      const peutChoisir = !leJourChoisi && peutCommander && indexDuJourDePromo(p.premierJour) >= 0
+      const jourCta = !leJourChoisi && peutCommander ? jourPourLaPromo(p.deal, p.premierJour) : null
       return {
         deal: p.deal,
         vedette: p.deal.id === dealVedette?.id,
         etiquette: leJourChoisi ? auJourChoisi(p.deal) : (p.moment || 'Promo'),
-        cta: peutChoisir ? `Commander pour ${pourQuelJour(p.premierJour, aujourdhuiPromos)}` : null,
-        premierJour: p.premierJour,
+        cta: jourCta ? `Commander pour ${pourQuelJour(jourCta, aujourdhuiPromos)}` : null,
+        premierJour: jourCta || p.premierJour,
       }
     })
   }
@@ -4755,8 +4786,8 @@ export default function CommanderSlug() {
                 </p>
               )}
               {!dealActifCeJour(dealDetailOuvert, jourDesPromos) && peutCommander && (() => {
-                const premier = promosAVenir([dealDetailOuvert], aujourdhuiPromos)[0]?.premierJour
-                if (!premier || indexDuJourDePromo(premier) < 0) return null
+                const premier = jourPourLaPromo(dealDetailOuvert, promosAVenir([dealDetailOuvert], aujourdhuiPromos)[0]?.premierJour)
+                if (!premier) return null
                 return (
                   <button type="button" onClick={() => { choisirJourDePromo(premier); setDealDetailOuvert(null) }}
                     style={{ width: '100%', marginTop: 14, padding: '0.95rem', border: 'none', borderRadius: 100, background: 'linear-gradient(135deg, #DC2626, #F97316)', color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>

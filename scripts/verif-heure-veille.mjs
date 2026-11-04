@@ -167,6 +167,17 @@ verifier('sans article pour demain, elle ne parle pas de demain',
   phraseLimiteFiche({ limite: '18:00', apresLimite: false, surCommande: true, demain: false }) === 'Les commandes à l’avance se prennent jusqu’à 18 h.'
   && phraseLimiteFiche({ limite: '18:00', apresLimite: true, surCommande: true, demain: false }) === 'Il est plus de 18 h : les commandes à l’avance se décalent d’un jour.')
 verifier('sans article sur commande, aucune phrase', phraseLimiteFiche({ limite: '18:00', apresLimite: true, surCommande: false, demain: false }) === null)
+// 🔴 (03/11, Alex) La phrase suit le jour choisi.
+{
+  const apres = (jourChoisi, touches, autres) => phraseLimiteFiche({ limite: '18:00', apresLimite: true, surCommande: true, demain: true, jourChoisi, touches, autres })
+  verifier('🔴 demain choisi, sandwichs encore possibles : « certains articles »', apres('demain', 2, 3) === 'Il est plus de 18 h : certains articles ne se commandent plus pour demain.')
+  verifier('demain choisi, plus rien : « trop tard pour demain »', apres('demain', 2, 0) === 'Il est plus de 18 h : trop tard pour demain. Choisis un autre jour.')
+  verifier('🔴 après-demain choisi : jamais « trop tard pour demain »', apres('plus_tard', 1, 5) === 'Il est plus de 18 h : les commandes à l’avance se décalent d’un jour.')
+  verifier('🔴 aucun article du jour choisi touché : rien', apres('demain', 0, 4) === null && apres('plus_tard', 0, 4) === null)
+  verifier('aujourd’hui choisi : rien (le jour même ne bouge pas)', apres('aujourdhui', 3, 1) === null)
+  verifier('avant 18 h, la phrase d’avant même avec un jour choisi',
+    phraseLimiteFiche({ limite: '18:00', apresLimite: false, surCommande: true, demain: true, jourChoisi: 'demain', touches: 0, autres: 3 }) === 'Pour demain, commande avant 18 h.')
+}
 verifier('la saisie du commerçant', refusDeSaisieLimite('') === null && refusDeSaisieLimite('18:00') === null && refusDeSaisieLimite('25:00') !== null)
 
 {
@@ -204,6 +215,14 @@ verifier('la saisie du commerçant', refusDeSaisieLimite('') === null && refusDe
   const F = code('app/commander/[slug]/page.js')
   verifier('🔴 la fiche lit la vue entière (la colonne y vient)', F.includes(".from('commercants_public').select('*').eq('slug', slug)"))
   verifier('la phrase est sous le calendrier', F.includes('const phrase = phraseHeureLimite()'))
+  // 🔴 (03/11) Au jour choisi, et le bouton promo ne promet que ce qui se commande.
+  verifier('🔴 la phrase lit le jour choisi', F.includes('const refus = jour ? refusDuJour({ ...r, jour, aujourdhui: auj }) : null')
+    && F.includes('if (jour > auj && refus?.limite) touches++')
+    && F.includes('phraseLimiteFiche({ limite, apresLimite, surCommande: !!limite, demain, jourChoisi, touches, autres })'))
+  verifier('🔴 le bouton promo vise un jour où un article se prend', F.includes('return vises.some(a => !refusDuJour({ ...regleArticle(a), jour: iso, aujourdhui: auj }))')
+    && F.includes('&& indexDuJourDePromo(j) >= 0 && promoSeCommandeCeJour(deal, j)) || null')
+    && F.includes('const jourCta = !leJourChoisi && peutCommander ? jourPourLaPromo(p.deal, p.premierJour) : null'))
+  verifier('le bouton promo change de jour comme le calendrier', /function choisirJourDePromo\(iso\) \{[\s\S]{0,160}else changerJour\(i\)/.test(F))
   verifier('la carte dit « À commander la veille avant 18 h »', F.includes('? `À commander ${delaiEnClair(etatJour.delaiJours, etatJour.limite)}`') && F.includes('limite: refus.limite || null,'))
   verifier('le panier bloqué nomme l’heure', F.includes('if (refus.limite) {') && F.includes('se commande ${delaiEnClair(n, refus.limite)} : trop tard pour ${quand}.'))
 }

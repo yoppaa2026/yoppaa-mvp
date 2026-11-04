@@ -118,7 +118,8 @@ egal('rien, rien', economieDesLignesCents(null), 0)
     && /\{bandeauxDesPromos\(\)\.map\(b => \(\s*<BandeauPromo /.test(F))
   verifier('🔴 le bandeau du jour dit ses heures', /return plage \? `\$\{jour\} · \$\{plage\}` : jour/.test(F))
   verifier('🔴 le bouton dit le jour, plus « ce jour »',
-    !/Commander pour ce jour/.test(F) && /`Commander pour \$\{pourQuelJour\(p\.premierJour, aujourdhuiPromos\)\}`/.test(F))
+    // REPOINTÉE LE 03/11 : le jour du bouton est `jourCta` (un jour où la promo se commande).
+    !/Commander pour ce jour/.test(F) && /`Commander pour \$\{pourQuelJour\(jourCta, aujourdhuiPromos\)\}`/.test(F))
   verifier('🔴 l’article dit la plage de sa promo', /\{heuresDeLaPromo\(remise\.deal\) && \(/.test(F))
   // 🔴 Deux `libellePlage` existent (plage de retrait, heures de promo) : les
   // importer tous deux sous ce nom casse la construction (28/10).

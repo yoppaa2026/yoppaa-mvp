@@ -40,6 +40,7 @@ import { euros, eurosNus } from '@/lib/montants'
 import { estRemiseSurProduit, libelleCibleDeal, dealActifCeJour, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
 import { refusRecurrence, libelleRecurrence, estRecurrente } from '@/lib/recurrence-promo'
 import { finDuDeal, dealTermine, fenetreDuDeal, momentDuDeal } from '@/lib/promos-visibles'
+import { TYPE_PANIER, accrocheOffrePanier } from '@/lib/offre-panier'
 
 // ✅ (28/10, lot 2) Le formulaire d'une promo sans récurrence : seulement ses
 // dates, comme avant.
@@ -6230,6 +6231,36 @@ function AvantLaFermeture({ commercantId, commercant, articles, toast, onPublie 
   )
 }
 
+// ✅ (04/11, lot 3) « ACHETEZ N, RECEVEZ X » : ce qui compte et ce qui est
+// offert, en cases à cocher. Une valeur est « cat:<catégorie> » ou l'id d'un
+// article. ⚠️ LES ARTICLES À TAILLES PARTICIPENT (Alex, 04/11 : « 3 achetés,
+// le moins cher offert, toutes tailles »), contrairement aux autres promos.
+const OFFRE_VIDE = { offre_mode: 'choisi', offre_seuil: '2', offre_nombre: '1', offre_declencheurs: [], offre_offerts: [] }
+const versCibleOffre = (v) => (String(v).startsWith('cat:') ? { categorie: String(v).slice(4) } : { article_id: v })
+const depuisCibleOffre = (c) => (c?.categorie ? `cat:${c.categorie}` : c?.article_id || null)
+function ChoixCiblesOffre({ articles, valeurs, onChange, titre }) {
+  const categories = [...new Set((articles || []).map(a => a.categorie).filter(Boolean))].sort()
+  const coche = (v) => valeurs.includes(v)
+  const basculer = (v) => onChange(coche(v) ? valeurs.filter(x => x !== v) : [...valeurs, v])
+  const ligne = (v, libelle) => (
+    <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: T.ink, cursor: 'pointer' }}>
+      <input type="checkbox" checked={coche(v)} onChange={() => basculer(v)} style={{ accentColor: T.main }}/>
+      {libelle}
+    </label>
+  )
+  return (
+    <div>
+      <label style={s.label}>{titre}</label>
+      <div style={{ display: 'grid', gap: 4, maxHeight: 220, overflowY: 'auto', padding: '8px 10px', border: `1px solid ${T.hairline}`, borderRadius: 10 }}>
+        {categories.length > 0 && <p style={{ fontSize: 10.5, fontWeight: 800, color: T.muted, textTransform: 'uppercase', margin: '2px 0' }}>Toute une catégorie</p>}
+        {categories.map(c => ligne(`cat:${c}`, `Tous les articles · ${c}`))}
+        {(articles || []).length > 0 && <p style={{ fontSize: 10.5, fontWeight: 800, color: T.muted, textTransform: 'uppercase', margin: '6px 0 2px' }}>Un produit précis</p>}
+        {(articles || []).map(a => ligne(a.id, `${a.nom}${a.categorie ? ` · ${a.categorie}` : ''} · ${euros(a.prix)}`))}
+      </div>
+    </div>
+  )
+}
+
 function TabDeals({ commercantId, commercant, toast }) {
   const today = jourBruxelles()
   const [deals, setDeals] = useState([])
@@ -6250,6 +6281,7 @@ function TabDeals({ commercantId, commercant, toast }) {
     inclus_morning: false, actif: true, article_id: '',
     cta_appeler_reserver: false,
     photo_url: '', est_bonne_affaire: false,
+    ...OFFRE_VIDE,
   })
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -6375,7 +6407,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       ...RECURRENCE_VIDE,
       inclus_morning: false, actif: true, article_id: '', categorie_cible: '', prestation_id: '', cible_tout: '',
       cta_appeler_reserver: false,
-      photo_url: '', est_bonne_affaire: false })
+      photo_url: '', est_bonne_affaire: false, ...OFFRE_VIDE })
     setPropsIa([])
     setEditId(null); setShowForm(true)
   }
@@ -6416,6 +6448,12 @@ function TabDeals({ commercantId, commercant, toast }) {
       cta_appeler_reserver: !!d.cta_appeler_reserver,
       photo_url: d.photo_url || '',
       est_bonne_affaire: !!d.est_bonne_affaire,
+      // ✅ (04/11, lot 3) L'offre « Achetez N, recevez X ».
+      offre_mode: d.offre_mode || 'choisi',
+      offre_seuil: String(d.offre_seuil ?? '2'),
+      offre_nombre: String(d.offre_nombre ?? '1'),
+      offre_declencheurs: (d.offre_declencheurs || []).map(depuisCibleOffre).filter(Boolean),
+      offre_offerts: (d.offre_offerts || []).map(depuisCibleOffre).filter(Boolean),
     })
     setPropsIa([])
     setEditId(d.id); setShowForm(true)
@@ -6540,6 +6578,18 @@ function TabDeals({ commercantId, commercant, toast }) {
     if (form.deal_type === 'bundle' && !form.article2_id) {
       setSaving(false); return toast('Choisis le second article du duo', 'error')
     }
+    // ✅ (04/11, lot 3) « Achetez N, recevez X » : la même règle que la base
+    // (`yoppaa_deals_offre_panier_check`), dite en mots.
+    const estPanier = form.deal_type === TYPE_PANIER
+    if (estPanier) {
+      const n = parseInt(form.offre_seuil, 10)
+      const x = parseInt(form.offre_nombre, 10)
+      if (!(n >= 1 && n <= 50)) { setSaving(false); return toast('Indique combien d’articles il faut acheter (1 à 50)', 'error') }
+      if (!(x >= 1 && x <= 20)) { setSaving(false); return toast('Indique combien d’articles sont offerts (1 à 20)', 'error') }
+      if (form.offre_declencheurs.length === 0) { setSaving(false); return toast('Coche ce qui compte pour l’offre', 'error') }
+      if (form.offre_mode === 'moins_cher' && x >= n) { setSaving(false); return toast('« Le moins cher offert » : il faut acheter plus d’articles qu’il n’y en a d’offerts', 'error') }
+      if (form.offre_mode === 'choisi' && form.offre_offerts.length === 0) { setSaving(false); return toast('Coche ce qui peut être offert', 'error') }
+    }
     // Validation prix : prix_deal doit etre inferieur au prix_original (audit M4.2 bug)
     if (form.deal_type !== 'remise_pct' && form.prix_deal && form.prix_original) {
       const pd = parseFloat(form.prix_deal)
@@ -6570,7 +6620,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       plage_fin: avecPlage ? hF : null,
       inclus_morning: !!form.inclus_morning,
       actif: !!form.actif,
-      article_id: form.article_id || null,
+      article_id: estPanier ? null : (form.article_id || null),
       // Une catégorie entière ne se remise que par un pourcentage ou un prix
       // promo : un lot « 3 + 1 » sur une catégorie n'aurait aucun sens, on ne
       // saurait pas ce qui est offert.
@@ -6586,6 +6636,12 @@ function TabDeals({ commercantId, commercant, toast }) {
       cta_appeler_reserver: !!form.cta_appeler_reserver,
       photo_url: form.photo_url || null,
       est_bonne_affaire: !!form.est_bonne_affaire,
+      // ✅ (04/11, lot 3) L'offre, ou rien du tout (la base exige les deux).
+      offre_mode: estPanier ? form.offre_mode : null,
+      offre_seuil: estPanier ? parseInt(form.offre_seuil, 10) : null,
+      offre_nombre: estPanier ? parseInt(form.offre_nombre, 10) : null,
+      offre_declencheurs: estPanier ? form.offre_declencheurs.map(versCibleOffre) : null,
+      offre_offerts: estPanier && form.offre_mode === 'choisi' ? form.offre_offerts.map(versCibleOffre) : null,
       // Reset statut_morning a 'pending' si on remet inclus_morning=true a l'edition,
       // pour que le cron 7h30 le repique le lendemain
       ...(form.inclus_morning ? { statut_morning: 'pending' } : {}),
@@ -6750,6 +6806,9 @@ function TabDeals({ commercantId, commercant, toast }) {
                   // Le duo exige DEUX articles au catalogue : inutile de le
                   // proposer à qui n'en a pas (salon, institut...).
                   ...(articlesLiables.length >= 2 ? [{ v: 'bundle', label: 'Duo (2 articles)' }] : []),
+                  // ✅ (04/11, lot 3) « 2 pizzas = 1 boisson », « 3 achetés, le
+                  // moins cher offert » : seulement avec un catalogue.
+                  ...(articles.length >= 1 ? [{ v: TYPE_PANIER, label: 'Achetez N, recevez X' }] : []),
                 ].map(t => (
                   <button key={t.v} type="button" onClick={() => setForm(p => ({ ...p, deal_type: t.v }))}
                     style={{ padding: '7px 13px', borderRadius: 100, border: `1.5px solid ${form.deal_type === t.v ? T.main : T.hairline}`, background: form.deal_type === t.v ? T.main : '#fff', color: form.deal_type === t.v ? '#fff' : T.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -6758,7 +6817,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                 ))}
               </div>
             </div>
-            <div>
+            {form.deal_type !== TYPE_PANIER && <div>
               {/* 🔴 LE LIBELLÉ MENTAIT SUR « PRIX PROMO » (Alex, 06/09). Le
                   branchement ne connaissait que `remise_pct` et `bundle` :
                   `prix_fixe` tombait dans le cas du lot et annonçait « Article
@@ -6861,7 +6920,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                     ? 'La remise s’applique directement au produit : ton client voit le prix barré et le prix promo, et paie le prix promo. Pas de doublon dans ton catalogue.'
                     : 'Le lot s’affiche comme une carte à part sous l’article : le produit reste achetable à l’unité au prix normal, parce qu’une unité n’est pas un lot.'}
               </p>
-            </div>
+            </div>}
             {form.deal_type === 'bundle' && (
               <div>
                 <label style={s.label}>Second article du duo *</label>
@@ -6874,7 +6933,45 @@ function TabDeals({ commercantId, commercant, toast }) {
                 </select>
               </div>
             )}
-            {form.deal_type === 'remise_pct' ? (
+            {form.deal_type === TYPE_PANIER ? (
+              // ✅ (04/11, lot 3) « Achetez N, recevez X ».
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[
+                    { v: 'choisi', label: 'Le client choisit son cadeau' },
+                    { v: 'moins_cher', label: 'Le moins cher est offert' },
+                  ].map(m => (
+                    <button key={m.v} type="button" onClick={() => setForm(p => ({ ...p, offre_mode: m.v }))}
+                      style={{ padding: '7px 13px', borderRadius: 100, border: `1.5px solid ${form.offre_mode === m.v ? T.main : T.hairline}`, background: form.offre_mode === m.v ? T.main : '#fff', color: form.offre_mode === m.v ? '#fff' : T.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <label style={s.label}>Articles achetés *</label>
+                    <Input type="number" step="1" min="1" max="50" value={form.offre_seuil} onChange={e => setForm(p => ({ ...p, offre_seuil: e.target.value }))} placeholder="2" style={{ width: '100%', boxSizing: 'border-box' }}/>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <label style={s.label}>Articles offerts *</label>
+                    <Input type="number" step="1" min="1" max="20" value={form.offre_nombre} onChange={e => setForm(p => ({ ...p, offre_nombre: e.target.value }))} placeholder="1" style={{ width: '100%', boxSizing: 'border-box' }}/>
+                  </div>
+                </div>
+                <ChoixCiblesOffre articles={articles} valeurs={form.offre_declencheurs}
+                  onChange={v => setForm(p => ({ ...p, offre_declencheurs: v }))}
+                  titre={form.offre_mode === 'moins_cher' ? 'Ce qui participe *' : 'Ce qu’il faut acheter *'}/>
+                {form.offre_mode === 'choisi' && (
+                  <ChoixCiblesOffre articles={articles} valeurs={form.offre_offerts}
+                    onChange={v => setForm(p => ({ ...p, offre_offerts: v }))}
+                    titre="Ce qui peut être offert *"/>
+                )}
+                <p style={{ fontSize: 10.5, color: T.muted, margin: 0, lineHeight: 1.45 }}>
+                  {form.offre_mode === 'moins_cher'
+                    ? `Dès ${parseInt(form.offre_seuil, 10) || 'N'} articles dans le panier, ${(parseInt(form.offre_nombre, 10) || 1) > 1 ? `les ${parseInt(form.offre_nombre, 10)} moins chers sont offerts` : 'le moins cher est offert'}, automatiquement. Toutes tailles confondues.`
+                    : `Dès ${parseInt(form.offre_seuil, 10) || 'N'} articles achetés, ton client choisit ${(parseInt(form.offre_nombre, 10) || 1) > 1 ? `${parseInt(form.offre_nombre, 10)} articles offerts` : 'un article offert'} dans ta liste. Il apparaît à 0 € sur la commande ; ses suppléments restent payants.`}
+                </p>
+              </div>
+            ) : form.deal_type === 'remise_pct' ? (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={s.label}>Remise (%) *</label>
@@ -7081,6 +7178,7 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, commercant = null, toas
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{d.titre}</span>
+            {d.deal_type === TYPE_PANIER && accrocheOffrePanier(d) && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FEF2F2', color: '#B91C1C' }}>{accrocheOffrePanier(d)}</span>}
             {isToday && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#F0FDF4', color: '#10B981' }}>Aujourd&rsquo;hui</span>}
             {d.inclus_morning && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FFF7ED', color: '#EA580C', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Sun size={11} strokeWidth={2}/> Morning</span>}
             {d.est_bonne_affaire && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FEF3C7', color: '#7C2D12', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Star size={11} strokeWidth={2.4}/> Bonne affaire</span>}

@@ -365,6 +365,10 @@ export async function POST(request) {
       // doit être là le jour du rendez-vous. Une taille sans stock s'y refuse
       // comme avant.
       surCommandeFournisseur: false,
+      // ⚠️ (04/11, lot 3) PAS D'OFFRE « ACHETEZ N, RECEVEZ X » AVEC UN
+      // RENDEZ-VOUS en V1 : cette route envoie ses produits à Stripe ligne par
+      // ligne, et une ligne à 0 € n'y a pas été éprouvée.
+      offresPanier: false,
     })
     if (!calcul.ok) {
       return NextResponse.json({ ok: false, error: calcul.error }, { status: calcul.status })

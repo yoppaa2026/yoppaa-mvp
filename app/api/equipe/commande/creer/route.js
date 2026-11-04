@@ -179,7 +179,9 @@ export async function POST(request) {
     }
     // ⚠️ AUCUNE OFFRE SÉPARÉE (lot, duo, fin de journée) : la grille encode des
     // articles. Les remises en cours s'appliquent, comme en ligne.
-    const panierPropre = panier.map(({ id, quantite, variante_id, options }) => ({ id, quantite, variante_id: variante_id || null, options }))
+    // ✅ (04/11, lot 3) `offert_par` : le cadeau choisi d'une offre « Achetez N,
+    // recevez X » (le serveur le revérifie : un article non offert est payé).
+    const panierPropre = panier.map(({ id, quantite, variante_id, options, offert_par }) => ({ id, quantite, variante_id: variante_id || null, options, offert_par: offert_par || null }))
     const calcul = construireLignesCommande({
       panier: panierPropre, articlesData, optionsValeurs, variantesData, dealsData,
       groupesOptions: groupesOptions || [],

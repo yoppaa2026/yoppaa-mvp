@@ -133,7 +133,8 @@ egal('rien, rien', economieDesLignesCents(null), 0)
   verifier('🔴 pas de « Promo appliquée » avant le créneau quand la promo a des heures',
     /if \(plages && sansCreneau\) \{/.test(F) && /Ce créneau est hors promo : prix plein\./.test(F))
   verifier('🔴 la pastille « -20 % mercredi » est passée aux articles',
-    (F.match(/promoAVenir=\{promoAVenirPourArticle\(a, dealsTous, jourDesPromos, aujourdhuiPromos\)\}/g) || []).length >= 3)
+    // REPOINTÉE LE 04/11 : l'offre « Achetez N, recevez X » prend le relais.
+    (F.match(/promoAVenir=\{promoAVenirPourArticle\(a, dealsTous, jourDesPromos, aujourdhuiPromos\) \|\| offrePanierPourArticle\(a, dealsTous, jourDesPromos, aujourdhuiPromos\)\}/g) || []).length >= 3)
   verifier('🔴 une offre ne s’achète qu’au jour choisi', /if \(!dealActifCeJour\(deal, jourDesPromos\)\) return false/.test(F))
   verifier('🔴 le récapitulatif dit l’économie', /Tu économises \{euros\(economiePanier\(\)\)\}/.test(F))
   const R = lireCode('app/commander/rdv/[slug]/page.js')
@@ -282,7 +283,9 @@ egal('rien, rien', economieDesLignesCents(null), 0)
   egal('🔴 le calcul applique la promo dans la plage', calc('12:00').lignes?.[0]?.prix_unitaire, 3.2)
   egal('🔴 et pas en dehors', calc('15:00').lignes?.[0]?.prix_unitaire, 4)
   const L = lireCode('lib/lignes-commande.js')
-  verifier('🔴 les deals se lisent AVEC la récurrence', /export const SELECT_DEALS = `[^`]*\$\{COLONNES_RECURRENCE\}`/.test(L))
+  // REPOINTÉE LE 04/11 : l'offre « Achetez N, recevez X » suit la récurrence.
+  verifier('🔴 les deals se lisent AVEC la récurrence', /export const SELECT_DEALS = `[^`]*\$\{COLONNES_RECURRENCE\}[^`]*`/.test(L))
+  verifier('🔴 et avec l’offre « Achetez N, recevez X »', /export const SELECT_DEALS = `[^`]*\$\{COLONNES_OFFRE_PANIER\}`/.test(L))
   verifier('🔴 le prix des prestations aussi', /\$\{COLONNES_RECURRENCE\}`\)/.test(lireCode('lib/prix-prestation-server.js')))
   verifier('🔴 et la liste des commerces', /est_bonne_affaire, \$\{COLONNES_RECURRENCE\}`\)/.test(lireCode('app/commander/page.js')))
   verifier('🔴 la commande passe l’heure du créneau',
@@ -327,8 +330,10 @@ egal('rien, rien', economieDesLignesCents(null), 0)
   const deux = calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 2 }, coca])
   egal('🔴 2 pizzas : la boisson choisie est offerte', [deux.droits, deux.cadeaux, deux.refus], [1, [{ index: 1, unites: 1 }], null])
   egal('🔴 la boisson offerte ne compte pas comme pizza', calculerOffrePanier(PIZZAS, [marg, coca]).compte, 1)
-  egal('🔴 deux boissons pour un seul droit : la seconde est refusée',
-    calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 2 }, { ...coca, quantite: 2 }]).refus, 'trop_de_cadeaux')
+  // ✅ (04/11, Alex) La seconde n'est pas refusée : elle est PAYÉE (1 offerte).
+  egal('🔴 deux boissons pour un seul droit : une offerte, la seconde payée',
+    [calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 2 }, { ...coca, quantite: 2 }]).cadeaux, calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 2 }, { ...coca, quantite: 2 }]).refus],
+    [[{ index: 1, unites: 1 }], 'trop_de_cadeaux'])
   egal('🔴 un cadeau hors liste est refusé',
     calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 2 }, { ...coca, article_id: 'tira', categorie: 'Desserts' }]).refus, 'article_non_offert')
   egal('4 pizzas : 2 boissons', calculerOffrePanier(PIZZAS, [{ ...marg, quantite: 4 }]).droits, 2)
@@ -347,6 +352,83 @@ egal('rien, rien', economieDesLignesCents(null), 0)
   egal('une promo mal formée ne donne rien', calculerOffrePanier({ id: 'x', seuil: 0, nombre_offerts: 1 }, [top(10, 5)]).droits, 0)
   egal('les accroches', [accrocheOffrePanier(PIZZAS), accrocheOffrePanier(FRINGUES)], ['2 achetés, 1 offert', '3 achetés, le moins cher offert'])
   egal('rien à dire tant qu’aucun article ne participe', phraseEncore(PIZZAS, calculerOffrePanier(PIZZAS, [])), null)
+
+  // ── ✅ 04/11 : le branchement (MIGRATION_OFFRE_PANIER_04_11) ──
+  const { appliquerOffresPanier, offreDuDeal, estOffrePanier } = await import('../lib/offre-panier.js')
+  const EN_BASE = { id: 'pz', deal_type: 'panier', offre_mode: 'choisi', offre_seuil: 2, offre_nombre: 1,
+    offre_declencheurs: [{ categorie: 'Pizzas' }], offre_offerts: [{ categorie: 'Boissons' }] }
+  verifier('🔴 l’offre se lit telle qu’elle est en base', estOffrePanier(EN_BASE) && offreDuDeal(EN_BASE).seuil === 2
+    && calculerOffrePanier(EN_BASE, [{ ...marg, quantite: 2 }, coca]).cadeaux.length === 1)
+  const cocaCarte = { article_id: 'coca', categorie: 'Boissons', prix_unitaire: 2.5, quantite: 1 }
+  const auto = calculerOffrePanier(EN_BASE, [{ ...marg, quantite: 2 }, cocaCarte])
+  egal('🔴 la boisson ajoutée depuis la carte devient le cadeau', [auto.cadeaux, auto.aChoisir], [[{ index: 1, unites: 1 }], 0])
+  egal('🔴 sans boisson dans le panier : une à choisir', calculerOffrePanier(EN_BASE, [{ ...marg, quantite: 2 }]).aChoisir, 1)
+  egal('🔴 un lot de pizzas ne déclenche pas l’offre', calculerOffrePanier(EN_BASE, [{ ...marg, quantite: 2, deal_id: 'lot3' }]).droits, 0)
+  egal('« 2 pizzas = 1 pizza » : la pizza ne s’offre pas d’office',
+    calculerOffrePanier({ ...EN_BASE, offre_offerts: [{ categorie: 'Pizzas' }] }, [{ ...marg, quantite: 3 }]).aChoisir, 1)
+  {
+    const DESSERT = { id: 'zz', deal_type: 'panier', offre_mode: 'choisi', offre_seuil: 2, offre_nombre: 1,
+      offre_declencheurs: [{ categorie: 'Pizzas' }], offre_offerts: [{ categorie: 'Desserts' }] }
+    const r2 = appliquerOffresPanier([DESSERT, EN_BASE], [{ ...marg, quantite: 2 }, cocaCarte, { article_id: 'tira', categorie: 'Desserts', prix_unitaire: 4, quantite: 1 }])
+    egal('🔴 deux offres : les mêmes pizzas ne servent qu’une fois', r2.unitesOffertes, { 1: [{ deal_id: 'pz', unites: 1 }] })
+    egal('la seconde attend ses propres pizzas', r2.offres.find(o => o.deal.id === 'zz').calcul.droits, 0)
+    const r3 = appliquerOffresPanier([FRINGUES ? { ...FRINGUES, deal_type: 'panier' } : null].filter(Boolean), [top(30), top(20), top(25)])
+    egal('moins cher : les unités offertes par ligne', r3.unitesOffertes, { 1: [{ deal_id: 'fr', unites: 1 }] })
+    egal('une promo d’un autre type est ignorée', appliquerOffresPanier([{ id: 'r', deal_type: 'remise_pct' }], [marg]).offres, [])
+  }
+
+  // ── ✅ 04/11 : LE SERVEUR, EXÉCUTÉ (`construireLignesCommande`) ──
+  const { construireLignesCommande } = await import('../lib/lignes-commande.js')
+  const ART = [
+    { id: 'marg', nom: 'Margherita', prix: 9, categorie: 'Pizzas', actif: true },
+    { id: 'coca', nom: 'Coca', prix: 2.5, categorie: 'Boissons', actif: true },
+  ]
+  const OFFRE = { ...EN_BASE, titre: '2 pizzas, 1 boisson offerte', actif: true, date_debut: LUNDI, date_fin: jour(6) }
+  const GLACONS = [{ id: 'v1', nom: 'Glaçons', prix_supplement: 0.5, groupe_id: 'g1', article_options_groupes: { article_id: 'coca', nom: 'Extras' } }]
+  const serveur = (panier, extra = {}) => construireLignesCommande({
+    panier, articlesData: ART, optionsValeurs: GLACONS, variantesData: [], dealsData: [OFFRE],
+    commercant: { tva_taux_defaut: 6 }, regime: undefined, dateCommande: LUNDI, ...extra,
+  })
+  const s1 = serveur([{ id: 'marg', quantite: 2 }, { id: 'coca', quantite: 2 }])
+  egal('🔴 2 pizzas + 2 cocas : une ligne payée, une ligne à 0 €, le total juste',
+    [s1.ok, s1.totalCents, s1.lignes.map(l => [l.article_id, l.quantite, l.prix_unitaire, l.prix_plein, l.promo_deal_id, l.index_panier])],
+    [true, 2050, [['marg', 2, 9, null, null, 0], ['coca', 1, 2.5, null, null, 1], ['coca', 1, 0, 2.5, 'pz', 1]]])
+  egal('le cadeau se nomme « (offert) » partout', s1.lignes[2]?.article_nom, 'Coca (offert)')
+  verifier('🔴 le stock des deux cocas sort quand même', s1.lignes.filter(l => l.article_id === 'coca').reduce((n, l) => n + l.quantite_stock, 0) === 2)
+  egal('l’état de l’offre pour l’écran', s1.offresPanier.map(o => [o.deal_id, o.droits, o.aChoisir]), [['pz', 1, 0]])
+  const s2 = serveur([{ id: 'marg', quantite: 2 }, { id: 'coca', quantite: 1, options: [{ groupe_id: 'g1', valeur_ids: ['v1'] }] }])
+  egal('🔴 le supplément du cadeau reste payé', [s2.totalCents, s2.lignes[1]?.prix_unitaire, s2.lignes[1]?.prix_plein], [1850, 0.5, 3])
+  egal('sans boisson : une à choisir', serveur([{ id: 'marg', quantite: 2 }]).offresPanier[0].aChoisir, 1)
+  egal('🔴 avec un rendez-vous : pas d’offre (V1)', serveur([{ id: 'marg', quantite: 2 }, { id: 'coca', quantite: 1 }], { offresPanier: false }).totalCents, 2050)
+  egal('une offre hors de ses dates ne s’applique pas', serveur([{ id: 'marg', quantite: 2 }, { id: 'coca', quantite: 1 }], { dateCommande: jour(10) }).totalCents, 2050)
+  const s3 = serveur([{ id: 'coca', quantite: 1 }, { id: 'marg', quantite: 2 }])
+  {
+    const { accrocheDuDeal, offrePanierPourArticle } = await import('../lib/promos-visibles.js')
+    egal('🔴 la section « Promos » dit l’offre', accrocheDuDeal(OFFRE), '2 achetés, 1 offert')
+    egal('🔴 la pizza porte la pastille de l’offre du jour', offrePanierPourArticle(ART[0], [OFFRE], LUNDI, LUNDI)?.moment, '')
+    egal('la boisson offerte aussi', offrePanierPourArticle(ART[1], [OFFRE], LUNDI, LUNDI)?.deal?.id, 'pz')
+    egal('un autre article non', offrePanierPourArticle({ id: 'tira', categorie: 'Desserts' }, [OFFRE], LUNDI, LUNDI), null)
+    egal('une offre à venir dit son moment', offrePanierPourArticle(ART[0], [{ ...OFFRE, date_debut: jour(2), date_fin: jour(2) }], LUNDI, LUNDI)?.moment, 'Mercredi')
+  }
+  {
+    const F2 = lireCode('app/commander/[slug]/page.js')
+    verifier('🔴 le panier lit ses prix par ligne de panier, plus par position',
+      F2.includes('return (calculDuServeur()?.lignes || []).filter(l => l.index_panier === index)') && !/lignes\?\.\[index\]/.test(F2))
+    verifier('🔴 le cadeau non choisi bloque, sauf « Je n’en veux pas »',
+      F2.includes('const blocagePanier = refusPanierCeJour() || blocageCadeau')
+      && F2.includes('if (!(o.aChoisir > 0) || cadeauxRefuses[o.deal_id] || cadeauxPossibles(o).length === 0) continue'))
+    verifier('le panier envoie le cadeau choisi', F2.includes('offert_par: i.offert_par || undefined,'))
+    verifier('le récap montre l’offre', F2.includes('offres={blocOffresPanier()}') && F2.includes('offertesDeLigne={unitesOffertesLigne}'))
+    const EQ2 = lireCode('app/api/equipe/commande/creer/route.js')
+    verifier('🔴 la commande au téléphone garde le cadeau choisi', EQ2.includes('options, offert_par: offert_par || null }))'))
+    verifier('🔴 pas d’offre avec un rendez-vous (V1)', lireCode('app/api/stripe/checkout/create-rdv-commande/route.js').includes('offresPanier: false,'))
+    const C2 = lireCode('app/dashboard/ConfigDashboard.js')
+    verifier('🔴 le formulaire écrit l’offre, ou rien',
+      C2.includes('offre_seuil: estPanier ? parseInt(form.offre_seuil, 10) : null,')
+      && C2.includes("offre_offerts: estPanier && form.offre_mode === 'choisi' ? form.offre_offerts.map(versCibleOffre) : null,")
+      && C2.includes("if (form.offre_mode === 'moins_cher' && x >= n)"))
+  }
+  egal('🔴 l’ordre du panier ne change rien (index_panier suit la ligne)', [s3.totalCents, s3.lignes.map(l => l.index_panier)], [1800, [0, 1]])
 }
 
 // ─── LA FIN D'UNE PROMO, PAS SON PREMIER JOUR (03/11) ─────────────────────

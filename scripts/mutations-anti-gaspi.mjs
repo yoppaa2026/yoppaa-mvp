@@ -427,8 +427,9 @@ const MUTATIONS = [
   { nom: '🔴 le select des deals ne demande plus la quantite',
     fichier: 'lib/lignes-commande.js',
     // Recalée le 28/10 (lot 2) : la récurrence suit `quantite` dans le select.
-    de: 'heure_debut, heure_fin, quantite, ${COLONNES_RECURRENCE}`',
-    vers: 'heure_debut, heure_fin, ${COLONNES_RECURRENCE}`' },
+    // Recalée le 04/11 (lot 3) : l'offre panier suit la récurrence.
+    de: 'heure_debut, heure_fin, quantite, ${COLONNES_RECURRENCE}, ${COLONNES_OFFRE_PANIER}`',
+    vers: 'heure_debut, heure_fin, ${COLONNES_RECURRENCE}, ${COLONNES_OFFRE_PANIER}`' },
 
   { nom: '🔴 la route cesse d opposer le plafond de l offre',
     fichier: 'app/api/stripe/checkout/create-commande/route.js',

@@ -25,8 +25,9 @@ import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleF
 import { plageDeLaLigne, plageCommune, creneauDansPlage, refusDePlageALAjout, raisonDeLaPlage, libellePlage, plageDeLArticle } from '@/lib/plage-retrait'
 import { delaiEnClair, phraseLimiteFiche, limiteDeLaVeille } from '@/lib/heure-veille'
 import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
+import { vise as viseOffre } from '@/lib/offre-panier'
 import { dealActifCeJour, dealViseArticle, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
-import { promosAVenir, promoAVenirPourArticle, accrocheDuDeal, economieDesLignesCents, nomDuJour, momentDuDeal, pourQuelJour, ajouterJoursISO } from '@/lib/promos-visibles'
+import { promosAVenir, promoAVenirPourArticle, offrePanierPourArticle, accrocheDuDeal,economieDesLignesCents, nomDuJour, momentDuDeal, pourQuelJour, ajouterJoursISO } from '@/lib/promos-visibles'
 // ⚠️ RENOMMÉ : `libellePlage` est déjà celui de la plage de retrait d'un
 // article (`lib/plage-retrait`). Celui-ci dit les heures d'une PROMO.
 import { libellePlage as heuresDeLaPromo } from '@/lib/recurrence-promo'
@@ -483,7 +484,9 @@ function VariantesSelector({ article, variantes, groupes = [], onAjouter }) {
 // ─── RecapPanier - FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
 // `prixDeLigne(item, index)` : le montant de la ligne au jour de la commande,
 // calculé comme le serveur (06/10). Sans lui, le prix figé à l'ajout.
-function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon heure de retrait', noteSousTotal = null, prixDeLigne = null, blocage = null }) {
+// ✅ (04/11, lot 3) `offertesDeLigne(index)` : les unités offertes de la ligne
+// (« dont 1 offert ») ; `offres` : « Encore 1 … » et le choix du cadeau.
+function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon heure de retrait', noteSousTotal = null, prixDeLigne = null, blocage = null, offertesDeLigne = null, offres = null }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
   function labelOptions(options) {
@@ -558,6 +561,11 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
                 {stockAtteintPanier && (
                   <p style={{ fontSize: '0.68rem', color: T.main, fontWeight: 700, marginTop: 2 }}>Stock disponible atteint</p>
                 )}
+                {offertesDeLigne && offertesDeLigne(index) > 0 && (
+                  <p style={{ fontSize: '0.68rem', color: '#15803D', fontWeight: 800, marginTop: 2 }}>
+                    {offertesDeLigne(index) === item.quantite ? 'Offert' : `Dont ${offertesDeLigne(index)} offert${offertesDeLigne(index) > 1 ? 's' : ''}`}
+                  </p>
+                )}
               </div>
               <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>{euros(prixDeLigne ? prixDeLigne(item, index) : prixUnitaire * item.quantite)}</p>
             </div>
@@ -565,6 +573,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
         })}
       </div>
       <div style={{ padding: '1rem 1.25rem' }}>
+        {offres && <div style={{ marginBottom: 12 }}>{offres}</div>}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: noteSousTotal ? 4 : 12 }}>
           <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.875rem' }}>Total commande</span>
           <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.25rem', letterSpacing: '-0.5px' }}>{euros(total)}</span>
@@ -755,7 +764,9 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
                     pas quel jour choisir. */}
                 {promoAVenir && (
                   <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>
-                    {accrocheDuDeal(promoAVenir.deal)} {String(promoAVenir.moment || '').charAt(0).toLowerCase() + String(promoAVenir.moment || '').slice(1)}
+                    {/* ✅ (04/11, lot 3) Une offre « 2 achetés, 1 offert » du jour
+                        choisi n'a pas de moment : la pastille dit l'offre seule. */}
+                    {[accrocheDuDeal(promoAVenir.deal), String(promoAVenir.moment || '').charAt(0).toLowerCase() + String(promoAVenir.moment || '').slice(1)].filter(Boolean).join(' ')}
                   </span>
                 )}
               </>
@@ -1645,6 +1656,8 @@ export default function CommanderSlug() {
   const modeAppliqueRef = useRef(false) // pour n'appliquer la préférence livraison qu'une fois
   // Confirmation de changement de jour quand le panier n'est pas vide
   const [confirmationJour, setConfirmationJour] = useState(null) // { nouveauIdx }
+  // ✅ (04/11, lot 3) Les offres dont le client a dit « Je n'en veux pas ».
+  const [cadeauxRefuses, setCadeauxRefuses] = useState({})
   const [optionsParArticle, setOptionsParArticle] = useState({})
   const [variantesParArticle, setVariantesParArticle] = useState({})
   const [stocksJour, setStocksJour] = useState({})
@@ -3206,6 +3219,8 @@ export default function CommanderSlug() {
       quantite: i.quantite,
       variante_id: i.variante?.id || undefined,
       deal_id: i.deal_id || undefined,
+      // ✅ (04/11, lot 3) Le cadeau choisi dans le sélecteur du panier.
+      offert_par: i.offert_par || undefined,
       options: i.options
         ? Object.entries(i.options).map(([groupe_id, valeurs]) => ({
             groupe_id,
@@ -3273,10 +3288,16 @@ export default function CommanderSlug() {
 
   // Le prix d'une ligne du panier, au jour de la commande. Même ordre que
   // `articlesDuPanier` (donc que `Object.values(panier)`).
+  // 🔴 (04/11, lot 3) PAR `index_panier`, PLUS PAR POSITION : un cadeau
+  // « Achetez N, recevez X » coupe une ligne en deux (payée, offerte), et lire
+  // `lignes[index]` aurait donné à chaque ligne suivante le prix de la
+  // précédente. Le total, lui, restait juste : le défaut ne se voyait pas.
+  function lignesServeurDe(index) {
+    return (calculDuServeur()?.lignes || []).filter(l => l.index_panier === index)
+  }
   function prixLigne(item, index) {
-    const r = calculDuServeur()
-    const ligne = r?.lignes?.[index]
-    if (ligne) return Math.round(Number(ligne.prix_unitaire) * 100) * item.quantite / 100
+    const lignes = lignesServeurDe(index)
+    if (lignes.length > 0) return lignes.reduce((s, l) => s + Math.round(Number(l.prix_unitaire) * 100) * Number(l.quantite), 0) / 100
     const supplement = item.options ? supplementDeSelection(item.options) : 0
     return Math.round((Number(item.prix) + supplement) * 100) * item.quantite / 100
   }
@@ -3285,9 +3306,13 @@ export default function CommanderSlug() {
   // le barrer à côté du prix payé, et ce que le panier fait économiser. Tous
   // deux viennent du MÊME calcul que le prix (`tracePromo`), au jour choisi.
   function prixPleinLigne(index) {
-    const ligne = calculDuServeur()?.lignes?.[index]
-    if (!ligne || ligne.prix_plein == null) return null
-    return Math.round(Number(ligne.prix_plein) * 100) * Number(ligne.quantite) / 100
+    const lignes = lignesServeurDe(index)
+    if (!lignes.some(l => l.prix_plein != null)) return null
+    return lignes.reduce((s, l) => s + Math.round(Number(l.prix_plein ?? l.prix_unitaire) * 100) * Number(l.quantite), 0) / 100
+  }
+  // ✅ (04/11, lot 3) Combien d'unités de cette ligne sont offertes.
+  function unitesOffertesLigne(index) {
+    return lignesServeurDe(index).filter(l => l.offert_par).reduce((s, l) => s + Number(l.quantite), 0)
   }
   function economiePanier() {
     return economieDesLignesCents(calculDuServeur()?.lignes) / 100
@@ -4288,7 +4313,97 @@ export default function CommanderSlug() {
     }
     return null
   }
-  const blocagePanier = refusPanierCeJour()
+  // ═══════════════════════════════════════════════════════════════════════
+  // ✅ « ACHETEZ N, RECEVEZ X » DANS LE PANIER (04/11, lot 3 du module promo)
+  // ═══════════════════════════════════════════════════════════════════════
+  // L'état de chaque offre vient du MÊME calcul que le prix
+  // (`construireLignesCommande` → `offresPanier`). Décisions d'Alex (04/11) :
+  // « Encore 1 … », puis le cadeau à choisir ; le paiement est BLOQUÉ tant
+  // qu'il n'est pas choisi, sauf « Je n'en veux pas », ou si aucun cadeau
+  // n'est disponible ce jour-là.
+  const offresDuPanier = calculDuServeur()?.offresPanier || []
+  function cadeauxPossibles(o) {
+    const jour = jourDuPanier()
+    const auj = aujourdhuiISO()
+    return articles.filter(a => a && a.actif !== false && !a.est_vitrine
+      && viseOffre(o.offerts, { article_id: a.id, categorie: a.categorie })
+      && (!jour || !refusDuJour({ ...regleArticle(a), jour, aujourdhui: auj }))
+      && getStockMax(a.id) > qteTotaleArticle(a.id))
+  }
+  // Un article simple entre au panier comme CADEAU (`offert_par`) ; un article
+  // à tailles ou à options s'ouvre sur sa fiche : ajouté, il devient le
+  // cadeau tout seul (le serveur offre l'article offert déjà au panier).
+  function ajouterCadeau(article, dealId) {
+    const simple = !article.gere_variantes && !(optionsParArticle?.[article.id] || []).length
+    if (!simple) { setArticleDetail(article); return }
+    if (refuseParDelai(article, { article, options: null, variante: null })) return
+    if (refuseParPlage(article)) return
+    const key = `${article.id}_cadeau_${dealId}`
+    setPanier(prev => ({ ...prev, [key]: { ...article, prix: Number(article.prix), options: null, offert_par: dealId, quantite: (prev[key]?.quantite || 0) + 1 } }))
+  }
+  const nomsDesCibles = (cibles) => (cibles || [])
+    .map(c => c?.categorie || articles.find(a => a.id === c?.article_id)?.nom).filter(Boolean).join(', ')
+  const blocageCadeau = (() => {
+    for (const o of offresDuPanier) {
+      if (!(o.aChoisir > 0) || cadeauxRefuses[o.deal_id] || cadeauxPossibles(o).length === 0) continue
+      return `Ton offre « ${o.titre} » te donne ${o.aChoisir > 1 ? `${o.aChoisir} articles offerts` : 'un article offert'} : choisis-le juste au-dessus, ou dis que tu n’en veux pas.`
+    }
+    return null
+  })()
+  function blocOffresPanier() {
+    const blocs = offresDuPanier.map(o => {
+      const possibles = o.aChoisir > 0 ? cadeauxPossibles(o) : []
+      if (o.droits === 0 && o.compte > 0) {
+        const n = o.manque
+        const suite = o.mode === 'moins_cher' ? 'le moins cher est offert' : `${o.nombre_offerts > 1 ? `${o.nombre_offerts} articles offerts` : 'un article offert'}`
+        return (
+          <p key={o.deal_id} style={{ fontSize: '0.78rem', fontWeight: 700, color: '#B91C1C', margin: 0 }}>
+            Encore {n} article{n > 1 ? 's' : ''} parmi « {nomsDesCibles(o.declencheurs || [])} » et {suite} ({o.titre}).
+          </p>
+        )
+      }
+      if (o.aChoisir > 0 && possibles.length > 0 && !cadeauxRefuses[o.deal_id]) {
+        return (
+          <div key={o.deal_id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <p style={{ fontSize: '0.8rem', fontWeight: 800, color: '#B91C1C', margin: 0 }}>
+              {o.titre} : choisis {o.aChoisir > 1 ? `tes ${o.aChoisir} articles offerts` : 'ton article offert'}
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {possibles.slice(0, 12).map(a => (
+                <button key={a.id} type="button" onClick={() => ajouterCadeau(a, o.deal_id)}
+                  style={{ padding: '0.4rem 0.75rem', borderRadius: 100, border: '1.5px solid #FCA5A5', background: '#fff', color: '#B91C1C', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  {a.nom}
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => setCadeauxRefuses(r => ({ ...r, [o.deal_id]: true }))}
+              style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, color: T.muted, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }}>
+              Je n’en veux pas
+            </button>
+          </div>
+        )
+      }
+      if (o.aChoisir > 0 && cadeauxRefuses[o.deal_id]) {
+        return (
+          <p key={o.deal_id} style={{ fontSize: '0.72rem', color: T.muted, margin: 0 }}>
+            Article offert non choisi ({o.titre}).{' '}
+            <button type="button" onClick={() => setCadeauxRefuses(r => ({ ...r, [o.deal_id]: false }))}
+              style={{ background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }}>
+              Le choisir
+            </button>
+          </p>
+        )
+      }
+      if (o.droits > 0) {
+        return <p key={o.deal_id} style={{ fontSize: '0.78rem', fontWeight: 700, color: '#15803D', margin: 0 }}>Offre appliquée : {o.titre}</p>
+      }
+      return null
+    }).filter(Boolean)
+    if (blocs.length === 0) return null
+    return <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0.625rem 0.75rem', borderRadius: 12, background: '#FEF2F2', border: '1.5px solid #FECACA' }}>{blocs}</div>
+  }
+
+  const blocagePanier = refusPanierCeJour() || blocageCadeau
   // Arrivé à l'étape du retrait avec un tel panier, on revient au panier, où
   // l'encadré dit pourquoi.
   useEffect(() => {
@@ -5733,7 +5848,7 @@ export default function CommanderSlug() {
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
-                            remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
+                            remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos) || offrePanierPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
                             onOpenDetail={() => setArticleDetail(a)}
                             mentionVitrineTexte={mentionVitrine(commercant)}
                             coupDeCoeur={badgesCoeur.has(String(a.id))}/>
@@ -5775,7 +5890,7 @@ export default function CommanderSlug() {
                               getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
-                              remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
+                              remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos) || offrePanierPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
                               onOpenDetail={() => setArticleDetail(a)}
                               mentionVitrineTexte={mentionVitrine(commercant)}
                               coupDeCoeur={badgesCoeur.has(String(a.id))}/>
@@ -5810,7 +5925,7 @@ export default function CommanderSlug() {
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
-                            remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
+                            remise={remiseSurArticle(a, dealsDuJourChoisi, jourDesPromos)} promoAVenir={promoAVenirPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos) || offrePanierPourArticle(a, dealsTous, jourDesPromos, aujourdhuiPromos)}
                             onOpenDetail={() => setArticleDetail(a)}
                               mentionVitrineTexte={mentionVitrine(commercant)}
                               coupDeCoeur={badgesCoeur.has(String(a.id))}/>
@@ -5844,6 +5959,8 @@ export default function CommanderSlug() {
                       onAjouter={incrementerPanier}
                       total={totalPanier()}
                       prixDeLigne={prixLigne}
+                      offertesDeLigne={unitesOffertesLigne}
+                      offres={blocOffresPanier()}
                       blocage={blocagePanier}
                       onValider={() => allerEtape(3)}
                       getStockMax={getStockMax}

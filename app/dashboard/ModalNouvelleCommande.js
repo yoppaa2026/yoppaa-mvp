@@ -527,6 +527,16 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                 <p style={{ fontSize: 12, color: T.alerte, margin: '2px 0 0' }}>Ta livraison n’est pas encore réglée (frais, zone) : règle-la dans tes paramètres.</p>
               )}
               {calcul && !calcul.ok && <p role="alert" style={{ fontSize: 13, color: T.erreur, margin: '4px 0 0' }}>{calcul.error}</p>}
+              {/* ✅ (04/11, lot 3) « Achetez N, recevez X » au téléphone : un
+                  article offert ajouté depuis la grille devient le cadeau tout
+                  seul (le serveur l'offre) ; la fenêtre dit qu'il en reste à ajouter. */}
+              {calcul?.ok && (calcul.offresPanier || []).map(o => (
+                o.aChoisir > 0
+                  ? <p key={o.deal_id} style={{ fontSize: 13, fontWeight: 700, color: T.alerte, margin: '4px 0 0' }}>{o.titre} : {o.aChoisir > 1 ? `${o.aChoisir} articles offerts` : 'un article offert'} à ajouter (demande au client lequel).</p>
+                  : o.droits > 0
+                    ? <p key={o.deal_id} style={{ fontSize: 13, fontWeight: 700, color: T.ok, margin: '4px 0 0' }}>Offre appliquée : {o.titre}</p>
+                    : null
+              ))}
             </div>
           )}
         </section>

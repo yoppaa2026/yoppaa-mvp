@@ -4790,11 +4790,17 @@ verifier('les échecs sont comptés, pas alertés douze fois',
   // ── (12/10) LES COMMANDES : passé 1 000, celles du JOUR disparaissaient ──
   verifier('🔴 les commandes du tableau de bord se lisent toutes, en ordre total',
     /function lireCommandes\([^)]*\) \{\s*return toutesLesLignes\(\(\) => \{[\s\S]*?\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)[\s\S]*?\.order\('created_at', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\)/.test(DASH))
-  verifier('🔴 l’ouverture ET le relevé passent par cette seule lecture (aucun select de commandes recopié)',
-    (DASH.match(/await lireCommandes\(/g) || []).length === 2
-    && (DASH.match(/\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)/g) || []).length === 1)
+  // ⚠️ REPOINTÉES LE 09/11 (alerte « Disk IO ») : le relevé des 5 s ne relit
+  // plus tout, il passe par `lireCommandesRecentes` (verif:releve). La garantie
+  // reste la même : UN SEUL select de commandes (`SELECT_COMMANDES`), partagé
+  // par la lecture complète et la lecture récente, jamais recopié en texte.
+  verifier('🔴 l’ouverture ET le relevé passent par le même select (aucun select de commandes recopié)',
+    (DASH.match(/await lireCommandes\(/g) || []).length === 1
+    && (DASH.match(/await lireCommandesRecentes\(/g) || []).length === 1
+    && (DASH.match(/\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)/g) || []).length === 2
+    && /function lireCommandesRecentes\(commercantId\) \{[\s\S]{0,300}?\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)/.test(DASH))
   verifier('🔴 le relevé lit son erreur : une lecture refusée ne VIDE plus la liste',
-    /const \{ data, error \} = await lireCommandes\(commercant\.id, \{ sansPaiementEnAttente: true \}\)\s*if \(error\) \{[^}]*setErreurCommandes\(/.test(DASH))
+    /const \{ data: recentes, error \} = await lireCommandesRecentes\(commercant\.id\)\s*const data = error \? null[\s\S]{0,200}?if \(error\) \{[^}]*setErreurCommandes\(/.test(DASH))
   const EXPORT = lireSansProse('app/api/dashboard/export-comptable/route.js')
   verifier('🔴 l’export comptable lit toutes les commandes et tous les rendez-vous de la période',
     /const \{ data: commandesPeriode, error: errCommandes \} = await toutesLesLignes\(\(\) => admin\s*\.from\('commandes'\)/.test(EXPORT)

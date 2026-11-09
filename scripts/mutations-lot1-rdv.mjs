@@ -1179,8 +1179,10 @@ const MUTATIONS = [
 
   { nom: '🔴 le releve de l agenda repasse a mille lignes',
     banc: 'verif:logique', fichier: 'app/dashboard/page.js',
-    de: '      const { data: rdvsData } = await toutesLesLignes(() => supabase',
-    vers: '      const { data: rdvsData } = await (() => supabase',
+    // ⚠️ REPOINTÉE LE 09/11 : le relevé de l'agenda passe par `lireRdvsRecents`
+    // (alerte « Disk IO », verif:releve), toujours sans plafond de mille lignes.
+    de: "  return toutesLesLignes(() => supabase.from('rdv_reservations')",
+    vers: "  return (() => supabase.from('rdv_reservations')",
     garde: 'l’agenda du tableau de bord lit toutes ses réservations' },
 
   { nom: '⚠️ l ordre de l agenda n est plus total : des pages se chevauchent',
@@ -1216,8 +1218,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le releve des commandes vide la liste sur une erreur',
     banc: 'verif:logique', fichier: 'app/dashboard/page.js',
-    de: '      const { data, error } = await lireCommandes(commercant.id, { sansPaiementEnAttente: true })',
-    vers: '      const { data } = await lireCommandes(commercant.id, { sansPaiementEnAttente: true }); const error = null',
+    // ⚠️ REPOINTÉE LE 09/11 : le relevé passe par `lireCommandesRecentes`.
+    de: '      const { data: recentes, error } = await lireCommandesRecentes(commercant.id)',
+    vers: '      const { data: recentes } = await lireCommandesRecentes(commercant.id); const error = null',
     garde: 'le relevé lit son erreur : une lecture refusée ne VIDE plus la liste' },
 
   { nom: '🔴 l export comptable repasse a mille commandes',

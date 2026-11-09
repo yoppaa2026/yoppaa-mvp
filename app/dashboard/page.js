@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 // pas doit se voir (Alex, 27/08).
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
+import { debutReleveRecent, filtreCommandesRecentes, fusionnerParId, rdvSupprime, trierRdvs, RELEVE_RECENT_MS, RELECTURE_COMPLETE_MS } from '@/lib/releve-recent'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { lireImpersonation, verifierImpersonation, effacerImpersonation, fermerImpersonationServeur, compteAChange } from '@/lib/impersonation'
@@ -210,6 +211,38 @@ function lireCommandes(commercantId, { sansPaiementEnAttente = false } = {}) {
     if (sansPaiementEnAttente) q = q.neq('statut', 'paiement_en_attente')
     return q.order('created_at', { ascending: true }).order('id', { ascending: true })
   })
+}
+
+// 🔴 LE RELEVÉ DES 5 SECONDES NE RELIT PLUS QUE LE RÉCENT (Alex, 09/11, alerte
+// « Disk IO » de Supabase) : voir `lib/releve-recent.js`. Même `select` que la
+// lecture complète, pour que les lignes relues remplacent les affichées sans
+// perdre une colonne.
+function lireCommandesRecentes(commercantId) {
+  const depuis = debutReleveRecent()
+  if (!depuis) return Promise.resolve({ data: null, error: { message: 'jour illisible' } })
+  return toutesLesLignes(() => supabase
+    .from('commandes')
+    .select(SELECT_COMMANDES)
+    .eq('commercant_id', commercantId)
+    .neq('statut', 'paiement_en_attente')
+    .or(filtreCommandesRecentes(depuis))
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true }))
+}
+
+// L'agenda relu toutes les 5 s : à partir d'avant-hier. ⚠️ SANS le filtre
+// `deleted_at` de la lecture complète : un rendez-vous supprimé doit revenir
+// ici pour que la fusion le RETIRE de l'agenda affiché (`rdvSupprime`).
+function lireRdvsRecents(commercantId) {
+  const depuis = debutReleveRecent()
+  if (!depuis) return Promise.resolve({ data: null, error: { message: 'jour illisible' } })
+  return toutesLesLignes(() => supabase.from('rdv_reservations')
+    .select(SELECT_RDVS)
+    .eq('commercant_id', commercantId)
+    .gte('date_rdv', depuis)
+    .order('date_rdv', { ascending: true })
+    .order('heure_debut', { ascending: true })
+    .order('id', { ascending: true }))
 }
 
 // Côté rendez-vous, la commande liée vient avec sa RÉFÉRENCE et le détail de ses
@@ -1686,6 +1719,21 @@ export default function Dashboard() {
   // l'existant sans rien annoncer, sinon le commerçant recevrait une alerte par
   // rendez-vous déjà en agenda à chaque ouverture de son tableau de bord.
   const rdvsConnusRef = useRef(null)
+  // 🔴 LE RELEVÉ RÉCENT SE POSE SUR LA LISTE AFFICHÉE (09/11) : il lui faut la
+  // liste à jour, d'où ces deux miroirs, et il ne tourne qu'une fois
+  // l'historique de CE commerce lu en entier (`…ChargeesPourRef` = son id).
+  // ⚠️ SANS CETTE ATTENTE, UNE FAUSSE ALERTE : un relevé fusionné sur un agenda
+  // encore vide prendrait note des seuls rendez-vous récents, et le suivant,
+  // posé sur l'agenda complet, annoncerait tout l'historique comme « nouveau ».
+  // ⚠️ LES MIROIRS SUIVENT L'ÉTAT, gestes compris : sans cela, un statut changé
+  // à la main sur une commande ancienne serait écrasé par la liste d'avant au
+  // relevé suivant.
+  const commandesRef = useRef([])
+  const rdvsRef = useRef([])
+  useEffect(() => { commandesRef.current = commandes }, [commandes])
+  useEffect(() => { rdvsRef.current = rdvs }, [rdvs])
+  const commandesChargeesPourRef = useRef(null)
+  const rdvsChargesPourRef = useRef(null)
   // Bons cadeaux vendus : le commerçant n'en savait RIEN depuis son tableau de
   // bord. Même mécanique que les rendez-vous, on compare des identifiants.
   const [bonsVendus, setBonsVendus] = useState([])
@@ -1731,6 +1779,8 @@ export default function Dashboard() {
     setErreurCommandes(null)
     const triees = trierCommandes(data)
     setCommandes(triees)
+    commandesRef.current = triees
+    commandesChargeesPourRef.current = id
     dernierNombreRef.current = nombreArriveesEnLigne(triees)
     setLoading(false)
     // 🔴 LE JOUR CHOISI N'EST PLUS REMIS À AUJOURD'HUI (Alex, 11/10 : « l'écran
@@ -1822,6 +1872,8 @@ export default function Dashboard() {
         .order('ordre', { ascending: true }),
     ])
     setRdvs(rdvData || [])
+    // Lu en entier (et pas tombé en erreur) : le relevé récent peut s'y poser.
+    if (rdvData) { rdvsRef.current = rdvData; rdvsChargesPourRef.current = id }
     setCreneauxRdv(crData || [])
     // ⚠️ UNE LECTURE À PART, PAS UNE JOINTURE DANS LE SELECT DES PLAGES : une
     // jointure qui échoue ferait échouer toute la lecture des plages. Ratée,
@@ -1988,7 +2040,12 @@ export default function Dashboard() {
     const onVisChange = () => refresh()
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', onVisChange)
-    const interval = setInterval(refresh, 60000)
+    // 🔴 TOUTES LES 5 MIN, PLUS TOUTES LES 60 S (Alex, 09/11, alerte « Disk
+    // IO ») : cette relecture reprend TOUT l'historique, plages et prestations
+    // comprises. Ce qui bouge est déjà relu toutes les 5 s par le relevé récent ;
+    // celle-ci ne rattrape que l'ancien (un remboursement sur une vieille
+    // commande), et le retour sur l'écran la déclenche toujours.
+    const interval = setInterval(refresh, RELECTURE_COMPLETE_MS)
     return () => {
       window.removeEventListener('focus', refresh)
       document.removeEventListener('visibilitychange', onVisChange)
@@ -2080,10 +2137,22 @@ export default function Dashboard() {
     if (pollingRef.current) clearInterval(pollingRef.current)
 
     pollingRef.current = setInterval(async () => {
+      // 🔴 RIEN AVANT L'HISTORIQUE COMPLET DE CE COMMERCE (09/11) : voir
+      // `commandesChargeesPourRef`. La lecture complète tombe d'ordinaire en
+      // moins d'une seconde ; un tour sauté ne retarde rien.
+      const historiquePret = commandesChargeesPourRef.current === commercant.id
+      if (historiquePret) {
       // Exclut 'paiement_en_attente' : commande créée mais Stripe Checkout pas
       // encore validé. Sinon la notif "Nouvelle commande !" tomberait trop tôt
       // (dès le clic Payer & confirmer, avant la confirmation paiement).
-      const { data, error } = await lireCommandes(commercant.id, { sansPaiementEnAttente: true })
+      // 🔴 SEULEMENT LE RÉCENT (Alex, 09/11, alerte « Disk IO ») : il relisait
+      // TOUT l'historique toutes les 5 s. Les lignes relues se posent sur la
+      // liste affichée ; l'ancien est repris par la relecture complète (5 min,
+      // retour sur l'écran). ⚠️ Le filtre final rend la même liste qu'avant :
+      // sans « paiement en attente », lu ou non par la relecture complète.
+      const { data: recentes, error } = await lireCommandesRecentes(commercant.id)
+      const data = error ? null
+        : fusionnerParId(commandesRef.current, recentes).filter(c => c.statut !== 'paiement_en_attente')
       // 🔴 L'ERREUR N'ÉTAIT PAS LUE ICI NON PLUS (12/10) : une lecture refusée
       // rendait `null`, trié en liste VIDE, et le tableau de bord se vidait
       // toutes les 5 secondes. On garde ce qui est affiché, et on le dit.
@@ -2128,23 +2197,21 @@ export default function Dashboard() {
       dernierNombreRef.current = arrivees
       setCommandes(triees)
       } // fin : relevé des commandes lu sans erreur
+      } // fin : historique des commandes déjà lu
 
       // Polling RDVs : meme interval pour eviter de multiplier les setInterval.
       // ⚠️ LE RELEVÉ AUSSI LIT TOUT (B3) : sinon il remplaçait toutes les
       // trente secondes l'agenda complet par ses mille premières lignes.
-      const { data: rdvsData } = await toutesLesLignes(() => supabase
-        .from('rdv_reservations')
-        // La commande liée vient avec : un rendez-vous du tunnel unique porte
-        // des produits déjà payés que le commerçant doit préparer AVANT que le
-        // client arrive. Sans elle, il les découvrirait dans un autre onglet
-        // sans faire le lien avec le créneau. Le hint !..._commande_id_fkey
-        // lève l'ambiguïté, les deux tables se pointant désormais l'une l'autre.
-        .select(SELECT_RDVS)
-        .eq('commercant_id', commercant.id)
-        .is('deleted_at', null)
-        .order('date_rdv', { ascending: true })
-        .order('heure_debut', { ascending: true })
-        .order('id', { ascending: true }))
+      // 🔴 (09/11) IL NE RELIT PLUS QUE L'AGENDA À PARTIR D'AVANT-HIER, posé sur
+      // l'agenda affiché (`lireRdvsRecents`, `fusionnerParId`) ; toujours sans
+      // plafond de mille lignes, et un supprimé relu en sort. Il attend lui
+      // aussi l'agenda complet de CE commerce (fausse alerte, voir les miroirs).
+      // Lecture ratée = `null` : l'agenda affiché reste tel quel, comme avant.
+      const agendaPret = rdvsChargesPourRef.current === commercant.id
+      const { data: rdvsRecents } = agendaPret ? await lireRdvsRecents(commercant.id) : { data: null }
+      const rdvsData = rdvsRecents
+        ? trierRdvs(fusionnerParId(rdvsRef.current, rdvsRecents, { retirer: rdvSupprime }))
+        : null
       // ⚠️ LE SALON N'ÉTAIT PRÉVENU DE RIEN. Le commerçant alimentaire reçoit un
       // son et une notification à chaque commande ; la coiffeuse ne découvrait
       // ses nouveaux rendez-vous qu'en pensant à regarder son agenda.
@@ -2198,7 +2265,7 @@ export default function Dashboard() {
         }
         setBonsVendus(bonsData)
       }
-    }, 5000)
+    }, RELEVE_RECENT_MS)
 
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07

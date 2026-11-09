@@ -2853,7 +2853,12 @@ export default function CommanderSlug() {
     const channel = supabase
       .channel(`stock-sync-${commercant.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes', filter: `commercant_id=eq.${commercant.id}` }, () => chargerCommandesJour())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'commande_articles' }, () => chargerCommandesJour())
+      // 🔴 PLUS D'ÉCOUTE DE `commande_articles` (Alex, 09/11, alerte Disk IO).
+      // Cette table ne dit pas de quel commerce vient la ligne : l'écoute ne
+      // pouvait pas être filtrée, et CHAQUE visiteur de CHAQUE fiche relisait
+      // ses commandes du jour à chaque commande passée n'importe où sur Yoppaa.
+      // L'écoute des commandes de CE commerce, juste au-dessus, suffit ; le
+      // relevé de 30 s rattrape les lignes écrites juste après la commande.
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'articles', filter: `commercant_id=eq.${commercant.id}` }, payload => {
         setArticles(prev => prev.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a))
       })

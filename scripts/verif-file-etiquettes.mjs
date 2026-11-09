@@ -12,8 +12,8 @@
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
-  stationEnLigne, etiquetteADeposer, sacsBornes, contenusAImprimer, phraseEchec, raisonValide,
-  STATION_EN_LIGNE_MS, REPRISE_EN_COURS_MS, PAR_PASSAGE, RAISONS_ECHEC,
+  stationEnLigne, etiquetteADeposer, sacsBornes, contenusAImprimer, phraseEchec, raisonValide, battementAEcrire,
+  STATION_EN_LIGNE_MS, BATTEMENT_STATION_MS, INTERVALLE_FILE_MS, REPRISE_EN_COURS_MS, PAR_PASSAGE, RAISONS_ECHEC,
 } from '../lib/file-etiquettes.js'
 
 const RACINE = new URL('../', import.meta.url)
@@ -31,10 +31,18 @@ function v(nom, condition, detail = '') {
 {
   const t0 = new Date('2026-10-12T08:00:00Z')
   const ilYa = (ms) => new Date(t0.getTime() - ms).toISOString()
-  v('🔴 en ligne : nouvelles de moins de 20 s ; au-delà, hors ligne ; sans nouvelles, hors ligne',
-    stationEnLigne(ilYa(5000), t0) && !stationEnLigne(ilYa(STATION_EN_LIGNE_MS), t0) && !stationEnLigne(null, t0) && !stationEnLigne('pas une date', t0))
-  v('les délais : 20 s pour « en ligne », 90 s pour reprendre une étiquette, 5 par passage',
-    STATION_EN_LIGNE_MS === 20000 && REPRISE_EN_COURS_MS === 90000 && PAR_PASSAGE === 5)
+  v('🔴 en ligne : nouvelles de moins de 45 s ; au-delà, hors ligne ; sans nouvelles, hors ligne',
+    stationEnLigne(ilYa(5000), t0) && stationEnLigne(ilYa(30000), t0) && !stationEnLigne(ilYa(STATION_EN_LIGNE_MS), t0) && !stationEnLigne(null, t0) && !stationEnLigne('pas une date', t0))
+  // ⚠️ (09/11, Disk IO) LE SEUIL A ÉTÉ PORTÉ DE 20 À 45 s parce que la présence
+  // ne s'écrit plus que toutes les 15 s : il doit rester au moins deux
+  // battements au-dessus, sinon une tablette allumée clignote « hors ligne ».
+  v('les délais : 45 s pour « en ligne », battement 15 s, 90 s pour reprendre une étiquette, 5 par passage',
+    STATION_EN_LIGNE_MS === 45000 && BATTEMENT_STATION_MS === 15000 && REPRISE_EN_COURS_MS === 90000 && PAR_PASSAGE === 5)
+  v('🔴 seuil « en ligne » au moins deux battements au-dessus du battement (sinon clignotement)',
+    STATION_EN_LIGNE_MS >= 2 * BATTEMENT_STATION_MS + INTERVALLE_FILE_MS)
+  v('🔴 battement : réécrit seulement si la présence date de 15 s ou plus, ou manque, ou est illisible',
+    !battementAEcrire(ilYa(3000), t0) && !battementAEcrire(ilYa(14999), t0) && battementAEcrire(ilYa(15000), t0)
+    && battementAEcrire(null, t0) && battementAEcrire('pas une date', t0))
 
   const retrait = { id: 'c1', mode_retrait: 'retrait' }
   const depot = (o) => etiquetteADeposer({ commande: retrait, deStatut: 'en_attente', versStatut: 'en_preparation', stationExiste: true, ...o })
@@ -84,6 +92,9 @@ for (const [nom, c] of ROUTES) {
     /\.update\(\{ statut: 'en_attente', pris_le: null, appareil_id: null \}\)\s*\.eq\('commercant_id', commercant_id\)\.eq\('statut', 'en_cours'\)\.lt\('pris_le', limite\)/.test(file))
   v('🔴 file : JAMAIS DEUX FOIS LA MÊME (prise conditionnelle sur « en attente »)',
     /\.update\(\{ statut: 'en_cours', pris_le: maintenant\.toISOString\(\), appareil_id \}\)\s*\.in\('id', candidates\.map\(c => c\.id\)\)\.eq\('commercant_id', commercant_id\)\.eq\('statut', 'en_attente'\)/.test(file))
+  v('🔴 file : la présence ne s’écrit que si elle date (battement 15 s, Disk IO 09/11)',
+    /\.select\('appareil_id, dernier_contact'\)/.test(file)
+    && /if \(battementAEcrire\(station\.dernier_contact, maintenant\)\) \{\s*const \{ error: errC \} = await admin\.from\('stations_impression'\)\s*\.update\(\{ dernier_contact: maintenant\.toISOString\(\) \}\)/.test(file))
   v('file : au plus 5 par passage, les plus anciennes d’abord',
     /\.order\('cree_le', \{ ascending: true \}\)\.limit\(PAR_PASSAGE\)/.test(file))
   v('🔴 file : les commandes relues sont CELLES DE CE COMMERCE',

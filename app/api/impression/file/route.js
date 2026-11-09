@@ -3,7 +3,8 @@
 //
 // CE QUE LA STATION DU COMPTOIR VIENT CHERCHER, toutes les 3 secondes
 // (« Yoppaa Comptoir », 11/10) :
-//   1. elle dit qu'elle est en ligne (`dernier_contact`) ;
+//   1. elle dit qu'elle est en ligne (`dernier_contact`), toutes les 15 s
+//      seulement (09/11) ;
 //   2. une étiquette PRISE il y a plus de 90 s et jamais rendue (l'app fermée
 //      en pleine impression) redevient « en attente » ;
 //   3. elle PREND au plus 5 étiquettes (en_attente → en_cours), et reçoit leur
@@ -18,7 +19,7 @@
 import { NextResponse } from 'next/server'
 import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe } from '@/lib/equipe-server'
-import { PAR_PASSAGE, REPRISE_EN_COURS_MS, SELECT_COMMANDE_ETIQUETTE, contenusAImprimer } from '@/lib/file-etiquettes'
+import { PAR_PASSAGE, REPRISE_EN_COURS_MS, SELECT_COMMANDE_ETIQUETTE, contenusAImprimer, battementAEcrire } from '@/lib/file-etiquettes'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,16 +31,20 @@ export async function POST(request) {
     if (!garde.ok) return NextResponse.json({ ok: false, error: garde.error }, { status: garde.status })
 
     const { data: station, error: errS } = await admin.from('stations_impression')
-      .select('appareil_id').eq('commercant_id', commercant_id).maybeSingle()
+      .select('appareil_id, dernier_contact').eq('commercant_id', commercant_id).maybeSingle()
     if (errS) return NextResponse.json({ ok: false, error: 'Lecture impossible, réessaie.' }, { status: 500 })
     if (!station || station.appareil_id !== appareil_id) {
       return NextResponse.json({ ok: false, error: 'Cette tablette n’est plus l’imprimante du comptoir.', pas_la_station: true }, { status: 409 })
     }
 
+    // 1. La présence ne s'écrit que si elle date (15 s, `battementAEcrire`) :
+    // une écriture toutes les 3 s usait le disque de la base (Disk IO, 08/11).
     const maintenant = new Date()
-    const { error: errC } = await admin.from('stations_impression')
-      .update({ dernier_contact: maintenant.toISOString() }).eq('commercant_id', commercant_id).eq('appareil_id', appareil_id)
-    if (errC) return NextResponse.json({ ok: false, error: 'Lecture impossible, réessaie.' }, { status: 500 })
+    if (battementAEcrire(station.dernier_contact, maintenant)) {
+      const { error: errC } = await admin.from('stations_impression')
+        .update({ dernier_contact: maintenant.toISOString() }).eq('commercant_id', commercant_id).eq('appareil_id', appareil_id)
+      if (errC) return NextResponse.json({ ok: false, error: 'Lecture impossible, réessaie.' }, { status: 500 })
+    }
 
     // 2. Les étiquettes prises et jamais rendues reviennent dans la file.
     const limite = new Date(maintenant.getTime() - REPRISE_EN_COURS_MS).toISOString()

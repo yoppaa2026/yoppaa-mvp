@@ -1507,7 +1507,9 @@ verifier('sans nom de commerce, la phrase tient debout',
   verifier('et son bouton dit le geste', /Réserver mes séances/.test(mail))
 
   // ─── Les branchements ─────────────────────────────────────────────────────
-  const poll = (srcFicheAbo.match(/const timer = setInterval\(async \(\) => \{[\s\S]*?\}, 1000\)/) || [''])[0]
+  // ⚠️ REPOINTÉE LE 12/11 (un relevé à la fois) : la lecture vit dans
+  // `unSeulALaFois`, le minuteur d'une seconde l'appelle juste après.
+  const poll = (srcFicheAbo.match(/const lecture = unSeulALaFois\(async \(\) => \{[\s\S]*?const timer = setInterval\([^\n]*1000\)/) || [''])[0]
   verifier('🔴 la relecture s’arrête au premier refus « pas connecté »',
     /if \(res\.status === 401\) \{[\s\S]{0,120}setAboSansCompte\(true\)[\s\S]{0,60}setAboEnAttente\(false\)[\s\S]{0,40}clearInterval\(timer\)/.test(poll)
     && poll.indexOf('res.status === 401') < poll.indexOf('await res.json()'), poll.slice(0, 200))

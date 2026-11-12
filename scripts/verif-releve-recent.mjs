@@ -78,24 +78,27 @@ function v(nom, condition, detail = '') {
 // ═══ 2. LE TABLEAU DE BORD, LU ═══════════════════════════════════════════════
 {
   const d = code('app/dashboard/page.js')
-  const recentes = (d.match(/function lireCommandesRecentes\(commercantId\) \{[\s\S]*?\n\}/) || [''])[0]
+  // ⚠️ REPOINTÉES LE 12/11 (un relevé à la fois) : les lectures reçoivent le
+  // `signal` d'abandon, le relevé passe par `unSeulALaFois` + `repeterEspace`
+  // (verif:garde). Fenêtre, fusion et rythme de base ne changent pas.
+  const recentes = (d.match(/function lireCommandesRecentes\(commercantId, signal\) \{[\s\S]*?\n\}/) || [''])[0]
   v('🔴 lecture récente des commandes : même select que la lecture complète, sans « paiement en attente », filtrée sur la fenêtre',
     /\.select\(SELECT_COMMANDES\)/.test(recentes) && /\.eq\('commercant_id', commercantId\)/.test(recentes)
     && /\.neq\('statut', 'paiement_en_attente'\)/.test(recentes) && /\.or\(filtreCommandesRecentes\(depuis\)\)/.test(recentes)
     && /toutesLesLignes\(/.test(recentes))
-  const rdvs = (d.match(/function lireRdvsRecents\(commercantId\) \{[\s\S]*?\n\}/) || [''])[0]
+  const rdvs = (d.match(/function lireRdvsRecents\(commercantId, signal\) \{[\s\S]*?\n\}/) || [''])[0]
   v('🔴 lecture récente de l’agenda : à partir de la fenêtre, et SANS filtre deleted_at (sinon un supprimé ne sortirait jamais)',
     /\.select\(SELECT_RDVS\)/.test(rdvs) && /\.gte\('date_rdv', depuis\)/.test(rdvs) && !/deleted_at/.test(rdvs) && /toutesLesLignes\(/.test(rdvs))
 
   v('🔴 le relevé des 5 s ne relit PLUS tout l’historique des commandes',
     !/lireCommandes\(commercant\.id, \{ sansPaiementEnAttente: true \}\)/.test(d))
   v('🔴 le relevé pose le récent sur la liste affichée, sans « paiement en attente »',
-    /const \{ data: recentes, error \} = await lireCommandesRecentes\(commercant\.id\)/.test(d)
+    /const \{ data: recentes, error \} = await lireCommandesRecentes\(commercant\.id, signal\)/.test(d)
     && /fusionnerParId\(commandesRef\.current, recentes\)\.filter\(c => c\.statut !== 'paiement_en_attente'\)/.test(d))
   v('🔴 rien avant l’historique complet de CE commerce (fausse alerte sinon)',
     /const historiquePret = commandesChargeesPourRef\.current === commercant\.id\s*if \(historiquePret\) \{/.test(d)
     && /const agendaPret = rdvsChargesPourRef\.current === commercant\.id/.test(d)
-    && /agendaPret \? await lireRdvsRecents\(commercant\.id\) : \{ data: null \}/.test(d))
+    && /agendaPret \? await lireRdvsRecents\(commercant\.id, signal\) : \{ data: null \}/.test(d))
   v('🔴 l’agenda relu se pose sur l’agenda affiché, les supprimés en sortent, dans l’ordre',
     /trierRdvs\(fusionnerParId\(rdvsRef\.current, rdvsRecents, \{ retirer: rdvSupprime \}\)\)/.test(d))
   v('🔴 la lecture complète marque l’historique comme lu (commandes, et agenda SEULEMENT s’il a été lu)',
@@ -107,7 +110,7 @@ function v(nom, condition, detail = '') {
   v('🔴 l’historique complet toutes les 5 min (plus 60 s), et toujours au retour sur l’écran',
     /const interval = setInterval\(refresh, RELECTURE_COMPLETE_MS\)/.test(d) && !/setInterval\(refresh, 60000\)/.test(d)
     && /document\.addEventListener\('visibilitychange', onVisChange\)/.test(d))
-  v('le relevé tourne au rythme du récent', /\}, RELEVE_RECENT_MS\)/.test(d))
+  v('le relevé tourne au rythme du récent', /pollingRef\.current = repeterEspace\(tour, \{ base: RELEVE_RECENT_MS \}\)/.test(d))
   v('le son d’une nouvelle commande compte toujours sur la liste COMPLÈTE fusionnée',
     /const triees = trierCommandes\(data\)\s*const arrivees = nombreArriveesEnLigne\(triees\)/.test(d))
 }

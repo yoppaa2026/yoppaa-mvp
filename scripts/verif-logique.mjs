@@ -4776,8 +4776,10 @@ verifier('les échecs sont comptés, pas alertés douze fois',
   const DASH = lireSansProse('app/dashboard/page.js')
   verifier('🔴 l’agenda du tableau de bord lit toutes ses réservations',
     (DASH.match(/toutesLesLignes\(\(\) => supabase\s*\.from\('rdv_reservations'\)\s*\.select\(SELECT_RDVS\)/g) || []).length === 2)
+  // ⚠️ REPOINTÉE LE 12/11 (un relevé à la fois) : la lecture récente porte
+  // `.abortSignal(signal)` après son ordre total ; l'ordre, lui, ne change pas.
   verifier('⚠️ dans un ordre total, pour que les pages ne se chevauchent pas',
-    (DASH.match(/\.order\('heure_debut', \{ ascending: true \}\)\s*\.order\('id', \{ ascending: true \}\)\)/g) || []).length === 2)
+    (DASH.match(/\.order\('heure_debut', \{ ascending: true \}\)\s*\.order\('id', \{ ascending: true \}\)(\s*\.abortSignal\(signal\))?\)/g) || []).length === 2)
   const CONFIG = lireSansProse('app/dashboard/ConfigDashboard.js')
   // ⚠️ REPOINTÉE LE 04/10 (Abo-I1) : le select porte aussi `id` et l'heure,
   // pour la part non utilisée d'un remboursement.
@@ -4798,9 +4800,12 @@ verifier('les échecs sont comptés, pas alertés douze fois',
     (DASH.match(/await lireCommandes\(/g) || []).length === 1
     && (DASH.match(/await lireCommandesRecentes\(/g) || []).length === 1
     && (DASH.match(/\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)/g) || []).length === 2
-    && /function lireCommandesRecentes\(commercantId\) \{[\s\S]{0,300}?\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)/.test(DASH))
+    && /function lireCommandesRecentes\(commercantId, signal\) \{[\s\S]{0,300}?\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)/.test(DASH))
+  // ⚠️ REPOINTÉE LE 12/11 (un relevé à la fois) : la lecture reçoit le
+  // `signal` d'abandon, et un tour abandonné ne pose rien (verif:garde). La
+  // garantie reste : une erreur garde la liste et se dit.
   verifier('🔴 le relevé lit son erreur : une lecture refusée ne VIDE plus la liste',
-    /const \{ data: recentes, error \} = await lireCommandesRecentes\(commercant\.id\)\s*const data = error \? null[\s\S]{0,200}?if \(error\) \{[^}]*setErreurCommandes\(/.test(DASH))
+    /const \{ data: recentes, error \} = await lireCommandesRecentes\(commercant\.id, signal\)[\s\S]{0,120}?const data = error \? null[\s\S]{0,200}?if \(error\) \{[^}]*setErreurCommandes\(/.test(DASH))
   const EXPORT = lireSansProse('app/api/dashboard/export-comptable/route.js')
   verifier('🔴 l’export comptable lit toutes les commandes et tous les rendez-vous de la période',
     /const \{ data: commandesPeriode, error: errCommandes \} = await toutesLesLignes\(\(\) => admin\s*\.from\('commandes'\)/.test(EXPORT)

@@ -840,8 +840,11 @@ verifier('la page rappelle qu\'on peut refuser la géolocalisation',
   const src = lire('app/commander/page.js')
     .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
 
+  // ⚠️ REPOINTÉE LE 12/11 (un relevé à la fois) : le relevé de 15 s passe par
+  // `siEcranRegarde`, qui saute le tour d'un écran caché (verif:garde exécute
+  // cette règle).
   verifier('le relevé ne tourne que si l\'écran est allumé',
-    /visibilityState !== 'visible'\) return\s*\n\s*const email/.test(src))
+    /const iv = setInterval\(siEcranRegarde\(tour\), 15000\)/.test(src))
   verifier('et il a cessé de battre toutes les 5 secondes',
     !/\}, 5000\)/.test(src), (src.match(/.*\}, 5000\).*/) || [])[0])
   // ⚠️ CES DEUX GARDES ONT ROUGI LE 22/08 SUR UN CODE AMÉLIORÉ, et c'est le

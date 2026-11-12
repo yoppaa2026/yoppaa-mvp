@@ -479,7 +479,9 @@ const membre = (o = {}) => ({
   // case « Agenda » seulement. Clôturer une séance entière reste au patron.
   v('🔴 l’agenda ne propose de créer qu’avec la case Agenda, et jamais de clôturer',
     /<AgendaRdv /.test(poste) && /onNouveauRdv=\{etat\.droits\?\.agenda \? \(date, heure\) => setSaisie\(\{ date, heure \}\) : undefined\}/.test(poste) && !/onHonorerSeance=/.test(poste))
-  v('le poste se rafraîchit seul, et au retour sur l’écran', /setInterval\(charger, RAFRAICHIR_MS\)/.test(poste) && /addEventListener\('pageshow', auRetour\)/.test(poste))
+  // ⚠️ REPOINTÉE LE 12/11 (un relevé à la fois) : le minuteur passe par la
+  // garde (`unSeulALaFois` + `siEcranRegarde`, exécutées par verif:garde).
+  v('le poste se rafraîchit seul, et au retour sur l’écran', /const tour = unSeulALaFois\(\(\) => charger\(\)\)/.test(poste) && /setInterval\(siEcranRegarde\(tour\), RAFRAICHIR_MS\)/.test(poste) && /addEventListener\('pageshow', auRetour\)/.test(poste))
   v('un accès coupé se dit', /Ton accès à ce commerce est fermé/.test(lire('app/equipe/PosteEquipe.js')))
   v('🔴 se déconnecter est une déconnexion voulue', /marquerDeconnexionVoulue\(\)\s*const \{ error \} = await supabase\.auth\.signOut\(\)/.test(code('app/equipe/page.js')))
 
@@ -983,7 +985,7 @@ const membre = (o = {}) => ({
     && /background: couleur\.badge, padding: '4px 10px'/.test(poste))
   v('🔴 la carte livraison aussi, avec son statut écrit', /borderTop: `4px solid \$\{couleurStatutCommande\(l\)\.border\}`/.test(poste) && /background: couleurStatutCommande\(l\)\.badge[\s\S]{0,120}\{libelleStatutCommande\(l\)\}/.test(poste))
 
-  v('🔴 le Poste se rafraîchit toutes les 10 secondes (30, c’était figé)', /const RAFRAICHIR_MS = 10000/.test(poste) && /setInterval\(charger, RAFRAICHIR_MS\)/.test(poste))
+  v('🔴 le Poste se rafraîchit toutes les 10 secondes (30, c’était figé)', /const RAFRAICHIR_MS = 10000/.test(poste) && /setInterval\(siEcranRegarde\(tour\), RAFRAICHIR_MS\)/.test(poste))
   v('🔴 il dit de quand il date, et se rafraîchit à la demande',
     /setEtat\(\{ charge: true, \.\.\.j, majA: new Date\(\) \}\)/.test(poste) && /À jour à \{etat\.majA\.toLocaleTimeString\(/.test(poste) && /<button type="button" onClick=\{charger\}/.test(poste))
 

@@ -174,6 +174,8 @@ import { mentionVitrine } from '@/lib/stock-article'
 // pas de l'autre. Cette page n'affichait aucun avis jusqu'au 21/09.
 import BlocAvis from '../../BlocAvis'
 import { resumeAvis } from '@/lib/avis-affichage'
+import { unSeulALaFois } from '@/lib/releve-unique'
+import { ecranRegarde } from '@/lib/rafraichissement'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
 // Affiche les jours de l'horizon, regroupes par mois. ⚠️ L'HORIZON N'EST PLUS
@@ -1129,8 +1131,11 @@ export default function CommanderRdvSlug() {
 
     let tentatives = 0
     const MAX = 15
-    const timer = setInterval(async () => {
-      tentatives++
+    // 🔴 UNE LECTURE À LA FOIS (Alex, 12/11, panne de production) : chaque
+    // seconde compte toujours comme une tentative (l'attente reste de 15 s),
+    // mais aucune lecture ne part tant que la précédente n'a pas répondu
+    // (`lib/releve-unique.js`).
+    const lecture = unSeulALaFois(async () => {
       try {
         const res = await fetchYopper('/api/yopper/abonnements')
         // 🔴 PAS CONNECTÉ : LE REFUS EST UNE RÉPONSE, PAS UNE ATTENTE (Abo-I7,
@@ -1161,7 +1166,9 @@ export default function CommanderRdvSlug() {
         console.error('[abo] relecture du contrat', e?.message)
       }
       if (tentatives >= MAX && vivant) { setAboEnAttente(false); clearInterval(timer) }
-    }, 1000)
+    })
+    // Écran caché : ni lecture, ni tentative comptée (elle reprend au retour).
+    const timer = setInterval(() => { if (!ecranRegarde()) return; tentatives++; lecture() }, 1000)
 
     return () => { vivant = false; clearInterval(timer) }
   }, [abonnementRetour, commercant?.id, slug])
@@ -1239,8 +1246,10 @@ export default function CommanderRdvSlug() {
         if (sessionId && slug) {
           let attempts = 0
           const MAX_ATTEMPTS = 15
-          const pollInterval = setInterval(async () => {
-            attempts++
+          // 🔴 UNE LECTURE À LA FOIS (Alex, 12/11) : chaque seconde compte, mais
+          // aucune lecture ne part tant que la précédente n'a pas répondu
+          // (`lib/releve-unique.js`).
+          const lecture = unSeulALaFois(async () => {
             console.info('[rdv stripe] poll attempt', attempts, '/', MAX_ATTEMPTS)
             try {
               const res = await fetch(`/api/rdv/from-session?session_id=${encodeURIComponent(sessionId)}&slug=${encodeURIComponent(slug)}`)
@@ -1271,7 +1280,9 @@ export default function CommanderRdvSlug() {
                 clearInterval(pollInterval)
               }
             }
-          }, 1000)
+          })
+          // Écran caché : ni lecture, ni tentative comptée (elle reprend au retour).
+          const pollInterval = setInterval(() => { if (!ecranRegarde()) return; attempts++; lecture() }, 1000)
         }
       } else {
         // Pas de snapshot (cookies cleared ?) → fallback : message + retour accueil

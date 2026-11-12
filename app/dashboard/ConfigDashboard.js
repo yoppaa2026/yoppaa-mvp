@@ -159,7 +159,8 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 // un titre qui changeait selon la catégorie, est parti le 13/08.
 import { jourLocalISO, jourSemaineLocal, jourBruxelles, creneauDejaCommence, minutesBruxelles, jourCivilPlus } from '@/lib/timezone'
 import { lundiDeLaSemaine, conflitSemaineGmy, erreurActuGmy } from '@/lib/actu-gmy'
-import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
+import { poserSiChange } from '@/lib/rafraichissement'
+import { unSeulALaFois, siEcranRegarde } from '@/lib/releve-unique'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { TAILLE_CONSEILLEE, avertissementTaille } from '@/lib/image-qualite'
@@ -975,8 +976,10 @@ function TabMenu({ commercantId, commercant, toast }) {
   }, [commercantId])
   useEffect(() => {
     if (!commercantId) return
-    chargerVentesMagasin()
-    const id = setInterval(() => { if (ecranRegarde()) chargerVentesMagasin() }, 30000)
+    // 🔴 UN RELEVÉ À LA FOIS (Alex, 12/11) : voir `lib/releve-unique.js`.
+    const tour = unSeulALaFois(() => chargerVentesMagasin())
+    tour()
+    const id = setInterval(siEcranRegarde(tour), 30000)
     return () => clearInterval(id)
   }, [commercantId, chargerVentesMagasin])
 
@@ -988,11 +991,10 @@ function TabMenu({ commercantId, commercant, toast }) {
   // ne bougent qu'au rythme des commandes.
   useEffect(() => {
     if (!commercantId) return
-    chargerCommandesAujourdhui()
-    const id = setInterval(() => {
-      if (!ecranRegarde()) return
-      chargerCommandesAujourdhui()
-    }, 30000)
+    // 🔴 UN RELEVÉ À LA FOIS (Alex, 12/11) : voir `lib/releve-unique.js`.
+    const tour = unSeulALaFois(() => chargerCommandesAujourdhui())
+    tour()
+    const id = setInterval(siEcranRegarde(tour), 30000)
     return () => clearInterval(id)
   }, [commercantId, chargerCommandesAujourdhui])
 

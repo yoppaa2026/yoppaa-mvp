@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Bell } from 'lucide-react'
 import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
+import { unSeulALaFois, siEcranRegarde } from '@/lib/releve-unique'
 import { fetchYopper, fetchAvecPreuveSiConnecte, estSessionPerdue } from '@/lib/fetch-yopper'
 import CarteAbonnement from './CarteAbonnement'
 import HistoriqueRepli from './HistoriqueRepli'
@@ -2359,12 +2360,14 @@ export default function Commander() {
   // ci avait été oublié. Et cinq secondes n'apportaient rien : le Yopper n'a pas
   // besoin de voir sa commande changer d'état à la seconde près.
   useEffect(() => {
-    const iv = setInterval(() => {
-      if (document.visibilityState !== 'visible') return
+    // 🔴 UN RELEVÉ À LA FOIS (Alex, 12/11, panne de production) : voir
+    // `lib/releve-unique.js`.
+    const tour = unSeulALaFois(() => {
       const email = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_email') : null
       if (!email) return  // utilisateur déconnecté → on saute ce tick (mais on laisse l'interval tourner pour le cas re-login)
-      chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient(); chargerAttentesClient()
-    }, 15000)
+      return Promise.all([chargerCommandesClient(email), chargerRdvsClient(email), chargerAbonnementsClient(), chargerAttentesClient()])
+    })
+    const iv = setInterval(siEcranRegarde(tour), 15000)
     return () => clearInterval(iv)
   }, [])
 
@@ -2681,11 +2684,11 @@ export default function Commander() {
   useEffect(() => {
     if (commercants.length === 0) return
     const ids = commercants.map(c => c.id)
+    // 🔴 UN RELEVÉ À LA FOIS (Alex, 12/11) : focus, retour et minute pouvaient
+    // partir ensemble (`lib/releve-unique.js`).
+    const relire = unSeulALaFois(() => Promise.all([chargerActiviteAujourdhui(ids), chargerNotes(ids, commercants)]))
     const refresh = () => {
-      if (document.visibilityState === 'visible') {
-        chargerActiviteAujourdhui(ids)
-        chargerNotes(ids, commercants)
-      }
+      if (document.visibilityState === 'visible') relire()
     }
     const onVisChange = () => refresh()
     window.addEventListener('focus', refresh)
@@ -2706,11 +2709,10 @@ export default function Commander() {
   useEffect(() => {
     const email = client?.email
     if (!email) return
+    // 🔴 UN RELEVÉ À LA FOIS (Alex, 12/11) : voir `lib/releve-unique.js`.
+    const relire = unSeulALaFois(() => Promise.all([chargerCommandesClient(email), chargerRdvsClient(email), chargerAbonnementsClient(), chargerAttentesClient()]))
     const refresh = () => {
-      if (document.visibilityState === 'visible') {
-        chargerCommandesClient(email)
-        chargerRdvsClient(email); chargerAbonnementsClient(); chargerAttentesClient()
-      }
+      if (document.visibilityState === 'visible') relire()
     }
     const onVisChange = () => refresh()
     window.addEventListener('focus', refresh)

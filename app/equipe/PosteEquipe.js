@@ -45,6 +45,7 @@ import { gesteLivraisonPermis } from '@/lib/livraison-geste'
 import { couleurStatutCommande } from '@/lib/couleurs-statut-commande'
 import { lirePoste, ecrirePoste } from '@/lib/poste-adresse'
 import { estLivraison, filtresCommandes, filtreValide, commandesDeLaVue, ongletsDuPoste } from '@/lib/poste-vues'
+import { unSeulALaFois, siEcranRegarde } from '@/lib/releve-unique'
 import PosteComptoir from './PosteComptoir'
 
 // Les filtres du tableau de bord, les mêmes (lib/poste-vues.js).
@@ -493,10 +494,14 @@ export default function PosteEquipe({ equipe, onChanger }) {
     }
   }, [equipe.commercant_id])
 
+  // 🔴 UN RELEVÉ À LA FOIS, ET RIEN QUAND L'ÉCRAN EST CACHÉ (Alex, 12/11, panne
+  // de production) : voir `lib/releve-unique.js`. Les gestes appellent
+  // toujours `charger` directement.
   useEffect(() => {
-    charger()
-    const id = setInterval(charger, RAFRAICHIR_MS)
-    const auRetour = () => { if (document.visibilityState === 'visible') charger() }
+    const tour = unSeulALaFois(() => charger())
+    tour()
+    const id = setInterval(siEcranRegarde(tour), RAFRAICHIR_MS)
+    const auRetour = () => { if (document.visibilityState === 'visible') tour() }
     document.addEventListener('visibilitychange', auRetour)
     window.addEventListener('pageshow', auRetour)
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', auRetour); window.removeEventListener('pageshow', auRetour) }

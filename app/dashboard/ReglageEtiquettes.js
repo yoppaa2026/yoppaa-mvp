@@ -17,6 +17,7 @@ import DotsAttente from '@/app/components/DotsAttente'
 import { dessinerEtiquette, policeMarqueDeLaPage } from '@/lib/etiquette-image'
 import { identifiantAppareil } from '@/lib/station-comptoir'
 import { ReglageTablette } from './StationComptoir'
+import { unSeulALaFois, siEcranRegarde } from '@/lib/releve-unique'
 
 const T = { ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', vert: '#047857', alerte: '#B45309', erreur: '#B91C1C' }
 
@@ -43,9 +44,13 @@ export function useStationComptoir(commercantId) {
     const j = typeof res?.json === 'function' ? await res.json().catch(() => null) : null
     if (j?.ok) setEtat({ station: j.station, dernieres: j.dernieres || [] })
   }, [commercantId])
+  // 🔴 UN RELEVÉ À LA FOIS, ET RIEN QUAND L'ÉCRAN EST CACHÉ (Alex, 12/11, panne
+  // de production) : voir `lib/releve-unique.js`. Une demande d'étiquette
+  // relit toujours tout de suite (`demander`).
   useEffect(() => {
-    relire()
-    const t = setInterval(relire, 20000)
+    const tour = unSeulALaFois(() => relire())
+    tour()
+    const t = setInterval(siEcranRegarde(tour), 20000)
     return () => clearInterval(t)
   }, [relire])
   async function demander(corps) {

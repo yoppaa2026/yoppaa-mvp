@@ -34,7 +34,8 @@ import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { joursRetraitBoutique, creneauRetraitHorsHoraires, estFermeExceptionnellement, ouvertLe, horizonBoutique } from '@/lib/ouverture'
-import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
+import { poserSiChange } from '@/lib/rafraichissement'
+import { unSeulALaFois, siEcranRegarde } from '@/lib/releve-unique'
 import { categorieAtteinte, barreDetachee, defilementVersCategorie, positionDansContenu } from '@/lib/responsive'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
 // pas si un commerce bouge. C'est `estItinerant`, qui lit les lieux déclarés,
@@ -2832,11 +2833,11 @@ export default function CommanderSlug() {
   useEffect(() => { articlesRef.current = articles }, [articles])
   useEffect(() => {
     if (!commercant) return
-    const intervalId = setInterval(() => {
-      if (!ecranRegarde()) return
-      chargerCommandesJour()
-      rafraichirArticlesEtStocks()
-    }, 30000)
+    // 🔴 UN RELEVÉ À LA FOIS (Alex, 12/11, panne de production) : voir
+    // `lib/releve-unique.js`. Le temps réel ci-dessous relit toujours à chaque
+    // commande du commerce.
+    const tour = unSeulALaFois(() => Promise.all([chargerCommandesJour(), rafraichirArticlesEtStocks()]))
+    const intervalId = setInterval(siEcranRegarde(tour), 30000)
     const channel = supabase
       .channel(`stock-sync-${commercant.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes', filter: `commercant_id=eq.${commercant.id}` }, () => chargerCommandesJour())

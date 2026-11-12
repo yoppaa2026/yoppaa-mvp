@@ -38,7 +38,7 @@ const MUTATIONS = [
     de: 'export const RELECTURE_COMPLETE_MS = 5 * 60 * 1000', vers: 'export const RELECTURE_COMPLETE_MS = 60 * 1000' },
   // ─── le tableau de bord ─────────────────────────────────────────────────
   { nom: '🔴 le relevé relit de nouveau tout l historique', fichier: BORD,
-    de: '      const { data: recentes, error } = await lireCommandesRecentes(commercant.id)', vers: '      const { data: recentes, error } = await lireCommandes(commercant.id, { sansPaiementEnAttente: true })' },
+    de: '      const { data: recentes, error } = await lireCommandesRecentes(commercant.id, signal)', vers: '      const { data: recentes, error } = await lireCommandes(commercant.id, { sansPaiementEnAttente: true })' },
   { nom: '🔴 la lecture récente oublie la fenêtre', fichier: BORD,
     de: '    .or(filtreCommandesRecentes(depuis))', vers: '' },
   { nom: '🔴 « paiement en attente » sonne trop tôt (filtre final retiré)', fichier: BORD,

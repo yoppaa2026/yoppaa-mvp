@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase'
 import { ficheAPublier, ficheComplete } from '@/lib/fiche-complete'
 import { attenteDepuis } from '@/lib/statut-commercant'
 import { ecrireSousOnglet } from '@/lib/onglet-url'
+import { unSeulALaFois, siEcranRegarde } from '@/lib/releve-unique'
 
 const T = {
   main: '#6B35C4', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B', muted: '#6B7280',
@@ -84,8 +85,10 @@ export default function BandeauFicheAPublier({ commercant, onAllerA, cleRafraich
 
   useEffect(() => {
     if (!concerne) return
-    lire()
-    const t = setInterval(() => { if (document.visibilityState === 'visible') lire() }, RELECTURE_MS)
+    // 🔴 UN RELEVÉ À LA FOIS (Alex, 12/11) : voir `lib/releve-unique.js`.
+    const tour = unSeulALaFois(() => lire())
+    tour()
+    const t = setInterval(siEcranRegarde(tour), RELECTURE_MS)
     return () => clearInterval(t)
   }, [concerne, lire, cleRafraichir])
 

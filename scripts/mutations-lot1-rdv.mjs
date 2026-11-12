@@ -1219,8 +1219,8 @@ const MUTATIONS = [
   { nom: '🔴 le releve des commandes vide la liste sur une erreur',
     banc: 'verif:logique', fichier: 'app/dashboard/page.js',
     // ⚠️ REPOINTÉE LE 09/11 : le relevé passe par `lireCommandesRecentes`.
-    de: '      const { data: recentes, error } = await lireCommandesRecentes(commercant.id)',
-    vers: '      const { data: recentes } = await lireCommandesRecentes(commercant.id); const error = null',
+    de: '      const { data: recentes, error } = await lireCommandesRecentes(commercant.id, signal)',
+    vers: '      const { data: recentes } = await lireCommandesRecentes(commercant.id, signal); const error = null',
     garde: 'le relevé lit son erreur : une lecture refusée ne VIDE plus la liste' },
 
   { nom: '🔴 l export comptable repasse a mille commandes',

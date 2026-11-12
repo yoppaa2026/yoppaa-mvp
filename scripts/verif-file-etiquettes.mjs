@@ -148,7 +148,8 @@ for (const [nom, c] of ROUTES) {
   const reglage = code('app/dashboard/ReglageEtiquettes.js')
   v('le crochet lit l’état par la route du serveur, et le relit toutes les 20 s',
     // Réorientée le 12/10 : l'état part avec l'identifiant de l'appareil (« c'est cette tablette »).
-    /postPro\('\/api\/impression\/station', \{ commercant_id: commercantId, action: 'etat', appareil_id: identifiantAppareil\(\) \}\)/.test(reglage) && /setInterval\(relire, 20000\)/.test(reglage))
+    // ⚠️ REPOINTÉE LE 12/11 (un relevé à la fois) : 20 s toujours, à travers la garde.
+    /postPro\('\/api\/impression\/station', \{ commercant_id: commercantId, action: 'etat', appareil_id: identifiantAppareil\(\) \}\)/.test(reglage) && /const tour = unSeulALaFois\(\(\) => relire\(\)\)/.test(reglage) && /setInterval\(siEcranRegarde\(tour\), 20000\)/.test(reglage))
   v('les boutons de la tablette travaillent visiblement (DotsAttente) et disent le résultat',
     /\{envoi === 'essai' \? <DotsAttente\/> : null\}/.test(reglage) && /setMessage\(r\.ok \? 'Étiquette d’essai envoyée à la tablette\.' : r\.error\)/.test(reglage))
 }

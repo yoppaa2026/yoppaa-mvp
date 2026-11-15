@@ -9206,22 +9206,41 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
       fidelite_recompense_valeur: due.valeur,
     }
     const patch = { ...reglages }
-    if (activer) {
-      patch.fidelite_actif = true
-      // 25 SMS offerts à la première activation (une seule fois)
-      if ((commercant?.fidelite_sms_credits || 0) === 0) patch.fidelite_sms_credits = 25
-    }
+    if (activer) patch.fidelite_actif = true
     setSaving(true)
     const { error } = await supabase.from('commercants').update(patch).eq('id', commercantId)
+    if (error) { setSaving(false); toast(`Erreur : ${error.message}`, 'error'); return false }
+    // 🔴 LES 25 SMS OFFERTS NE S'ÉCRIVENT PLUS ICI (audit du 15/11). L'écran
+    // posait `fidelite_sms_credits: 25` lui-même : le solde était donc ouvert
+    // au navigateur (des milliers de SMS depuis la console), et une
+    // réactivation à solde nul redonnait 25 SMS sans fin. C'est le serveur qui
+    // les donne, une seule fois par commerce ; le verrou SQL refuse désormais
+    // toute écriture du solde depuis le navigateur.
+    let offerts = 0
+    if (activer) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          const r = await fetch('/api/fidelite/sms-offerts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ commercant_id: commercantId }),
+          })
+          const j = await r.json().catch(() => ({}))
+          if (r.ok && j.ok) offerts = j.offerts || 0
+        }
+      } catch { /* le programme est activé : le cadeau n'est jamais bloquant */ }
+    }
     setSaving(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return false }
     // Les valeurs bornées (seuil ramené entre 2 et 50, taux entre 1 et 30) sont
     // ce qui part vraiment en base : c'est donc `reglages` et non `cfg` qui
     // devient la nouvelle référence. Sinon un seuil saisi à 99, corrigé à 50 par
     // le garde-fou, laisserait la barre affichée après un enregistrement réussi.
     setCfg(reglages)
     setInitial(reglages)
-    toast(activer ? 'Fidélité activée, 25 SMS offerts 🟣' : 'Programme mis à jour')
+    toast(activer
+      ? (offerts > 0 ? `Fidélité activée, ${offerts} SMS offerts 🟣` : 'Fidélité activée 🟣')
+      : 'Programme mis à jour')
     setShowConfig(false)
     onSaved?.()
     return true
